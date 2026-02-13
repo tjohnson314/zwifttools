@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login to Zwift</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-box {
+            background: rgba(255,255,255,0.05);
+            padding: 40px;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 400px;
+        }
+        h1 {
+            color: #f7931e;
+            margin-bottom: 20px;
+        }
+        .note {
+            color: #888;
+            font-size: 0.9rem;
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #f7931e;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 20px;
+            border: 2px solid #333;
+            border-radius: 8px;
+            background: #1a1a2e;
+            color: #fff;
+            font-size: 1rem;
+        }
+        input:focus {
+            outline: none;
+            border-color: #f7931e;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(90deg, #ff6b35, #f7931e);
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(247, 147, 30, 0.4);
+        }
+        .error {
+            color: #f44336;
+            margin-bottom: 20px;
+        }
+        a {
+            color: #888;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <h1>🚴 Login to Zwift</h1>
+        <p class="note">
+            Your credentials are sent directly to Zwift's servers and are not stored.
+        </p>
+        <form method="POST" action="/auth/login">
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" required placeholder="your@email.com">
+            
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" required>
+            
+            <button type="submit">Login</button>
+        </form>
+        <details style="margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px;">
+            <summary style="cursor: pointer; font-size: 0.85rem; color: #888;">Why do you need my Zwift credentials?</summary>
+            <div style="margin-top: 10px; font-size: 0.85rem; color: #888; line-height: 1.6;">
+                <p>Logging in lets the tool fetch your ride telemetry and profile data (height, weight, equipped bike) directly from Zwift's API. Your credentials are sent straight to Zwift's servers to obtain an access token — they are never stored or logged by this app.</p>
+                <p style="margin-top: 10px; font-weight: 600; color: #aaa;">Alternatives if you prefer not to log in:</p>
+                <ul style="margin-top: 6px; padding-left: 18px;">
+                    <li style="margin-bottom: 6px;">Any Zwift account works — you can <a href="https://www.zwift.com/create_account" target="_blank" style="color: #4fc3f7;">create a free second account</a> to use here instead of your main one.</li>
+                    <li>You can <strong style="color: #e0e0e0;">upload a .fit file</strong> directly on the main page — no login required. Export it from the Zwift companion app or your zwift.com activity page.</li>
+                </ul>
+            </div>
+        </details>
+        <p style="margin-top: 20px; text-align: center;">
+            <a href="/">← Back to app</a>
+        </p>
+    </div>
+</body>
+</html>

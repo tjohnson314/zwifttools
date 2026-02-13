@@ -1,0 +1,117 @@
+<!-- FAQ Section -->
+<div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 30px; margin-top: 30px;">
+    <h2 style="font-size: 1.5rem; margin-bottom: 20px; color: #f7931e;">Frequently Asked Questions</h2>
+
+    <details style="margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
+        <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">What does this tool do?</summary>
+        <p style="margin-top: 10px; color: #aaa; line-height: 1.6;">
+            This tool estimates how much power you would need to maintain the same speed on a different bike setup in Zwift.
+            It replays your actual ride data — your speed, gradient, and drafting at every second — through a physics model
+            and calculates what your power output would have been if you were on a different frame and wheelset.
+            A lower Normalized Power means the bike is more efficient (you'd need less effort to go the same speed).
+        </p>
+    </details>
+
+    <details style="margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
+        <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">Where does the data come from?</summary>
+        <p style="margin-top: 10px; color: #aaa; line-height: 1.6;">
+            The telemetry is your actual ride timeline from Zwift — either fetched via the Zwift API using an activity ID, or parsed from a .fit file you export from Zwift.
+            It includes second-by-second data points for speed, power, gradient, altitude, cadence, and heart rate.
+        </p>
+        <p style="margin-top: 8px; color: #aaa; line-height: 1.6;">
+            Bike performance data (aerodynamic drag coefficient and rolling weight for every frame, wheelset, and upgrade level) comes from
+            <a href="https://zwifterbikes.web.app" target="_blank" style="color: #4fc3f7;">ZwifterBikes</a>,
+            which measures these values through controlled in-game speed tests. The physics model used to convert bike stats into
+            power estimates is documented on their
+            <a href="https://zwifterbikes.web.app/howitworks" target="_blank" style="color: #4fc3f7;">How It Works</a> page.
+        </p>
+    </details>
+
+    <details style="margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
+        <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">What are Cd and bike weight?</summary>
+        <p style="margin-top: 10px; color: #aaa; line-height: 1.6;">
+            <strong style="color: #e0e0e0;">Cd (Drag Coefficient)</strong> represents how aerodynamic a bike is in Zwift's physics engine.
+            A lower Cd means less air resistance, which matters most on flat roads and at higher speeds.
+            The total aerodynamic drag depends on both the bike's Cd and the rider's frontal area (estimated from height and weight).
+        </p>
+        <p style="margin-top: 8px; color: #aaa; line-height: 1.6;">
+            <strong style="color: #e0e0e0;">Bike weight</strong> affects climbing speed — lighter bikes require less power to go uphill.
+            On flat terrain, weight has almost no effect. As a rule of thumb: prioritize low Cd for flat or rolling courses,
+            and low weight for hilly or mountainous courses.
+        </p>
+    </details>
+
+    <details style="margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
+        <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">What is Normalized Power (NP)?</summary>
+        <p style="margin-top: 10px; color: #aaa; line-height: 1.6;">
+            Normalized Power is a way of measuring effort that accounts for the variability of cycling power.
+            Unlike average power, which simply averages all your power readings, NP gives extra weight to hard efforts and surges.
+        </p>
+        <p style="margin-top: 8px; color: #aaa; line-height: 1.6;">
+            The calculation takes a 30-second rolling average of power, raises each value to the 4th power, averages those, and
+            then takes the 4th root. This means a ride with lots of sprints and coasting will have a higher NP than average power,
+            while a steady ride will have NP very close to average power.
+        </p>
+        <p style="margin-top: 8px; color: #aaa; line-height: 1.6;">
+            NP is the primary metric used in the comparison because it better represents the physiological cost of a ride.
+            If a bike change gives you a lower NP for the same speed, it means the ride would feel easier overall.
+        </p>
+    </details>
+
+    <details style="margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
+        <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">What are the limitations of this tool?</summary>
+        <p style="margin-top: 10px; color: #aaa; line-height: 1.6;">
+            There are a few things to keep in mind:
+        </p>
+        <ul style="margin-top: 8px; color: #aaa; line-height: 1.8; padding-left: 20px;">
+            <li><strong style="color: #e0e0e0;">Bike not recorded:</strong> Zwift's telemetry does not include which bike you actually used. You need to select your "Actual Bike" manually.</li>
+            <li><strong style="color: #e0e0e0;">Height and weight are current values:</strong> When fetching via the API, we pull the current in-game height and weight from the rider's profile, not the values at the time of the ride. If these have changed since the ride, the estimates will be slightly off. When loading from a .fit file, these values will stay as the defaults.</li>
+            <li><strong style="color: #e0e0e0;">Drafting is estimated:</strong> The telemetry doesn't explicitly record draft status. Instead, the tool infers a draft factor by comparing your actual power to what solo power would be at that speed and gradient. This estimate is then applied equally to the alternative bike, but it may not perfectly capture complex pack dynamics.</li>
+            <li><strong style="color: #e0e0e0;">Powerups not tracked:</strong> Zwift powerups (aero boost, lightweight, draft boost, etc.) are not recorded in the telemetry, so their effects can't be accounted for in the comparison.</li>
+            <li><strong style="color: #e0e0e0;">Assumes same speed:</strong> The comparison asks "what power would I need to go the same speed on a different bike?" It would be interesting to also calculate "what speed would I get for the same power?", but that's difficult to answer because it depends on interactions with other riders.</li>
+        </ul>
+    </details>
+
+    <details style="margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
+        <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">What does "Exclude special unlocks" do?</summary>
+        <p style="margin-top: 10px; color: #aaa; line-height: 1.6;">
+            Some frames and wheels in Zwift can't be purchased in the Drop Shop — they require completing challenges
+            (e.g. the Tron bike from the Everest challenge), winning event prizes (e.g. Big Spin wheels), or
+            spinning the prize wheel atop Alpe du Zwift (Lightweight Meilenstein wheels).
+            Checking "Exclude special unlocks" hides these from the best bikes search so you only see equipment
+            you can buy directly. Default starter equipment (like the Zwift Steel frame and Classic wheels) is not affected.
+        </p>
+    </details>
+
+    <details style="margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
+        <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">What does "Pareto optimal" mean?</summary>
+        <p style="margin-top: 10px; color: #aaa; line-height: 1.6;">
+            A bike is Pareto optimal if no other bike is better in both aerodynamics <em>and</em> weight simultaneously.
+            For example, a bike with the best Cd but moderate weight is Pareto optimal because nothing else beats
+            it on aero without being heavier. Enabling the Pareto filter narrows the search to only these "best trade-off" bikes,
+            which dramatically reduces the number of combinations to test and focuses on setups that aren't strictly outclassed.
+        </p>
+    </details>
+
+    <details style="margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
+        <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">What is the time range slider for?</summary>
+        <p style="margin-top: 10px; color: #aaa; line-height: 1.6;">
+            The time range slider lets you select which portion of your ride to analyze. By default, it auto-trims
+            the cooldown period (the slow-down at the end of a race) since that segment doesn't represent real racing effort.
+            You can also use it to focus on a specific climb, sprint, or section of the course.
+        </p>
+    </details>
+
+    <details style="margin-bottom: 0;">
+        <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">How do I get my activity ID?</summary>
+        <p style="margin-top: 10px; color: #aaa; line-height: 1.6;">
+            Your activity ID is in the URL when you view a ride on
+            <a href="https://www.zwift.com/feed" target="_blank" style="color: #4fc3f7;">zwift.com</a>.
+            Go to your activity feed, click on a ride, and the long number in the URL is your activity ID
+            (e.g. <code style="color: #f7931e; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">zwift.com/activity/1234567890</code>).
+            Alternatively, you can export a .fit file from the Zwift companion app or from your
+            <a href="https://www.zwift.com/feed" target="_blank" style="color: #4fc3f7;">Zwift.com</a> activity page
+            and upload it directly — no login required.
+        </p>
+    </details>
+</div>
