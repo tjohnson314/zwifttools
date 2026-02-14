@@ -1505,6 +1505,11 @@
             
             // Auto-refresh comparison
             if (telemetryData) runComparison();
+            
+            // Auto-refresh best bikes if they were already shown and actual bike changed
+            if (prefix === 'actual' && telemetryData && !document.getElementById('bestBikesContainer').classList.contains('hidden')) {
+                findBestBikes();
+            }
         }
         
         function updateActivityLink() {
