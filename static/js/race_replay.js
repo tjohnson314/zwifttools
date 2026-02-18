@@ -1356,8 +1356,8 @@ function fitMapToRoute() {
     //          routeImgH * fitScale * viewScale <= canvas.height
     const scaleByW = canvas.width / (routeImgW * fitScale);
     const scaleByH = canvas.height / (routeImgH * fitScale);
-    // Zoom in 2x beyond route-fit for a closer default view, but never below 1.0
-    mapState.viewScale = Math.max(1.0, Math.min(scaleByW, scaleByH) * 1.8);
+    // Zoom in beyond route-fit for a closer default view, but never below 1.0
+    mapState.viewScale = Math.max(1.0, Math.min(scaleByW, scaleByH) * 2.8);
 }
 
 /**
