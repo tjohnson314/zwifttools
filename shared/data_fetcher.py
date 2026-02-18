@@ -11,6 +11,8 @@ import pandas as pd
 import json
 import os
 import time as _time
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .utils import calculate_normalized_power
 
@@ -39,6 +41,12 @@ def _request_with_retry(method, url, **kwargs):
     last_response = None
     for attempt in range(_MAX_RETRIES):
         response = requests.request(method, url, **kwargs)
+        if response.status_code == 429:
+            # Rate limited — back off and retry
+            retry_after = int(response.headers.get('Retry-After', 5))
+            _time.sleep(retry_after)
+            last_response = response
+            continue
         if response.status_code < 500:
             return response
         last_response = response
@@ -422,40 +430,48 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
     if error:
         return None, error
     
-    # Step 6: Fetch telemetry for each participant
+    # Step 6: Fetch telemetry for each participant (concurrent)
     participants = deduplicate_ranks(participants)
-    summary_data = []
     total_riders = len(participants)
+    _CONCURRENT_WORKERS = 5
     
-    for idx, p in enumerate(participants):
+    # Thread-safe progress counter
+    _progress_lock = threading.Lock()
+    _progress_count = [0]  # mutable container for closure
+    
+    def fetch_one(p):
+        """Fetch a single rider's telemetry. Returns a summary dict."""
         act_id = p['activity_id']
-        
-        if progress_callback:
-            progress_callback(idx + 1, total_riders, p['name'])
         
         telem_data, act_data, error = fetch_rider_telemetry(act_id, headers)
         
+        # Report progress
+        with _progress_lock:
+            _progress_count[0] += 1
+            current = _progress_count[0]
+        if progress_callback:
+            progress_callback(current, total_riders, p['name'])
+        
         if error:
-            summary_data.append({
+            return {
                 'rank': p['rank'],
                 'name': p['name'],
                 'activity_id': act_id,
                 'weight_kg': p.get('weight_kg', 75.0),
                 'player_id': p.get('player_id'),
                 'status': error
-            })
-            continue
+            }
         
         df = convert_telemetry_to_dataframe(telem_data)
-        route_id = act_data.get('routeId') if act_data else None
-        save_rider_data(output_dir, p['rank'], act_id, df, telem_data, route_id)
+        rider_route_id = act_data.get('routeId') if act_data else None
+        save_rider_data(output_dir, p['rank'], act_id, df, telem_data, rider_route_id)
         
         file_url = act_data.get('fitnessData', {}).get('fullDataUrl', '') or act_data.get('fitnessData', {}).get('smallDataUrl', '')
         file_id = file_url.split('/file/')[-1] if file_url else None
         
         np_value = calculate_normalized_power(df['power_watts']) if len(df) > 0 else None
         
-        summary_data.append({
+        return {
             'rank': p['rank'],
             'name': p['name'],
             'activity_id': act_id,
@@ -469,9 +485,33 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
             'max_power': df['power_watts'].max() if len(df) > 0 else 0,
             'avg_hr': round(df['hr_bpm'].mean(), 1) if len(df) > 0 else 0,
             'data_points': len(df)
-        })
-        
-        _time.sleep(0.1)  # Rate limiting
+        }
+    
+    # Fetch all riders concurrently, preserving original order
+    summary_data = []
+    with ThreadPoolExecutor(max_workers=_CONCURRENT_WORKERS) as executor:
+        future_to_idx = {
+            executor.submit(fetch_one, p): idx
+            for idx, p in enumerate(participants)
+        }
+        results_by_idx = {}
+        for future in as_completed(future_to_idx):
+            idx = future_to_idx[future]
+            try:
+                results_by_idx[idx] = future.result()
+            except Exception as e:
+                p = participants[idx]
+                results_by_idx[idx] = {
+                    'rank': p['rank'],
+                    'name': p['name'],
+                    'activity_id': p['activity_id'],
+                    'weight_kg': p.get('weight_kg', 75.0),
+                    'player_id': p.get('player_id'),
+                    'status': f'Exception: {e}'
+                }
+        # Reassemble in original participant order
+        for idx in range(len(participants)):
+            summary_data.append(results_by_idx[idx])
     
     # Step 7: Save summary
     summary_df = pd.DataFrame(summary_data)
