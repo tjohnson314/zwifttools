@@ -282,18 +282,48 @@ async function loadRaceById(raceId) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ race_id: raceId }),
         });
+        if (!loadResp.ok) {
+            let errMsg = `Server error: ${loadResp.status}`;
+            try { const d = await loadResp.json(); errMsg = d.error || errMsg; } catch {}
+            hideLoading();
+            showStatus(errMsg, 'error');
+            return;
+        }
         const loadData = await loadResp.json();
-        if (!loadResp.ok || loadData.error) {
+        if (loadData.error) {
             hideLoading();
             console.error('Race load error:', loadResp.status, loadData);
-            showStatus(loadData.error || 'Failed to load race', 'error');
+            showStatus(loadData.error, 'error');
             return;
         }
 
-        // Step 2: Fetch full data JSON
+        // Step 2: Fetch full data JSON (retry once on truncated response)
         showLoading('Downloading race data...');
-        const dataResp = await fetch(`/api/race/data/${raceId}`);
-        const fullData = await dataResp.json();
+        let fullData;
+        for (let attempt = 0; attempt < 2; attempt++) {
+            const dataResp = await fetch(`/api/race/data/${raceId}`);
+            if (!dataResp.ok) {
+                let errMsg = `Server error: ${dataResp.status}`;
+                try { const d = await dataResp.json(); errMsg = d.error || errMsg; } catch {}
+                hideLoading();
+                showStatus(errMsg, 'error');
+                return;
+            }
+            try {
+                fullData = await dataResp.json();
+                break;  // success
+            } catch (parseErr) {
+                console.warn(`Race data JSON parse failed (attempt ${attempt + 1}):`, parseErr);
+                if (attempt === 0) {
+                    showLoading('Download interrupted, retrying...');
+                    await new Promise(r => setTimeout(r, 1000));
+                } else {
+                    hideLoading();
+                    showStatus('Race data download was incomplete. Please try again.', 'error');
+                    return;
+                }
+            }
+        }
         if (fullData.error) {
             hideLoading();
             console.error('Race data error:', fullData);
