@@ -70,6 +70,24 @@
             color: #888;
             text-decoration: none;
         }
+        .remember-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            gap: 8px;
+        }
+        .remember-row input[type="checkbox"] {
+            width: auto;
+            margin: 0;
+            padding: 0;
+            accent-color: #f7931e;
+        }
+        .remember-row label {
+            margin: 0;
+            color: #888;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -79,14 +97,37 @@
             Your credentials are sent directly to Zwift's servers and are not stored.
         </p>
         <form method="POST" action="/auth/login">
+            <input type="hidden" name="next" value="{{ next_url }}">
             <label for="email">Email</label>
             <input type="email" id="email" name="email" required placeholder="your@email.com">
             
             <label for="password">Password</label>
             <input type="password" id="password" name="password" required>
             
+            <div class="remember-row">
+                <input type="checkbox" id="remember-email">
+                <label for="remember-email">Remember my email</label>
+            </div>
             <button type="submit">Login</button>
         </form>
+        <script>
+            (function() {
+                const emailInput = document.getElementById('email');
+                const checkbox = document.getElementById('remember-email');
+                const saved = localStorage.getItem('zwift_remember_email');
+                if (saved) {
+                    emailInput.value = saved;
+                    checkbox.checked = true;
+                }
+                document.querySelector('form').addEventListener('submit', function() {
+                    if (checkbox.checked) {
+                        localStorage.setItem('zwift_remember_email', emailInput.value);
+                    } else {
+                        localStorage.removeItem('zwift_remember_email');
+                    }
+                });
+            })();
+        </script>
         <details style="margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px;">
             <summary style="cursor: pointer; font-size: 0.85rem; color: #888;">Why do you need my Zwift credentials?</summary>
             <div style="margin-top: 10px; font-size: 0.85rem; color: #888; line-height: 1.6;">

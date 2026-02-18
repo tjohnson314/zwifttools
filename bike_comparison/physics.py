@@ -10,8 +10,8 @@ import numpy as np
 import pandas as pd
 from dataclasses import dataclass
 
-from bike_data import BikeSetup, get_bike_stats, get_bike_database
-from utils import calculate_normalized_power
+from bike_comparison.bike_data import BikeSetup, get_bike_stats, get_bike_database
+from shared.utils import calculate_normalized_power
 
 
 # Physics constants (from Zwift/Gribble model)
@@ -35,6 +35,7 @@ class ComparisonResult:
     actual_watts: np.ndarray
     alternative_watts: np.ndarray
     watts_difference: np.ndarray  # alternative - actual (positive = harder with alt bike)
+    draft_watts: np.ndarray  # estimated draft savings (solo_power - recorded_power)
     
     # Summary stats
     total_actual_kj: float
@@ -126,7 +127,8 @@ def compare_bike_setups(
     crr: float = 0.004,
     frontal_area: float = 0.36,
     alt_rider_weight_kg: float = None,
-    alt_frontal_area: float = None
+    alt_frontal_area: float = None,
+    alt_crr: float = None
 ) -> ComparisonResult:
     """
     Compare actual bike setup with an alternative.
@@ -139,10 +141,11 @@ def compare_bike_setups(
         rider_weight_kg: Rider weight in kg (for actual bike)
         actual_setup: The bike actually used
         alternative_setup: The alternative bike to compare
-        crr: Rolling resistance coefficient (can vary by surface)
+        crr: Rolling resistance coefficient for actual bike (can vary by surface)
         frontal_area: Rider frontal area in m² (for actual bike)
         alt_rider_weight_kg: Rider weight for alternative (defaults to rider_weight_kg)
         alt_frontal_area: Frontal area for alternative (defaults to frontal_area)
+        alt_crr: Rolling resistance for alternative bike (defaults to crr if None)
         
     Returns:
         ComparisonResult with time series and summary stats
@@ -205,6 +208,14 @@ def compare_bike_setups(
     else:
         crr_values = np.full_like(speed_mps, crr)
     
+    # Handle alternative CRR (different bike types have different CRR on same surface)
+    if alt_crr is None:
+        alt_crr_values = crr_values
+    elif isinstance(alt_crr, np.ndarray):
+        alt_crr_values = alt_crr
+    else:
+        alt_crr_values = np.full_like(speed_mps, alt_crr)
+    
     # Calculate solo power required with actual bike (no drafting)
     solo_power_actual = np.array([
         calculate_power_for_speed(
@@ -218,7 +229,7 @@ def compare_bike_setups(
     solo_power_alternative = np.array([
         calculate_power_for_speed(
             speed_mps[i], gradient[i], alt_rider_weight_kg,
-            alternative_setup.weight_kg, alternative_cda, crr_values[i]
+            alternative_setup.weight_kg, alternative_cda, alt_crr_values[i]
         )
         for i in range(len(speed_mps))
     ])
@@ -299,10 +310,31 @@ def compare_bike_setups(
         # Alternative power = actual power + difference
         alternative_watts = actual_watts + power_diff
         alternative_watts = np.maximum(alternative_watts, 0)
+        
+        # Draft savings estimation
+        # solo_power is steady-state (no acceleration term). For a rider (solo or drafted):
+        #   actual_watts = solo_power + m*a*v / (1 - eta)   [when solo]
+        #   actual_watts = drafted_power + m*a*v / (1 - eta) [when drafted]
+        # So: draft = solo_power - actual_watts + d(KE)/dt / (1 - eta)
+        # Using d(KE)/dt only (not PE) avoids altitude noise issues since
+        # gravity is already accounted for in solo_power via gradient.
+        ke = 0.5 * total_mass * speed_mps**2
+        dke_dt = np.zeros_like(ke)
+        dke_dt[:-1] = np.diff(ke) / dt[1:]
+        dke_dt[-1] = dke_dt[-2] if len(dke_dt) > 1 else 0
+        
+        draft_watts = solo_power_actual - actual_watts + dke_dt / (1 - DRIVETRAIN_LOSS)
+        
+        # Smooth to reduce discrete derivative noise
+        draft_window = min(10, len(draft_watts))
+        if draft_window > 1:
+            dk = np.ones(draft_window) / draft_window
+            draft_watts = np.convolve(draft_watts, dk, mode='same')
     else:
         # No recorded power - use physics model only (original behavior)
         actual_watts = solo_power_actual
         alternative_watts = solo_power_alternative
+        draft_watts = np.zeros_like(actual_watts)
     
     # Calculate differences
     watts_difference = alternative_watts - actual_watts
@@ -330,6 +362,7 @@ def compare_bike_setups(
         actual_watts=actual_watts,
         alternative_watts=alternative_watts,
         watts_difference=watts_difference,
+        draft_watts=draft_watts,
         total_actual_kj=total_actual_kj,
         total_alternative_kj=total_alternative_kj,
         avg_watts_difference=avg_watts_diff,

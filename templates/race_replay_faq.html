@@ -1,0 +1,124 @@
+<!-- FAQ Section -->
+<div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 30px; margin-top: 30px;">
+    <h2 style="font-size: 1.5rem; margin-bottom: 20px; color: #f7931e;">Frequently Asked Questions</h2>
+
+    <details style="margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
+        <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">What does this tool do?</summary>
+        <p style="margin-top: 10px; color: #aaa; line-height: 1.6;">
+            This tool replays a Zwift race second-by-second. Enter any participant's activity ID and it fetches the entire field's
+            telemetry — position, power, heart rate, speed, and distance — then lets you play back the race with an interactive
+            elevation chart, an overhead map, a live rider table, and automatic peloton detection. You can watch groups form,
+            attacks develop, and sprints unfold from a bird's-eye perspective.
+        </p>
+    </details>
+
+    <details style="margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
+        <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">Where does the data come from?</summary>
+        <p style="margin-top: 10px; color: #aaa; line-height: 1.6;">
+            All data comes directly from the Zwift API. When you provide an activity ID, the tool fetches the activity details
+            to find the event, pulls the race results for every participant, and downloads each rider's second-by-second telemetry.
+            Riders who have set their activities to private won't have data available and will be missing from the replay.
+        </p>
+        <p style="margin-top: 8px; color: #aaa; line-height: 1.6;">
+            Route geometry (the line drawn on the map and the elevation profile) comes from
+            <a href="https://zwiftmap.com" target="_blank" style="color: #4fc3f7;">ZwiftMap</a>'s route database
+            rather than rider GPS data, so it's always accurate regardless of individual telemetry quality.
+        </p>
+        <p style="margin-top: 8px; color: #aaa; line-height: 1.6;">
+            Because it uses the Zwift API, you need to be logged in with your Zwift account. The tool only reads data — it doesn't
+            modify anything on your account.
+        </p>
+    </details>
+
+    <details style="margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
+        <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">How do I get an activity ID?</summary>
+        <p style="margin-top: 10px; color: #aaa; line-height: 1.6;">
+            Your activity ID is in the URL when you view a ride on
+            <a href="https://www.zwift.com/feed" target="_blank" style="color: #4fc3f7;">zwift.com</a>.
+            Go to your activity feed, click on a ride, and the long number in the URL is your activity ID
+            (e.g. <code style="color: #f7931e; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">zwift.com/activity/1234567890</code>).
+            You can use any participant's activity ID — the tool will find the full race from it.
+        </p>
+    </details>
+
+    <details style="margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
+        <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">What does the rider table show?</summary>
+        <p style="margin-top: 10px; color: #aaa; line-height: 1.6;">
+            The table shows live stats at the current playback time: race position, gap to the leader, current power,
+            rolling 1-minute average power, Normalized Power, weight, heart rate, speed, and distance covered. Click a row
+            to follow that rider on the chart and map. Use the checkboxes to highlight specific riders on the elevation chart.
+            Click any column header to sort. Use the W / W/kg toggle to switch power columns between watts and watts per kilogram.
+        </p>
+    </details>
+
+    <details style="margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
+        <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">What are the two chart modes?</summary>
+        <p style="margin-top: 10px; color: #aaa; line-height: 1.6;">
+            The chart has two modes, toggled with the <strong style="color: #e0e0e0;">Riders</strong> and
+            <strong style="color: #e0e0e0;">Peloton</strong> buttons:
+        </p>
+        <ul style="margin-top: 8px; color: #aaa; line-height: 1.8; padding-left: 20px;">
+            <li><strong style="color: #e0e0e0;">Riders mode</strong> plots each individual rider as a dot on the elevation profile.
+                Checked riders are highlighted, making it easy to track specific people through the field.</li>
+            <li><strong style="color: #e0e0e0;">Peloton mode</strong> automatically detects groups of riders that are close together
+                and draws each group as a colored bar on the elevation profile. The peloton details panel below shows each group's
+                size, average power, and average speed. If you have a rider selected, an orange dot shows their position within
+                the peloton.</li>
+        </ul>
+    </details>
+
+    <details style="margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
+        <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">What does the map show?</summary>
+        <p style="margin-top: 10px; color: #aaa; line-height: 1.6;">
+            The map panel shows an overhead view of the Zwift world with the race route drawn as a line and rider positions
+            as dots. Each world uses its official in-game map image. You can zoom in and out with the +/− buttons or scroll wheel,
+            and drag to pan. When following a rider, the map automatically pans to keep them in view.
+        </p>
+    </details>
+
+    <details style="margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
+        <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">What are the playback controls?</summary>
+        <p style="margin-top: 10px; color: #aaa; line-height: 1.6;">
+            Use the play/pause button (or press <strong style="color: #e0e0e0;">Spacebar</strong>) to start and stop playback.
+            The speed selector lets you run the replay at 1×, 2×, 5×, 10×, or 20× real time.
+            Drag the time slider to jump to any point in the race.
+        </p>
+    </details>
+
+    <details style="margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
+        <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">What is the zoom and follow feature?</summary>
+        <p style="margin-top: 10px; color: #aaa; line-height: 1.6;">
+            The zoom slider below the map controls how much of the course the elevation chart shows at once — zoom in
+            to see small gaps more clearly. The "Follow" dropdown selects a rider to track: the chart and map will
+            automatically pan to keep that rider centered as the race progresses.
+        </p>
+    </details>
+
+    <details style="margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
+        <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">What do the YouTube stream links do?</summary>
+        <p style="margin-top: 10px; color: #aaa; line-height: 1.6;">
+            If any rider in the race is a known Zwift streamer, the tool checks whether they were live-streaming during
+            the race and shows a link to the YouTube VOD. Clicking the link opens the video at the timestamp matching the
+            current playback position, so you can watch the race from a rider's perspective alongside the data replay.
+            If the streamer trimmed their VOD after the broadcast, the tool automatically detects the trim and adjusts
+            the timestamp accordingly.
+        </p>
+    </details>
+
+    <details style="margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
+        <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">How can I share a race replay with someone?</summary>
+        <p style="margin-top: 10px; color: #aaa; line-height: 1.6;">
+            After loading a race, the URL updates to include an <code style="color: #f7931e; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">?activity_id=</code>
+            parameter. Copy that URL and share it — anyone who opens it (and is logged in) will automatically load the same race.
+        </p>
+    </details>
+
+    <details style="margin-bottom: 0;">
+        <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">Why does fetching take a while?</summary>
+        <p style="margin-top: 10px; color: #aaa; line-height: 1.6;">
+            The tool downloads full telemetry for every rider in the race individually from the Zwift API.
+            A race with 30 riders means 30 separate API calls. The data is cached on the server, so loading the
+            same race a second time is much faster.
+        </p>
+    </details>
+</div>

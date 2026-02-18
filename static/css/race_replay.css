@@ -1,0 +1,671 @@
+/* Race Replay Styles */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: #fff;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+h1 {
+    text-align: left;
+    font-size: 2.2rem;
+    margin-bottom: 5px;
+    background: linear-gradient(90deg, #ff6b35, #f7931e);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+h1 .header-icon {
+    -webkit-background-clip: initial;
+    -webkit-text-fill-color: initial;
+    background: none;
+}
+
+.subtitle {
+    text-align: left;
+    color: #888;
+    margin-bottom: 10px;
+}
+
+.back-link {
+    color: #4fc3f7;
+    text-decoration: none;
+    font-size: 0.9rem;
+    display: inline-block;
+    margin-bottom: 8px;
+}
+
+.back-link:hover {
+    text-decoration: underline;
+}
+
+.header-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.auth-section {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.auth-status {
+    font-size: 0.9rem;
+    color: #888;
+}
+
+.auth-status.logged-in {
+    color: #4caf50;
+}
+
+.btn-auth {
+    padding: 8px 16px;
+    font-size: 0.9rem;
+    border-radius: 6px;
+    border: 2px solid #f7931e;
+    background: transparent;
+    color: #f7931e;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.3s ease;
+}
+
+.btn-auth:hover {
+    background: #f7931e;
+    color: #1a1a2e;
+}
+
+.btn-auth.logout {
+    border-color: #666;
+    color: #666;
+}
+
+.btn-auth.logout:hover {
+    background: #666;
+    color: #fff;
+}
+
+/* Panels */
+.panel {
+    background: rgba(255,255,255,0.05);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.panel h2 {
+    font-size: 1.2rem;
+    margin-bottom: 12px;
+    color: #ccc;
+}
+
+/* Race controls */
+.race-controls {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.race-input-group {
+    flex: 1;
+    min-width: 280px;
+}
+
+.race-input-group label {
+    display: block;
+    font-size: 0.85rem;
+    color: #999;
+    margin-bottom: 6px;
+}
+
+.input-row {
+    display: flex;
+    gap: 8px;
+}
+
+.input-row input[type="text"],
+.input-row select {
+    flex: 1;
+    background: #1a1a2e;
+    border: 2px solid #333;
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: #fff;
+    font-size: 0.95rem;
+}
+
+.input-row input[type="text"]:focus,
+.input-row select:focus {
+    outline: none;
+    border-color: #f7931e;
+}
+
+.input-row select option {
+    background: #1e2a3a;
+    color: #fff;
+}
+
+.input-row input::placeholder {
+    color: #666;
+}
+
+/* Buttons */
+.btn {
+    border: none;
+    border-radius: 8px;
+    padding: 12px 24px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.3s ease;
+}
+
+.btn-primary {
+    background: linear-gradient(90deg, #ff6b35, #f7931e);
+    color: #fff;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(247, 147, 30, 0.4);
+}
+
+.btn-secondary {
+    background: rgba(255,255,255,0.12);
+    color: #fff;
+}
+
+.btn-secondary:hover {
+    background: rgba(255,255,255,0.2);
+}
+
+.btn-play {
+    background: #4caf50;
+    color: #fff;
+    font-size: 1.1rem;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
+.btn-play:hover {
+    background: #66bb6a;
+}
+
+/* Status messages */
+.status-msg {
+    margin-top: 12px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+}
+
+.status-msg.success {
+    background: rgba(76,175,80,0.2);
+    color: #81c784;
+}
+
+.status-msg.error {
+    background: rgba(239,83,80,0.2);
+    color: #ef9a9a;
+}
+
+.status-msg.info {
+    background: rgba(41,182,246,0.2);
+    color: #4fc3f7;
+}
+
+/* Race info bar */
+.race-info {
+    display: flex;
+    gap: 30px;
+    flex-wrap: wrap;
+    padding: 15px 20px;
+}
+
+.info-item {
+    font-size: 0.9rem;
+    color: #ccc;
+}
+
+.info-item strong {
+    color: #4fc3f7;
+}
+
+.info-item a {
+    color: #4fc3f7;
+    text-decoration: none;
+}
+
+.info-item a:hover {
+    text-decoration: underline;
+}
+
+/* Playback controls */
+.playback-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.time-display {
+    font-family: 'Courier New', monospace;
+    font-size: 1rem;
+    color: #4fc3f7;
+    min-width: 45px;
+}
+
+.time-slider {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 3px;
+    outline: none;
+}
+
+.time-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #29b6f6;
+    cursor: pointer;
+}
+
+.time-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #29b6f6;
+    cursor: pointer;
+    border: none;
+}
+
+.speed-label {
+    font-size: 0.85rem;
+    color: #999;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.speed-label select {
+    background: #1a1a2e;
+    border: 2px solid #333;
+    border-radius: 6px;
+    padding: 4px 8px;
+    color: #fff;
+    font-size: 0.85rem;
+}
+
+.speed-label select option {
+    background: #1e2a3a;
+    color: #fff;
+}
+
+/* Rider table */
+.table-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+.table-header h2 {
+    margin: 0;
+}
+.power-unit-toggle {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+.toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: #aaa;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+.toggle-label input[type="radio"] {
+    accent-color: #29b6f6;
+}
+.table-container {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+#rider-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+#rider-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+#rider-table th {
+    background: rgba(255,255,255,0.08);
+    padding: 8px 10px;
+    text-align: left;
+    color: #aaa;
+    font-weight: 500;
+    cursor: default;
+    user-select: none;
+}
+
+#rider-table th.sortable {
+    cursor: pointer;
+}
+
+#rider-table th.sortable:hover {
+    color: #4fc3f7;
+}
+
+#rider-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+#rider-table tbody tr {
+    transition: background 0.15s;
+    border-left: 3px solid transparent;
+}
+#rider-table tbody tr:hover {
+    background: rgba(255,255,255,0.06);
+}
+
+#rider-table tbody tr.selected {
+    background: rgba(41,182,246,0.15);
+    border-left: 3px solid #29b6f6;
+}
+
+#rider-table tbody tr.checked {
+    background: rgba(76,175,80,0.1);
+}
+
+#rider-table tbody tr.finished {
+    color: #81c784;
+}
+
+#rider-table tbody tr.no-data {
+    opacity: 0.5;
+}
+
+.no-data-badge {
+    font-size: 0.65em;
+    color: #ff9800;
+    font-style: italic;
+}
+
+.col-check {
+    width: 30px;
+    text-align: center;
+}
+
+.col-pos { width: 45px; text-align: center; }
+.col-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.col-gap { width: 70px; font-family: monospace; }
+.col-power { width: 80px; font-family: monospace; }
+.col-hr { width: 50px; font-family: monospace; }
+.col-speed { width: 70px; font-family: monospace; }
+.col-dist { width: 70px; font-family: monospace; }
+.col-power1m { width: 80px; font-family: monospace; color: #90caf9; }
+.col-np { width: 80px; font-family: monospace; color: #a5d6a7; }
+.col-weight { width: 55px; font-family: monospace; }
+
+/* Zoom controls */
+.zoom-bar {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 8px 16px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    font-size: 0.9rem;
+}
+.zoom-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #aaa;
+    cursor: pointer;
+}
+.zoom-slider {
+    width: 200px;
+    accent-color: #29b6f6;
+}
+#follow-rider-select {
+    background: #1a1a2e;
+    border: 2px solid #333;
+    border-radius: 6px;
+    padding: 4px 8px;
+    color: #fff;
+    font-size: 0.85rem;
+    max-width: 200px;
+}
+#follow-rider-select option {
+    background: #1e2a3a;
+    color: #fff;
+}
+
+.chart-mode-toggle {
+    display: flex;
+    gap: 0;
+    margin-left: auto;
+}
+.chart-mode-btn {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid #444;
+    color: #888;
+    padding: 4px 12px;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+.chart-mode-btn:first-child {
+    border-radius: 6px 0 0 6px;
+}
+.chart-mode-btn:last-child {
+    border-radius: 0 6px 6px 0;
+    border-left: none;
+}
+.chart-mode-btn.active {
+    background: #29b6f6;
+    color: #fff;
+    border-color: #29b6f6;
+}
+
+/* Peloton details */
+.peloton-summary {
+    color: #aaa;
+    font-size: 0.85rem;
+    margin-bottom: 8px;
+}
+.peloton-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.peloton-card {
+    background: rgba(255,255,255,0.05);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    min-width: 180px;
+}
+.peloton-card.highlighted {
+    background: rgba(255,255,255,0.12);
+    box-shadow: 0 0 8px rgba(255,255,255,0.1);
+}
+.peloton-size {
+    color: #888;
+    font-weight: normal;
+}
+.peloton-stats {
+    display: flex;
+    gap: 12px;
+    margin-top: 4px;
+    color: #bbb;
+    font-size: 0.8rem;
+}
+
+/* Charts */
+.chart {
+    width: 100%;
+    height: 350px;
+}
+
+/* Loading overlay */
+.loading-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.7);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid rgba(255,255,255,0.2);
+    border-top-color: #f7931e;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 12px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Scrollbar styles */
+.table-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.table-container::-webkit-scrollbar-track {
+    background: rgba(255,255,255,0.05);
+}
+
+.table-container::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.15);
+    border-radius: 3px;
+}
+
+/* Stream links panel */
+.stream-links-panel {
+    padding: 10px 16px;
+}
+
+.stream-links-panel .stream-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    margin-right: 10px;
+    background: rgba(255, 0, 0, 0.12);
+    border: 1px solid rgba(255, 0, 0, 0.3);
+    border-radius: 6px;
+    color: #ff6b6b;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+    transition: background 0.2s, border-color 0.2s;
+}
+
+.stream-links-panel .stream-link:hover {
+    background: rgba(255, 0, 0, 0.22);
+    border-color: rgba(255, 0, 0, 0.5);
+    color: #ff8a8a;
+}
+
+.stream-links-panel .stream-link .yt-icon {
+    font-size: 16px;
+}
+
+.stream-links-panel .stream-label {
+    color: #aaa;
+    font-size: 12px;
+    margin-right: 8px;
+}
+
+/* Map panel */
+.map-container {
+    position: relative;
+    width: 100%;
+    height: 500px;
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: grab;
+    background: #0a1a2e;
+}
+
+.map-container:active {
+    cursor: grabbing;
+}
+
+#map-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.map-zoom-btn {
+    position: absolute;
+    right: 12px;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    font-size: 20px;
+    line-height: 32px;
+    text-align: center;
+    cursor: pointer;
+    z-index: 10;
+    user-select: none;
+    transition: background 0.15s;
+}
+
+.map-zoom-btn:hover {
+    background: rgba(60, 60, 60, 0.8);
+}
+
+#map-zoom-in {
+    bottom: 52px;
+}
+
+#map-zoom-out {
+    bottom: 12px;
+}

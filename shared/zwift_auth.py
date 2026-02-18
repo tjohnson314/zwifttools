@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 
 # Zwift OAuth endpoints
+ZWIFT_AUTH_URL = "https://secure.zwift.com/auth/realms/zwift/protocol/openid-connect/auth"
 ZWIFT_TOKEN_URL = "https://secure.zwift.com/auth/realms/zwift/protocol/openid-connect/token"
 
 # Public client ID used by Zwift Companion app

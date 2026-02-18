@@ -1,0 +1,33 @@
+{
+    "streamers": [
+        {
+            "name": "Adam (Road to A)",
+            "zwift_player_id": 5870214,
+            "youtube_handle": "@RoadtoA",
+            "youtube_channel_id": "UCgqQzVp5YsE0rFysyl4yT6Q",
+            "offset_adjust_sec": 0
+        },
+        {
+            "name": "Njål Pedersen",
+            "zwift_player_id": 3201227,
+            "youtube_handle": "@njalpedersen",
+            "offset_adjust_sec": 0,
+            "youtube_channel_id": "UCzFApJL33FU76MtPyyg2Glg"
+        },
+        {
+            "name": "Ed Laverack",
+            "zwift_player_id": 703388,
+            "youtube_handle": "@edlaverack",
+            "offset_adjust_sec": 0,
+            "youtube_channel_id": "UCYHSrKAKxCNk32ge-uI0fGQ"
+        },
+        {
+            "name": "BikeBonkBiff",
+            "zwift_player_id": 576041,
+            "youtube_handle": "@BikeBonkBiff",
+            "offset_adjust_sec": 0,
+            "youtube_channel_id": "UCgoCD9HTVMJrb004VqWa4_g"
+        }
+    ],
+    "_note": "youtube_channel_id will be auto-resolved from handle on first use. Set YOUTUBE_API_KEY env var to enable stream matching. offset_adjust_sec: positive = jump later in stream, negative = jump earlier."
+}

@@ -27,7 +27,7 @@ Thumbs.db
 .env
 
 # Race data (user-specific)
-race_data_*/
+race_data/
 routes_cache.json
 
 # Logs

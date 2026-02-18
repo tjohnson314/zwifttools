@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Race Replay - Zwift Tools</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <link rel="stylesheet" href="/static/css/race_replay.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header-bar">
+            <div>
+                <a href="/" class="back-link">← Back to Tools</a>
+                <h1><span class="header-icon">🏁</span> Race Replay</h1>
+                <p class="subtitle">Visualize multi-rider race data with interactive playback</p>
+            </div>
+            <div class="auth-section">
+                <span id="auth-status-text" class="auth-status">Checking...</span>
+                <button id="authBtn" class="btn-auth" onclick="handleAuth()" style="display:none;">Login with Zwift</button>
+            </div>
+        </div>
+
+        <!-- Race selection / fetch panel -->
+        <section class="panel">
+            <h2>Load Race Data</h2>
+            <div class="race-controls">
+                <div class="race-input-group">
+                    <label for="activity-input">Zwift Activity URL or ID</label>
+                    <div class="input-row">
+                        <input type="text" id="activity-input" placeholder="e.g. 2061899793440997424 or https://www.zwift.com/activity/...">
+                        <button id="fetch-btn" class="btn btn-primary">Fetch Race</button>
+                        <button id="refetch-btn" class="btn btn-secondary" title="Re-download race data from Zwift even if cached">Re-fetch</button>
+                    </div>
+                </div>
+                <div class="race-input-group">
+                    <label>Or load existing race data</label>
+                    <div class="input-row">
+                        <select id="race-select">
+                            <option value="">-- Select a race --</option>
+                        </select>
+                        <button id="load-btn" class="btn btn-secondary">Load</button>
+                    </div>
+                </div>
+            </div>
+            <div id="race-status" class="status-msg" style="display:none;"></div>
+        </section>
+
+        <!-- Race info bar (shown after loading) -->
+        <section class="panel race-info" id="race-info" style="display:none;">
+            <div class="info-item"><strong>Route:</strong> <span id="info-route">—</span></div>
+            <div class="info-item"><strong>Riders:</strong> <span id="info-riders">—</span></div>
+            <div class="info-item"><strong>Finish:</strong> <span id="info-finish">—</span></div>
+            <div class="info-item"><strong>Duration:</strong> <span id="info-duration">—</span></div>
+        </section>
+
+        <!-- Playback controls -->
+        <section class="panel" id="playback-panel" style="display:none;">
+            <div class="playback-controls">
+                <button id="play-btn" class="btn btn-play" title="Play/Pause">▶</button>
+                <span id="time-display" class="time-display">0:00</span>
+                <input type="range" id="time-slider" min="0" max="100" value="0" step="1" class="time-slider">
+                <span id="time-end" class="time-display">0:00</span>
+                <label class="speed-label">Speed:
+                    <select id="speed-select">
+                        <option value="1">1×</option>
+                        <option value="2">2×</option>
+                        <option value="5" selected>5×</option>
+                        <option value="10">10×</option>
+                        <option value="20">20×</option>
+                    </select>
+                </label>
+            </div>
+        </section>
+
+        <!-- YouTube stream links (shown when streamers detected) -->
+        <section class="panel stream-links-panel" id="stream-links-panel" style="display:none;">
+            <div id="stream-links-body"></div>
+        </section>
+
+        <!-- Rider table -->
+        <section class="panel" id="table-panel" style="display:none;">
+            <div class="table-header">
+                <h2>Rider Positions</h2>
+                <div class="power-unit-toggle">
+                    <label class="toggle-label">
+                        <input type="radio" name="power-unit" value="watts" checked> W
+                    </label>
+                    <label class="toggle-label">
+                        <input type="radio" name="power-unit" value="wkg"> W/kg
+                    </label>
+                </div>
+            </div>
+            <div class="table-container">
+                <table id="rider-table">
+                    <thead>
+                        <tr>
+                            <th class="col-check"><input type="checkbox" id="check-all" checked title="Toggle all"></th>
+                            <th class="col-pos sortable" data-sort="position">Pos</th>
+                            <th class="col-name sortable" data-sort="name">Name</th>
+                            <th class="col-gap sortable" data-sort="gap">Gap</th>
+                            <th class="col-power sortable" data-sort="power">Current Power</th>
+                            <th class="col-power1m sortable" data-sort="power1m">Past 1m Avg</th>
+                            <th class="col-np sortable" data-sort="np">NP</th>
+                            <th class="col-weight sortable" data-sort="weight">Weight</th>
+                            <th class="col-hr sortable" data-sort="hr">HR</th>
+                            <th class="col-speed sortable" data-sort="speed">Speed</th>
+                            <th class="col-dist sortable" data-sort="distance">Distance</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rider-tbody">
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Map panel -->
+        <section class="panel" id="map-panel" style="display:none;">
+            <h2>Race Map</h2>
+            <div id="map-container" class="map-container">
+                <canvas id="map-canvas"></canvas>
+                <button id="map-zoom-in" class="map-zoom-btn" title="Zoom in">+</button>
+                <button id="map-zoom-out" class="map-zoom-btn" title="Zoom out">&minus;</button>
+            </div>
+        </section>
+
+        <!-- Zoom controls -->
+        <section class="zoom-bar" id="zoom-controls" style="display:none;">
+            <label class="zoom-item">
+                🔍 Zoom:
+                <input type="range" id="zoom-slider" min="1" max="25" value="25" step="0.5" class="zoom-slider">
+                <span id="zoom-label">25.0 km</span>
+            </label>
+            <div class="zoom-item">
+                📍 Follow:
+                <select id="follow-rider-select">
+                    <option value="">None</option>
+                </select>
+            </div>
+            <div class="zoom-item chart-mode-toggle">
+                <button id="chart-mode-riders" class="chart-mode-btn active" title="Individual riders">Riders</button>
+                <button id="chart-mode-peloton" class="chart-mode-btn" title="Peloton groups">Peloton</button>
+            </div>
+        </section>
+
+        <!-- Combined elevation / peloton chart -->
+        <section class="panel" id="elevation-panel" style="display:none;">
+            <h2 id="chart-heading">Individual Riders</h2>
+            <div id="elevation-chart" class="chart"></div>
+        </section>
+
+        <!-- Peloton details -->
+        <section class="panel" id="peloton-details-panel" style="display:none;">
+            <h2>Peloton Details</h2>
+            <div id="peloton-details-body"></div>
+        </section>
+
+        {% include 'race_replay_faq.html' %}
+
+        <!-- Loading overlay -->
+        <div id="loading-overlay" class="loading-overlay" style="display:none;">
+            <div class="spinner"></div>
+            <p id="loading-text">Loading...</p>
+        </div>
+    </div>
+
+    <script src="/static/js/race_replay.js"></script>
+</body>
+</html>

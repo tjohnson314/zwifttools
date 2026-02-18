@@ -22,6 +22,7 @@ class BikeSetup:
     upgrade_level: int
     cd: float  # Drag coefficient Cd (NOT CdA - must multiply by frontal area)
     weight_kg: float  # Bike weight in kg
+    frame_type: str  # Frame type: 'Standard', 'TT', 'Gravel', 'MTB', etc.
     
     def __str__(self):
         return f"{self.frame_name} + {self.wheel_name} (Level {self.upgrade_level})"
@@ -113,7 +114,8 @@ class BikeDatabase:
                 wheel_name='(Built-in)',
                 upgrade_level=upgrade_level,
                 cd=combo['cd'][upgrade_level],  # Drag coefficient (not CdA!)
-                weight_kg=combo['weight'][upgrade_level]
+                weight_kg=combo['weight'][upgrade_level],
+                frame_type=frame.get('frametype', 'Standard') if frame else 'Standard'
             )
         
         wheel = self.wheels.get(wheel_id)
@@ -128,7 +130,8 @@ class BikeDatabase:
             wheel_name=f"{wheel['wheelmake']} {wheel['wheelmodel']}",
             upgrade_level=upgrade_level,
             cd=combo['cd'][upgrade_level],  # Drag coefficient (not CdA!)
-            weight_kg=combo['weight'][upgrade_level]
+            weight_kg=combo['weight'][upgrade_level],
+            frame_type=frame.get('frametype', 'Standard')
         )
     
     def list_frames(self, frame_type: Optional[str] = None) -> List[dict]:

@@ -1,14 +1,15 @@
 """
-Bike Comparison Web App for Zwift Race Analysis.
+Zwift Tools Web App.
 
-A web interface to compare your actual race performance with hypothetical
-performance using a different bike setup.
+A unified web app providing:
+- Bike Comparison: compare race performance with hypothetical bike setups
+- Race Replay: visualize multi-rider race data with interactive playback
 
 Run with: python app.py
 Then open: http://localhost:5000
 """
 
-from flask import Flask, render_template, jsonify, request, redirect, url_for, session
+from flask import Flask, render_template, jsonify, request, redirect, url_for, session, Response
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -17,13 +18,19 @@ import secrets
 import requests
 import traceback
 import gzip
+import json
+import queue
+import threading
 from scipy.ndimage import uniform_filter1d
 
-from bike_data import get_bike_database, get_bike_stats
-from physics import compare_bike_setups
-from utils import calculate_normalized_power
-from data_fetcher import fetch_rider_telemetry, convert_telemetry_to_dataframe
-from zwift_auth import exchange_code_for_tokens, refresh_access_token, ZwiftTokens, get_token_with_password
+from bike_comparison.bike_data import get_bike_database, get_bike_stats
+from bike_comparison.physics import compare_bike_setups
+from shared.utils import calculate_normalized_power
+from shared.data_fetcher import (
+    fetch_rider_telemetry, convert_telemetry_to_dataframe,
+    fetch_race_from_activity
+)
+from shared.zwift_auth import exchange_code_for_tokens, refresh_access_token, ZwiftTokens, get_token_with_password
 
 try:
     from garmin_fit_sdk import Decoder, Stream
@@ -63,12 +70,15 @@ def get_session_tokens() -> ZwiftTokens | None:
         
         # Refresh if expired
         if tokens.is_expired:
+            print(f"Token expired (expires_at={tokens.expires_at}, now={__import__('time').time()}), refreshing...")
             tokens = refresh_access_token(tokens.refresh_token)
             session['tokens'] = tokens.to_dict()
         
         return tokens
-    except Exception:
+    except Exception as e:
         # Token refresh failed, user needs to re-login
+        print(f"get_session_tokens failed: {e}")
+        traceback.print_exc()
         session.pop('tokens', None)
         return None
 
@@ -85,7 +95,8 @@ def get_headers():
 @app.route('/auth/login')
 def auth_login():
     """Show login form for password-based auth."""
-    return render_template('login.html')
+    next_url = request.args.get('next', url_for('index'))
+    return render_template('login.html', next_url=next_url)
 
 
 @app.route('/auth/login', methods=['POST'])
@@ -100,7 +111,8 @@ def auth_login_post():
     try:
         tokens = get_token_with_password(email, password)
         session['tokens'] = tokens.to_dict()
-        return redirect(url_for('index'))
+        next_url = request.form.get('next') or url_for('index')
+        return redirect(next_url)
     except Exception as e:
         return render_template('login_failed.html', error=str(e)), 401
 
@@ -160,8 +172,21 @@ def auth_status():
 
 @app.route('/')
 def index():
-    """Main page."""
-    return render_template('index.html')
+    """Landing page with links to both tools."""
+    logged_in = 'tokens' in session
+    return render_template('landing.html', logged_in=logged_in)
+
+
+@app.route('/bike-comparison')
+def bike_comparison():
+    """Bike comparison tool."""
+    return render_template('bike_comparison.html')
+
+
+@app.route('/race-replay')
+def race_replay():
+    """Race replay tool."""
+    return render_template('race_replay.html')
 
 
 def detect_cooldown_start(df: pd.DataFrame, power_col: str = 'power_watts') -> int:
@@ -222,6 +247,7 @@ def get_frames():
             'weight': frame['frameweight'],
             'hasBuiltInWheels': frame.get('framewheeltype') == 'fixed',
             'isTT': frame.get('frametype') == 'TT',
+            'frameType': frame.get('frametype', 'Standard'),
             'level': int(frame.get('framelevel') or 0)
         })
     return jsonify(frames)
@@ -231,13 +257,14 @@ def get_frames():
 def get_wheels():
     """Get all wheels for dropdown."""
     db = get_db()
-    wheels = [{'id': '', 'name': '(Built-in wheels)', 'aero': '-', 'weight': '-'}]
+    wheels = [{'id': '', 'name': '(Built-in wheels)', 'aero': '-', 'weight': '-', 'fitsFrame': ''}]
     for wheel in sorted(db.wheels.values(), key=lambda w: f'{w["wheelmake"]} {w["wheelmodel"]}'):
         wheels.append({
             'id': wheel['wheelid'],
             'name': f"{wheel['wheelmake']} {wheel['wheelmodel']}",
             'aero': wheel['wheelaero'],
             'weight': wheel['wheelweight'],
+            'fitsFrame': wheel.get('wheelfitsframe', 'Standard,TT'),
             'level': int(wheel.get('wheellevel') or 0)
         })
     return jsonify(wheels)
@@ -279,65 +306,6 @@ def get_my_profile():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/my_equipped_bike')
-def get_my_equipped_bike():
-    """
-    Get the currently equipped bike from the user's Zwift profile.
-    
-    Returns:
-        JSON with frame_id and wheel_id if available, otherwise null values.
-    """
-    headers = get_headers()
-    if not headers:
-        return jsonify({'error': 'Not authenticated'}), 401
-    
-    try:
-        # Fetch profile from Zwift API
-        resp = requests.get(
-            'https://us-or-rly101.zwift.com/api/profiles/me',
-            headers=headers,
-            timeout=10
-        )
-        
-        if resp.status_code != 200:
-            return jsonify({'error': 'Failed to fetch profile', 'status': resp.status_code}), resp.status_code
-        
-        profile = resp.json()
-        virtual_bike = profile.get('virtualBikeModel', '')
-        
-        # Parse virtualBikeModel - format appears to be "FNNN-WNNN" or "FNNN" or numeric
-        frame_id = None
-        wheel_id = None
-        
-        if virtual_bike and virtual_bike != '---':
-            # Try different format patterns
-            if '-' in virtual_bike:
-                # Format: "F089-W028" or similar
-                parts = virtual_bike.split('-')
-                if len(parts) >= 1 and parts[0].startswith('F'):
-                    frame_id = parts[0]
-                if len(parts) >= 2 and parts[1].startswith('W'):
-                    wheel_id = parts[1]
-            elif virtual_bike.startswith('F'):
-                # Just frame ID
-                frame_id = virtual_bike.split('W')[0] if 'W' in virtual_bike else virtual_bike
-                if 'W' in virtual_bike:
-                    wheel_id = 'W' + virtual_bike.split('W')[1]
-            elif virtual_bike.isdigit():
-                # Numeric ID - try to map (this is speculative)
-                # The numeric ID might correspond to frame position in game's bike list
-                pass
-        
-        return jsonify({
-            'frame_id': frame_id,
-            'wheel_id': wheel_id,
-            'raw_value': virtual_bike,
-            'player_id': profile.get('id'),
-            'player_name': f"{profile.get('firstName', '')} {profile.get('lastName', '')}"
-        })
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/bike_stats')
@@ -412,6 +380,25 @@ def fetch_activity():
         else:
             gradient = np.zeros(len(df))
         
+        # Compute per-point surface types from GPS surface polygons
+        surface_types = None
+        latlng = telem_data.get('latlng', [])
+        if latlng and len(latlng) == len(df):
+            try:
+                from shared.surface_lookup import compute_surface_types_array, surface_types_to_crr
+                lats = np.array([pt[0] for pt in latlng])
+                lngs = np.array([pt[1] for pt in latlng])
+                mid = len(lats) // 2
+                from race_replay.data_cleaner import detect_world_from_coords
+                world = detect_world_from_coords(float(lats[mid]), float(lngs[mid]))
+                if world:
+                    surface_types = compute_surface_types_array(lats, lngs, world)
+                    non_default = np.sum(surface_types != 'Tarmac')
+                    if non_default > 0:
+                        print(f"Surface types: {non_default} points on non-tarmac surfaces")
+            except Exception as e:
+                print(f"Warning: Could not compute surface types: {e}")
+
         # Build telemetry response
         telemetry = {
             'time_sec': df['time_sec'].tolist(),
@@ -421,8 +408,13 @@ def fetch_activity():
             'power_watts': df['power_watts'].tolist(),
             'altitude_m': df['altitude_m'].tolist()
         }
+        if surface_types is not None:
+            telemetry['surface_type'] = surface_types.tolist()
+            # Also include road_bike CRR for backward compatibility
+            telemetry['crr'] = surface_types_to_crr(surface_types, 'road_bike').tolist()
         
         # Look up rider profile for height/weight
+        # The rider may differ from the logged-in user, so always fetch by profileId
         rider_profile = None
         if activity_data:
             profile_id = activity_data.get('profileId') or activity_data.get('profile', {}).get('id')
@@ -435,13 +427,24 @@ def fetch_activity():
                     )
                     if profile_resp.status_code == 200:
                         p = profile_resp.json()
-                        rider_profile = {
-                            'height_cm': round(p.get('height', 0) / 10, 1),  # mm -> cm
-                            'weight_kg': round(p.get('weight', 0) / 1000, 1),  # g -> kg
-                            'name': f"{p.get('firstName', '')} {p.get('lastName', '')}".strip()
-                        }
+                        if p.get('height') and p.get('weight'):
+                            rider_profile = {
+                                'height_cm': round(p['height'] / 10, 1),
+                                'weight_kg': round(p['weight'] / 1000, 1),
+                                'name': f"{p.get('firstName', '')} {p.get('lastName', '')}".strip()
+                            }
                 except Exception:
-                    pass  # Non-critical, just skip
+                    pass  # Non-critical
+            
+            # Fallback: try embedded profile data in the activity
+            if not rider_profile:
+                profile = activity_data.get('profile', {})
+                if profile.get('height') and profile.get('weight'):
+                    rider_profile = {
+                        'height_cm': round(profile['height'] / 10, 1),
+                        'weight_kg': round(profile['weight'] / 1000, 1),
+                        'name': f"{profile.get('firstName', '')} {profile.get('lastName', '')}".strip()
+                    }
 
         response = {
             'success': True,
@@ -523,6 +526,8 @@ def upload_fit():
         speed_list = []   # m/s from enhanced_speed or speed
         distance_list = []  # metres from distance
         altitude_list = []  # metres from enhanced_altitude or altitude
+        lat_list = []
+        lng_list = []
 
         first_ts = None
         for rec in records:
@@ -554,6 +559,17 @@ def upload_fit():
             # Altitude: enhanced_altitude preferred, fallback to altitude
             alt = rec.get('enhanced_altitude') or rec.get('altitude')
             altitude_list.append(float(alt) if alt is not None else 0.0)
+
+            # GPS coordinates
+            lat = rec.get('position_lat')
+            lng = rec.get('position_long')
+            # FIT stores in semicircles; convert to degrees
+            if lat is not None and isinstance(lat, (int, float)) and abs(lat) > 180:
+                lat = lat * (180 / 2**31)
+            if lng is not None and isinstance(lng, (int, float)) and abs(lng) > 180:
+                lng = lng * (180 / 2**31)
+            lat_list.append(float(lat) if lat is not None else None)
+            lng_list.append(float(lng) if lng is not None else None)
 
         if len(timestamps) < 5:
             return jsonify({'error': 'FIT file has too few data points'}), 400
@@ -600,6 +616,25 @@ def upload_fit():
             'altitude_m': df['altitude_m'].tolist(),
         }
 
+        # Compute per-point surface types from GPS surface polygons
+        if any(x is not None for x in lat_list):
+            try:
+                from shared.surface_lookup import compute_surface_types_array, surface_types_to_crr
+                from race_replay.data_cleaner import detect_world_from_coords
+                lats = np.array([x if x is not None else 0.0 for x in lat_list])
+                lngs = np.array([x if x is not None else 0.0 for x in lng_list])
+                mid = len(lats) // 2
+                world = detect_world_from_coords(float(lats[mid]), float(lngs[mid]))
+                if world:
+                    surface_types = compute_surface_types_array(lats, lngs, world)
+                    telemetry['surface_type'] = surface_types.tolist()
+                    telemetry['crr'] = surface_types_to_crr(surface_types, 'road_bike').tolist()
+                    non_default = int(np.sum(surface_types != 'Tarmac'))
+                    if non_default > 0:
+                        print(f"FIT surface types: {non_default} points on non-tarmac surfaces")
+            except Exception as e:
+                print(f"Warning: Could not compute surface types from FIT GPS: {e}")
+
         return jsonify({
             'success': True,
             'source': 'fit_upload',
@@ -618,37 +653,29 @@ def upload_fit():
 
 def estimate_frontal_area(height_cm: float, weight_kg: float, position: str = 'drops') -> float:
     """
-    Estimate cyclist frontal area based on height, weight, and position.
+    Estimate cyclist frontal area based on height and weight.
     
-    Uses the formula from Heil (2001) / cycling aerodynamics research:
-    1. Calculate body surface area using Du Bois formula
-    2. Estimate frontal area as fraction of BSA based on position
+    Uses the Faria formula (drops position), which is the same formula
+    ZwifterBikes uses when deriving their Cd values. Using a consistent
+    frontal area formula ensures CdA = Cd × FA matches the original
+    wind-tunnel / velodrome calibration data.
+    
+    Formula: FA = 0.0293 × H^0.725 × M^0.425 + 0.0604
+    where H = height in metres, M = mass in kg
     
     Args:
         height_cm: Rider height in cm
         weight_kg: Rider weight in kg
-        position: 'drops', 'hoods', 'tt', or 'upright'
+        position: Riding position (currently unused; Faria formula is for drops)
         
     Returns:
         Frontal area in m²
     """
     height_m = height_cm / 100
     
-    # Du Bois Body Surface Area formula (m²)
-    # BSA = 0.007184 × height^0.725 × weight^0.425
-    bsa = 0.007184 * (height_cm ** 0.725) * (weight_kg ** 0.425)
-    
-    # Frontal area as fraction of BSA depends on position
-    # These values are from cycling aerodynamics studies
-    position_fractions = {
-        'tt': 0.17,       # TT/aero position (~0.32 m² for average rider)
-        'drops': 0.19,    # Drops position (~0.36 m² for average rider)  
-        'hoods': 0.21,    # Hoods position (~0.40 m² for average rider)
-        'upright': 0.24   # Upright/climbing (~0.45 m² for average rider)
-    }
-    
-    fraction = position_fractions.get(position, 0.19)
-    frontal_area = bsa * fraction
+    # Faria frontal area formula (drops position)
+    # Consistent with ZwifterBikes Cd derivation methodology
+    frontal_area = 0.0293 * (height_m ** 0.725) * (weight_kg ** 0.425) + 0.0604
     
     return frontal_area
 
@@ -689,15 +716,31 @@ def compare_bikes():
     frontal_area = estimate_frontal_area(rider_height, rider_weight, 'drops')
     alt_frontal_area = estimate_frontal_area(alt_rider_height, alt_rider_weight, 'drops')
     
+    # Use per-point CRR if available from surface data, adjusted by bike type
+    crr = 0.004
+    alt_crr = None
+    if 'surface_type' in telemetry.columns:
+        from shared.surface_lookup import surface_types_to_crr, get_bike_type_for_frame
+        surface_types = telemetry['surface_type'].values
+        actual_bike_type = get_bike_type_for_frame(actual.frame_type)
+        alt_bike_type = get_bike_type_for_frame(alternative.frame_type)
+        crr = surface_types_to_crr(surface_types, actual_bike_type)
+        if alt_bike_type != actual_bike_type:
+            alt_crr = surface_types_to_crr(surface_types, alt_bike_type)
+    elif 'crr' in telemetry.columns:
+        crr = telemetry['crr'].values
+
     # Run comparison
     result = compare_bike_setups(
         telemetry=telemetry,
         rider_weight_kg=rider_weight,
         actual_setup=actual,
         alternative_setup=alternative,
+        crr=crr,
         frontal_area=frontal_area,
         alt_rider_weight_kg=alt_rider_weight,
-        alt_frontal_area=alt_frontal_area
+        alt_frontal_area=alt_frontal_area,
+        alt_crr=alt_crr
     )
     
     # Prepare response data for charts
@@ -728,6 +771,7 @@ def compare_bikes():
             'actual_watts': result.actual_watts.tolist(),
             'alternative_watts': result.alternative_watts.tolist(),
             'watts_difference': result.watts_difference.tolist(),
+            'draft_watts': result.draft_watts.tolist(),
             'gradient': (result.gradient * 100).tolist()
         }
     })
@@ -975,13 +1019,29 @@ def find_best_bikes():
                 dt[0] = dt[1] if len(dt) > 1 else 1.0
                 total_kj = float(np.sum(actual_power * dt) / 1000)
             else:
+                # Compute per-bike-type CRR from surface types
+                crr = 0.004
+                alt_crr = None
+                if 'surface_type' in telemetry.columns:
+                    from shared.surface_lookup import surface_types_to_crr, get_bike_type_for_frame
+                    surface_types = telemetry['surface_type'].values
+                    actual_bike_type = get_bike_type_for_frame(actual_bike.frame_type)
+                    alt_bike_type = get_bike_type_for_frame(setup.frame_type)
+                    crr = surface_types_to_crr(surface_types, actual_bike_type)
+                    if alt_bike_type != actual_bike_type:
+                        alt_crr = surface_types_to_crr(surface_types, alt_bike_type)
+                elif 'crr' in telemetry.columns:
+                    crr = telemetry['crr'].values
+
                 # Use compare_bike_setups for consistent calculation with timeline comparison
                 result = compare_bike_setups(
                     telemetry=telemetry,
                     rider_weight_kg=rider_weight,
                     actual_setup=actual_bike,
                     alternative_setup=setup,
-                    frontal_area=frontal_area
+                    crr=crr,
+                    frontal_area=frontal_area,
+                    alt_crr=alt_crr
                 )
                 np_value = result.alternative_np
                 avg_power = float(np.mean(result.alternative_watts))
@@ -1025,11 +1085,383 @@ def find_best_bikes():
     })
 
 
+# ---------------------------------------------------------------------------
+# Race Replay API Routes
+# ---------------------------------------------------------------------------
+
+# In-memory cache of loaded race data (keyed by race_id)
+_race_data_cache = {}
+
+
+@app.route('/api/race/fetch', methods=['POST'])
+def api_race_fetch():
+    """Fetch race data from Zwift API by activity URL or ID (non-streaming fallback)."""
+    headers = get_headers()
+    if not headers:
+        return jsonify({'error': 'Not authenticated. Please log in first.'}), 401
+
+    data = request.json
+    activity_url_or_id = data.get('activity_id')
+    if not activity_url_or_id:
+        return jsonify({'error': 'activity_id required'}), 400
+
+    force_refresh = data.get('force_refresh', False)
+
+    try:
+        race_data_dir = Path('race_data')
+        race_data_dir.mkdir(exist_ok=True)
+
+        def log_progress(current, total, name):
+            print(f"  [{current}/{total}] Fetching {name}...")
+
+        output_dir, message = fetch_race_from_activity(
+            activity_url_or_id, headers,
+            output_base_dir=str(race_data_dir),
+            progress_callback=log_progress,
+            force_refresh=force_refresh
+        )
+
+        if not output_dir:
+            return jsonify({'error': message}), 400
+
+        race_id = Path(output_dir).name
+        return jsonify({'success': True, 'race_id': race_id, 'message': message})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/race/fetch_stream')
+def api_race_fetch_stream():
+    """SSE endpoint — streams progress while fetching race data."""
+    headers = get_headers()
+    if not headers:
+        print(f"SSE fetch_stream: No auth headers. Session keys: {list(session.keys())}")
+        def err_gen():
+            yield f"data: {json.dumps({'error': 'Not authenticated. Please log in first.'})}\n\n"
+        return Response(err_gen(), mimetype='text/event-stream')
+
+    activity_url_or_id = request.args.get('activity_id', '').strip()
+    if not activity_url_or_id:
+        def err_gen():
+            yield f"data: {json.dumps({'error': 'activity_id required'})}\n\n"
+        return Response(err_gen(), mimetype='text/event-stream')
+
+    force_refresh = request.args.get('force_refresh', '').lower() in ('1', 'true')
+
+    # Use a queue to bridge the progress_callback (in a thread) to the SSE generator
+    q = queue.Queue()
+
+    def run_fetch():
+        try:
+            race_data_dir = Path('race_data')
+            race_data_dir.mkdir(exist_ok=True)
+
+            def on_progress(current, total, name):
+                print(f"  [{current}/{total}] Fetching {name}...")
+                q.put({'progress': True, 'current': current, 'total': total, 'name': name})
+
+            output_dir, message = fetch_race_from_activity(
+                activity_url_or_id, headers,
+                output_base_dir=str(race_data_dir),
+                progress_callback=on_progress,
+                force_refresh=force_refresh
+            )
+
+            if not output_dir:
+                q.put({'error': message})
+            else:
+                race_id = Path(output_dir).name
+                # Clear in-memory cleaned data cache so it gets regenerated
+                _race_data_cache.pop(race_id, None)
+                q.put({'success': True, 'race_id': race_id, 'message': message})
+        except Exception as e:
+            traceback.print_exc()
+            q.put({'error': str(e)})
+        finally:
+            q.put(None)  # sentinel: stream done
+
+    thread = threading.Thread(target=run_fetch, daemon=True)
+    thread.start()
+
+    def event_stream():
+        while True:
+            msg = q.get()
+            if msg is None:
+                break
+            yield f"data: {json.dumps(msg)}\n\n"
+
+    return Response(event_stream(), mimetype='text/event-stream',
+                    headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
+
+
+@app.route('/api/race/list')
+def api_race_list():
+    """List available race data directories."""
+    race_dirs = []
+    race_data_dir = Path('race_data')
+    if race_data_dir.exists():
+        for d in sorted(race_data_dir.iterdir(), reverse=True):
+            if d.is_dir() and d.name.startswith('race_data_'):
+                summary_file = d / 'complete_race_summary.csv'
+                meta_file = d / 'race_meta.json'
+                info = {
+                    'race_id': d.name,
+                    'has_summary': summary_file.exists(),
+                    'race_name': None,
+                }
+                # Load race name from metadata
+                if meta_file.exists():
+                    try:
+                        with open(meta_file) as f:
+                            meta = json.load(f)
+                            info['race_name'] = meta.get('race_name')
+                    except Exception:
+                        pass
+                if summary_file.exists():
+                    try:
+                        summary = pd.read_csv(summary_file)
+                        info['rider_count'] = len(summary)
+                        info['riders'] = summary[['rank', 'name']].to_dict('records') if 'name' in summary.columns else []
+                    except Exception:
+                        pass
+                race_dirs.append(info)
+    return jsonify({'races': race_dirs})
+
+
+@app.route('/api/race/load', methods=['POST'])
+def api_race_load():
+    """Load/clean a race data directory and return metadata."""
+    data = request.json
+    race_id = data.get('race_id')
+    if not race_id:
+        return jsonify({'error': 'race_id required'}), 400
+
+    data_path = Path('race_data') / race_id
+    if not data_path.exists():
+        return jsonify({'error': f'Race data not found: {race_id}'}), 404
+
+    try:
+        from race_replay.data_cleaner import clean_race_data
+        race_data = clean_race_data(data_path, cache=True)
+        _race_data_cache[race_id] = race_data
+
+        return jsonify({
+            'success': True,
+            'race_id': race_id,
+            'route_name': race_data.route_name or 'Unknown',
+            'route_slug': race_data.route_slug,
+            'finish_line_km': round(float(race_data.finish_line_km), 3),
+            'rider_count': len(race_data.riders),
+            'min_time': int(race_data.min_time),
+            'max_time': int(race_data.max_time),
+            'riders': [
+                {
+                    'rank': int(r.rank),
+                    'name': r.name,
+                    'team': r.team,
+                    'is_finisher': bool(r.is_finisher),
+                    'finish_time_sec': float(r.finish_time_sec) if r.finish_time_sec is not None else None,
+                }
+                for r in race_data.riders
+            ]
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/race/data/<race_id>')
+def api_race_data(race_id):
+    """Get full cleaned race data (all riders, all timestamps) as JSON."""
+    if race_id not in _race_data_cache:
+        # Try loading
+        data_path = Path('race_data') / race_id
+        if not data_path.exists():
+            return jsonify({'error': f'Race data not found: {race_id}'}), 404
+        try:
+            from race_replay.data_cleaner import clean_race_data
+            race_data = clean_race_data(data_path, cache=True)
+            _race_data_cache[race_id] = race_data
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    race_data = _race_data_cache[race_id]
+
+    # Detect world if not already set (e.g. older cached data)
+    world = race_data.world
+    if not world and race_data.riders:
+        ref = max(race_data.riders, key=lambda r: len(r.data))
+        df0 = ref.data.reset_index()
+        if 'lat' in df0.columns and 'lng' in df0.columns:
+            mid = len(df0) // 2
+            from race_replay.data_cleaner import detect_world_from_coords
+            world = detect_world_from_coords(float(df0['lat'].iloc[mid]), float(df0['lng'].iloc[mid]))
+
+    # Build elevation profile
+    elev = race_data.elevation_profile
+    elevation_profile = {
+        'distance_km': elev['distance_km'].tolist(),
+        'altitude_m': elev['altitude_m'].tolist(),
+    }
+
+    # Build rider data — each rider's full time series
+    riders = []
+    def safe_list(series):
+        """Convert pandas Series to list, replacing NaN with None for valid JSON."""
+        return [None if pd.isna(v) else v for v in series]
+
+    for r in race_data.riders:
+        df = r.data.reset_index()  # time_sec is the index
+        rider_json = {
+            'rank': int(r.rank),
+            'name': r.name,
+            'team': r.team,
+            'activity_id': str(r.activity_id),
+            'player_id': int(r.player_id) if r.player_id else None,
+            'weight_kg': float(r.weight_kg),
+            'is_finisher': bool(r.is_finisher),
+            'finish_time_sec': float(r.finish_time_sec) if r.finish_time_sec is not None else None,
+            'time_sec': df['time_sec'].tolist(),
+            'distance_km': safe_list(df['distance_km']),
+            'altitude_m': safe_list(df['altitude_m']) if 'altitude_m' in df.columns else [],
+            'speed_kmh': safe_list(df['speed_kmh']) if 'speed_kmh' in df.columns else [],
+            'power_watts': safe_list(df['power_watts']) if 'power_watts' in df.columns else [],
+            'hr_bpm': safe_list(df['hr_bpm']) if 'hr_bpm' in df.columns else [],
+            'lat': safe_list(df['lat']) if 'lat' in df.columns else [],
+            'lng': safe_list(df['lng']) if 'lng' in df.columns else [],
+        }
+        riders.append(rider_json)
+
+    # Load race start time from metadata
+    race_start_time = None
+    meta_path = Path('race_data') / race_id / 'race_meta.json'
+    if meta_path.exists():
+        try:
+            with open(meta_path) as f:
+                meta = json.load(f)
+            race_start_time = meta.get('race_start_time')
+        except Exception:
+            pass
+
+    # Build world map configuration
+    map_config = None
+    if world:
+        from shared.world_config import get_world_map_config
+        map_config = get_world_map_config(world)
+
+    # Load official route polyline from ZwiftMap (if available)
+    route_latlng = None
+    if race_data.route_slug:
+        try:
+            from race_replay.data_cleaner import load_route_data
+            rd = load_route_data(race_data.route_slug)
+            if rd is not None:
+                route_latlng = rd.latlng.tolist()
+        except Exception as e:
+            print(f"Could not load route latlng: {e}")
+
+    return jsonify({
+        'race_id': race_id,
+        'route_name': race_data.route_name,
+        'route_slug': race_data.route_slug,
+        'source_activity_id': str(race_data.source_activity_id) if race_data.source_activity_id else None,
+        'race_start_time': race_start_time,
+        'finish_line_km': float(race_data.finish_line_km),
+        'min_time': int(race_data.min_time),
+        'max_time': int(race_data.max_time),
+        'elevation_profile': elevation_profile,
+        'riders': riders,
+        'map_config': map_config,
+        'route_latlng': route_latlng,
+    })
+
+
+@app.route('/api/race/streams/<race_id>')
+def api_race_streams(race_id):
+    """Find YouTube livestreams from known streamers who were in this race."""
+    try:
+        from shared.youtube_streams import find_matching_streams, get_api_key
+
+        # Check for cached stream results first (avoids slow YouTube API calls)
+        stream_cache_path = Path('race_data') / race_id / 'stream_cache.json'
+        if stream_cache_path.exists():
+            with open(stream_cache_path, encoding='utf-8') as f:
+                cached = json.load(f)
+            return jsonify(cached)
+
+        if not get_api_key():
+            return jsonify({'streams': [], 'note': 'YOUTUBE_API_KEY not configured'})
+
+        # Load race metadata for start time
+        meta_path = Path('race_data') / race_id / 'race_meta.json'
+        if not meta_path.exists():
+            return jsonify({'streams': [], 'error': 'Race metadata not found'})
+
+        with open(meta_path, encoding='utf-8') as f:
+            meta = json.load(f)
+
+        race_start_time = meta.get('race_start_time')
+        if not race_start_time:
+            return jsonify({'streams': [], 'note': 'No race start time available'})
+
+        # Get player IDs from in-memory cache or fall back to disk
+        if race_id in _race_data_cache:
+            race_data = _race_data_cache[race_id]
+            player_ids = [r.player_id for r in race_data.riders if r.player_id]
+            race_duration = race_data.max_time - race_data.min_time
+        else:
+            # Fall back to reading from cleaned_cache.json or summary CSV
+            cache_path = Path('race_data') / race_id / 'cleaned_cache.json'
+            summary_path = Path('race_data') / race_id / 'complete_race_summary.csv'
+            player_ids = []
+            race_duration = 3600  # Default 1h if unknown
+
+            if cache_path.exists():
+                with open(cache_path, encoding='utf-8') as f:
+                    cache_meta = json.load(f)
+                player_ids = [r['player_id'] for r in cache_meta.get('riders', []) if r.get('player_id')]
+                race_duration = cache_meta.get('max_time', 3600) - cache_meta.get('min_time', 0)
+            elif summary_path.exists():
+                import csv
+                with open(summary_path, encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        pid = row.get('player_id')
+                        if pid:
+                            try:
+                                player_ids.append(int(float(pid)))
+                            except (ValueError, TypeError):
+                                pass
+
+            if not player_ids:
+                return jsonify({'streams': [], 'note': 'No player IDs available'})
+
+        streams = find_matching_streams(
+            race_start_time=race_start_time,
+            race_duration_sec=race_duration,
+            rider_player_ids=player_ids,
+        )
+
+        # Cache results to disk so subsequent loads are instant
+        result = {'streams': streams}
+        if streams:
+            with open(stream_cache_path, 'w', encoding='utf-8') as f:
+                json.dump(result, f, indent=2)
+
+        return jsonify(result)
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'streams': [], 'error': str(e)})
+
+
 if __name__ == '__main__':
-    # Ensure templates directory exists
+    # Ensure directories exist
     Path('templates').mkdir(exist_ok=True)
-    Path('static').mkdir(exist_ok=True)
+    Path('static/css').mkdir(parents=True, exist_ok=True)
+    Path('static/js').mkdir(parents=True, exist_ok=True)
+    Path('race_data').mkdir(exist_ok=True)
     
-    print("Starting Bike Comparison Web App...")
+    print("Starting Zwift Tools Web App...")
     print("Open http://localhost:5000 in your browser")
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5000, threaded=True)
