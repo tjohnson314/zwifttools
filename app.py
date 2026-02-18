@@ -30,6 +30,7 @@ from shared.data_fetcher import (
     fetch_rider_telemetry, convert_telemetry_to_dataframe,
     fetch_race_from_activity
 )
+from shared import blob_storage
 from shared.zwift_auth import exchange_code_for_tokens, refresh_access_token, ZwiftTokens, get_token_with_password
 
 try:
@@ -1197,8 +1198,9 @@ def api_race_fetch_stream():
 
 @app.route('/api/race/list')
 def api_race_list():
-    """List available race data directories."""
+    """List available race data directories (local + blob storage)."""
     race_dirs = []
+    seen_ids = set()
     race_data_dir = Path('race_data')
     if race_data_dir.exists():
         for d in sorted(race_data_dir.iterdir(), reverse=True):
@@ -1226,6 +1228,17 @@ def api_race_list():
                     except Exception:
                         pass
                 race_dirs.append(info)
+                seen_ids.add(d.name)
+
+    # Merge in any races only in blob storage
+    for blob_info in blob_storage.list_races():
+        if blob_info['race_id'] not in seen_ids:
+            race_dirs.append({
+                'race_id': blob_info['race_id'],
+                'has_summary': True,
+                'race_name': blob_info.get('race_name'),
+            })
+
     return jsonify({'races': race_dirs})
 
 
@@ -1239,12 +1252,21 @@ def api_race_load():
 
     data_path = Path('race_data') / race_id
     if not data_path.exists():
+        # Try downloading from blob storage
+        if blob_storage.race_exists_in_blob(race_id):
+            data_path.parent.mkdir(exist_ok=True)
+            data_path.mkdir(parents=True, exist_ok=True)
+            blob_storage.download_race_dir(race_id, data_path)
+    if not data_path.exists():
         return jsonify({'error': f'Race data not found: {race_id}'}), 404
 
     try:
         from race_replay.data_cleaner import clean_race_data
         race_data = clean_race_data(data_path, cache=True)
         _race_data_cache[race_id] = race_data
+
+        # Upload cleaned cache to blob so it persists across deploys
+        blob_storage.upload_race_dir(race_id, data_path)
 
         return jsonify({
             'success': True,
@@ -1277,6 +1299,12 @@ def api_race_data(race_id):
     if race_id not in _race_data_cache:
         # Try loading
         data_path = Path('race_data') / race_id
+        if not data_path.exists():
+            # Try downloading from blob storage
+            if blob_storage.race_exists_in_blob(race_id):
+                data_path.parent.mkdir(exist_ok=True)
+                data_path.mkdir(parents=True, exist_ok=True)
+                blob_storage.download_race_dir(race_id, data_path)
         if not data_path.exists():
             return jsonify({'error': f'Race data not found: {race_id}'}), 404
         try:
@@ -1385,6 +1413,11 @@ def api_race_streams(race_id):
 
         # Check for cached stream results first (avoids slow YouTube API calls)
         stream_cache_path = Path('race_data') / race_id / 'stream_cache.json'
+        # Ensure race data is available locally (download from blob if needed)
+        race_dir = Path('race_data') / race_id
+        if not race_dir.exists() and blob_storage.race_exists_in_blob(race_id):
+            race_dir.mkdir(parents=True, exist_ok=True)
+            blob_storage.download_race_dir(race_id, race_dir)
         if stream_cache_path.exists():
             with open(stream_cache_path, encoding='utf-8') as f:
                 cached = json.load(f)
@@ -1448,6 +1481,8 @@ def api_race_streams(race_id):
         if streams:
             with open(stream_cache_path, 'w', encoding='utf-8') as f:
                 json.dump(result, f, indent=2)
+            # Persist stream cache to blob storage
+            blob_storage.upload_file(race_id, stream_cache_path)
 
         return jsonify(result)
     except Exception as e:

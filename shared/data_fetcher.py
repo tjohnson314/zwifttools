@@ -15,6 +15,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .utils import calculate_normalized_power
+from . import blob_storage
 
 BASE_URL = "https://us-or-rly101.zwift.com/api"
 
@@ -346,19 +347,27 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
     summary_path = os.path.join(output_dir, "complete_race_summary.csv")
     meta_path = os.path.join(output_dir, "race_meta.json")
     
-    # Check for existing cached data
-    if not force_refresh and os.path.exists(summary_path):
-        try:
-            summary_df = pd.read_csv(summary_path)
-            success_count = int((summary_df['status'] == 'SUCCESS').sum())
-            # Load race name from metadata if available
-            if os.path.exists(meta_path):
-                with open(meta_path) as f:
-                    meta = json.load(f)
-                    race_name = meta.get('race_name', race_name)
-            return output_dir, f"Cached: {race_name} ({success_count} riders)"
-        except Exception:
-            pass  # Fall through to re-fetch
+    # Check for existing cached data (local first, then blob storage)
+    if not force_refresh:
+        # If not on local disk, try downloading from blob storage
+        if not os.path.exists(summary_path):
+            race_dir_name = f"race_data_{event_subgroup_id}"
+            if blob_storage.race_exists_in_blob(race_dir_name):
+                os.makedirs(output_dir, exist_ok=True)
+                blob_storage.download_race_dir(race_dir_name, output_dir)
+
+        if os.path.exists(summary_path):
+            try:
+                summary_df = pd.read_csv(summary_path)
+                success_count = int((summary_df['status'] == 'SUCCESS').sum())
+                # Load race name from metadata if available
+                if os.path.exists(meta_path):
+                    with open(meta_path) as f:
+                        meta = json.load(f)
+                        race_name = meta.get('race_name', race_name)
+                return output_dir, f"Cached: {race_name} ({success_count} riders)"
+            except Exception:
+                pass  # Fall through to re-fetch
     
     os.makedirs(output_dir, exist_ok=True)
     
@@ -518,4 +527,9 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
     summary_df.to_csv(os.path.join(output_dir, "complete_race_summary.csv"), index=False)
     
     success_count = len([s for s in summary_data if s.get('status') == 'SUCCESS'])
+
+    # Persist to blob storage so the cache survives redeployments
+    race_dir_name = f"race_data_{event_subgroup_id}"
+    blob_storage.upload_race_dir(race_dir_name, output_dir)
+
     return output_dir, f"Loaded: {race_name} ({success_count} riders)"
