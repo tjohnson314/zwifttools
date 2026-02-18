@@ -28,7 +28,6 @@ Thumbs.db
 
 # Race data (user-specific)
 race_data/
-routes_cache.json
 
 # Logs
 *.log

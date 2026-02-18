@@ -1,0 +1,3692 @@
+{
+  "10003": {
+    "name": "Cote de Pike",
+    "map": "",
+    "distanceInMeters": 218083.15625,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 21595.369140625,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10004": {
+    "name": "Col d'Aspin",
+    "map": "",
+    "distanceInMeters": 1353582.25,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 81151.2421875,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10005": {
+    "name": "Col des Aravis",
+    "map": "",
+    "distanceInMeters": 519923.75,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 28011.630859375,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10006": {
+    "name": "Puy de Dome",
+    "map": "",
+    "distanceInMeters": 1298933.625,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 91354.1796875,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10007": {
+    "name": "Cote de Domancy",
+    "map": "",
+    "distanceInMeters": 297847.53125,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 24057.123046875,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10008": {
+    "name": "Col du Platzerwasel",
+    "map": "",
+    "distanceInMeters": 785299.5625,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 59693.234375,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10009": {
+    "name": "Cote de Trebiac",
+    "map": "",
+    "distanceInMeters": 459264.21875,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 20742.369140625,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10010": {
+    "name": "Col du Tourmalet",
+    "map": "",
+    "distanceInMeters": 1711817.5,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 121698.0703125,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10011": {
+    "name": "Bealach na Ba",
+    "map": "",
+    "distanceInMeters": 899236.125,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 63269.0078125,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10012": {
+    "name": "Crow Road",
+    "map": "",
+    "distanceInMeters": 695663.125,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 25146.29296875,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10013": {
+    "name": "Coll d'Ordino",
+    "map": "",
+    "distanceInMeters": 1032059.6875,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 50531.38671875,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10014": {
+    "name": "La Laguna Negra",
+    "map": "",
+    "distanceInMeters": 906204.625,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 50992.7578125,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10015": {
+    "name": "Col de la Madone",
+    "map": "",
+    "distanceInMeters": 1591436.75,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 89840.9765625,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10017": {
+    "name": "Rocacorba",
+    "map": "",
+    "distanceInMeters": 1183119.625,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 75621.8984375,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10018": {
+    "name": "Old La Honda",
+    "map": "",
+    "distanceInMeters": 557394.0,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 39538.8046875,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10019": {
+    "name": "Segment Portal -1",
+    "map": "",
+    "distanceInMeters": 859359.625,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 60297.0625,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10020": {
+    "name": "Old Willunga Hill",
+    "map": "",
+    "distanceInMeters": 398637.8125,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 25216.234375,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10021": {
+    "name": "Cheddar Gorge",
+    "map": "",
+    "distanceInMeters": 468530.125,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 17106.970703125,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10022": {
+    "name": "Cipressa",
+    "map": "",
+    "distanceInMeters": 643264.0,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 22806.9609375,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10023": {
+    "name": "Col du Rosier",
+    "map": "",
+    "distanceInMeters": 498915.625,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 22263.119140625,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10024": {
+    "name": "Passo dello Stelvio",
+    "map": "",
+    "distanceInMeters": 2336206.0,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 159615.609375,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10025": {
+    "name": "Col de la Couillole",
+    "map": "",
+    "distanceInMeters": 1809316.375,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 120230.8828125,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10026": {
+    "name": "Mt Fuji",
+    "map": "",
+    "distanceInMeters": 2535069.0,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 120858.265625,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10027": {
+    "name": "Pla d'Adet",
+    "map": "",
+    "distanceInMeters": 1211657.75,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 84770.6875,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10028": {
+    "name": "Pas de Peyrol/Puy Mary",
+    "map": "",
+    "distanceInMeters": 1025940.8125,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 60328.9609375,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10029": {
+    "name": "C\u00f4te des Forche",
+    "map": "",
+    "distanceInMeters": 299650.1875,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 14835.1328125,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10030": {
+    "name": "Isola 2000",
+    "map": "",
+    "distanceInMeters": 1889089.375,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 114569.640625,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10031": {
+    "name": "La Turbie + Col d'Eze",
+    "map": "",
+    "distanceInMeters": 1594093.875,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 61606.7421875,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10032": {
+    "name": "Col du Galibier (Lautaret)",
+    "map": "",
+    "distanceInMeters": 1035559.875,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 53930.1484375,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10033": {
+    "name": "Col de Peyresourde (Avajan)",
+    "map": "",
+    "distanceInMeters": 830451.5,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 55901.515625,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10034": {
+    "name": "Mont\u00e9e du Chinaillon",
+    "map": "",
+    "distanceInMeters": 811526.6875,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 35379.87109375,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10035": {
+    "name": "Lagos de Covadonga",
+    "map": "",
+    "distanceInMeters": 1452976.0,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 97633.46875,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10036": {
+    "name": "Mt. Hamilton",
+    "map": "",
+    "distanceInMeters": 3129840.5,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 125914.375,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10037": {
+    "name": "Trollstigen",
+    "map": "",
+    "distanceInMeters": 1244672.75,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 78443.4375,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10038": {
+    "name": "Gotthard Pass",
+    "map": "",
+    "distanceInMeters": 1442196.0,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 90930.671875,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10039": {
+    "name": "Norton Summit",
+    "map": "",
+    "distanceInMeters": 866602.6875,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 36360.203125,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10040": {
+    "name": "Hardknott Pass",
+    "map": "",
+    "distanceInMeters": 269157.625,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 30640.705078125,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10041": {
+    "name": "Poggio",
+    "map": "",
+    "distanceInMeters": 431199.5625,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 13635.3134765625,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10042": {
+    "name": "Oude Kwaremont",
+    "map": "",
+    "distanceInMeters": 150988.109375,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 6376.9541015625,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10043": {
+    "name": "Cauberg",
+    "map": "",
+    "distanceInMeters": 80620.8125,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 5779.466796875,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10044": {
+    "name": "C\u00f4te de la Redoute",
+    "map": "",
+    "distanceInMeters": 154292.84375,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 15314.8291015625,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10045": {
+    "name": "M\u00fbr De Bretagne",
+    "map": "",
+    "distanceInMeters": 197122.578125,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 12882.73828125,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10046": {
+    "name": "Hautacam",
+    "map": "",
+    "distanceInMeters": 1269734.5,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 102302.6015625,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10047": {
+    "name": "Col de la Croix Saint-Robert",
+    "map": "",
+    "distanceInMeters": 573219.75,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 34552.8203125,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "10048": {
+    "name": "Col de la Madeleine",
+    "map": "",
+    "distanceInMeters": 1430862.5,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 111083.4921875,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "5103974": {
+    "name": "Lady Liberty",
+    "map": "NEWYORK",
+    "distanceInMeters": 12361.2,
+    "leadinDistanceInMeters": 280.0,
+    "ascentInMeters": 206.1,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "5745690": {
+    "name": "Downtown Titans",
+    "map": "WATOPIA",
+    "distanceInMeters": 24645.0,
+    "leadinDistanceInMeters": 949.6,
+    "ascentInMeters": 292.2,
+    "leadinAscentInMeters": 3.0,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "22757204": {
+    "name": "Prospect Park Loop",
+    "map": "NEWYORK",
+    "distanceInMeters": 5427.990234375,
+    "leadinDistanceInMeters": 72.346321106,
+    "ascentInMeters": 37.3170509338,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "46799750": {
+    "name": "Rolling Highlands",
+    "map": "SCOTLAND",
+    "distanceInMeters": 8952.79296875,
+    "leadinDistanceInMeters": 5143.8647460938,
+    "ascentInMeters": 77.4,
+    "leadinAscentInMeters": 28.3,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "54700404": {
+    "name": "Libby Hill After Party",
+    "map": "RICHMOND",
+    "distanceInMeters": 32898.421875,
+    "leadinDistanceInMeters": 284.8463745117,
+    "ascentInMeters": 159.598739624,
+    "leadinAscentInMeters": 2.8,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "65777922": {
+    "name": "Electric Break",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 17759.9453125,
+    "leadinDistanceInMeters": 1838.7584228516,
+    "ascentInMeters": 190.2864532471,
+    "leadinAscentInMeters": 13.2099533081,
+    "difficulty": "3",
+    "eventOnly": false
+  },
+  "79243399": {
+    "name": "Glasgow Crit Six",
+    "map": "SCOTLAND",
+    "distanceInMeters": 18070.484375,
+    "leadinDistanceInMeters": 248.3587646484,
+    "ascentInMeters": 198.5810546875,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "3.0",
+    "eventOnly": true
+  },
+  "86621553": {
+    "name": "Lutece Express Run",
+    "map": "PARIS",
+    "distanceInMeters": 6616.0439453125,
+    "leadinDistanceInMeters": 3561.1474609375,
+    "ascentInMeters": 39.3657646179,
+    "leadinAscentInMeters": 25.8512458801,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "87055383": {
+    "name": "Greater London 8",
+    "map": "LONDON",
+    "distanceInMeters": 23807.7,
+    "leadinDistanceInMeters": 462.1,
+    "ascentInMeters": 275.8,
+    "leadinAscentInMeters": 4.4,
+    "difficulty": "2.5",
+    "eventOnly": false
+  },
+  "87631443": {
+    "name": "Queen's Highway After Party",
+    "map": "YORKSHIRE",
+    "distanceInMeters": 17148.8,
+    "leadinDistanceInMeters": 2764.0,
+    "ascentInMeters": 259.4,
+    "leadinAscentInMeters": 41.9,
+    "difficulty": "2",
+    "eventOnly": false
+  },
+  "104170948": {
+    "name": "No Sleep Till Brooklyn",
+    "map": "NEWYORK",
+    "distanceInMeters": 31787.119140625,
+    "leadinDistanceInMeters": 614.7109375,
+    "ascentInMeters": 251.4210205078,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "4.0",
+    "eventOnly": false
+  },
+  "107363867": {
+    "name": "Hilly Route Reverse",
+    "map": "WATOPIA",
+    "distanceInMeters": 9192.8,
+    "leadinDistanceInMeters": 214.0699768066,
+    "ascentInMeters": 108.9,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "1.5",
+    "eventOnly": true
+  },
+  "112312944": {
+    "name": "Issendorf Express",
+    "map": "NEWYORK",
+    "distanceInMeters": 7233.6904296875,
+    "leadinDistanceInMeters": 72.346321106,
+    "ascentInMeters": 52.8127822876,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "136140280": {
+    "name": "Sacre Bleu",
+    "map": "FRANCE",
+    "distanceInMeters": 71180.171875,
+    "leadinDistanceInMeters": 2598.7038574219,
+    "ascentInMeters": 396.3493347168,
+    "leadinAscentInMeters": 14.7,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "136957568": {
+    "name": "Jon's Route",
+    "map": "WATOPIA",
+    "distanceInMeters": 12496.7,
+    "leadinDistanceInMeters": 302.1,
+    "ascentInMeters": 58.9,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "152965568": {
+    "name": "Yoru Run",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 6889.7138671875,
+    "leadinDistanceInMeters": 1123.9208984375,
+    "ascentInMeters": 32.029838562,
+    "leadinAscentInMeters": 4.8508000374,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "156457316": {
+    "name": "Lutscher",
+    "map": "INNSBRUCK",
+    "distanceInMeters": 13704.2,
+    "leadinDistanceInMeters": 10797.7,
+    "ascentInMeters": 401.7,
+    "leadinAscentInMeters": 426.9,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "163688809": {
+    "name": "The London Pretzel",
+    "map": "LONDON",
+    "distanceInMeters": 55735.4,
+    "leadinDistanceInMeters": 462.1,
+    "ascentInMeters": 572.0,
+    "leadinAscentInMeters": 4.4,
+    "difficulty": "3.5",
+    "eventOnly": false
+  },
+  "172610229": {
+    "name": "Scotland Smash",
+    "map": "SCOTLAND",
+    "distanceInMeters": 17820.4,
+    "leadinDistanceInMeters": 248.8,
+    "ascentInMeters": 166.5,
+    "leadinAscentInMeters": 0.4,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "183635628": {
+    "name": "Elevation Evaluation",
+    "map": "WATOPIA",
+    "distanceInMeters": 24624.1,
+    "leadinDistanceInMeters": 3089.79,
+    "ascentInMeters": 395.9,
+    "leadinAscentInMeters": 13.95,
+    "difficulty": "5.0",
+    "eventOnly": false
+  },
+  "186601870": {
+    "name": "Makuri Madness",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 15948.6,
+    "leadinDistanceInMeters": 137.3,
+    "ascentInMeters": 85.0,
+    "leadinAscentInMeters": 2.7,
+    "difficulty": "1",
+    "eventOnly": false
+  },
+  "211138252": {
+    "name": "Island Outskirts",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 11365.11328125,
+    "leadinDistanceInMeters": 157.4537811279,
+    "ascentInMeters": 90.1,
+    "leadinAscentInMeters": 1.8,
+    "difficulty": "1.5",
+    "eventOnly": false
+  },
+  "226950646": {
+    "name": "Mayan San Remo",
+    "map": "WATOPIA",
+    "distanceInMeters": 21090.4,
+    "leadinDistanceInMeters": 322.4908447266,
+    "ascentInMeters": 216.9,
+    "leadinAscentInMeters": 2.0511324406,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "240388043": {
+    "name": "Sugar Cookie",
+    "map": "WATOPIA",
+    "distanceInMeters": 33552.6171875,
+    "leadinDistanceInMeters": 5658.6000976562,
+    "ascentInMeters": 250.1704864502,
+    "leadinAscentInMeters": 9.3999996185,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "242381847": {
+    "name": "Zwift Gran Fondo",
+    "map": "WATOPIA",
+    "distanceInMeters": 97507.421875,
+    "leadinDistanceInMeters": 456.5,
+    "ascentInMeters": 1192.5454101562,
+    "leadinAscentInMeters": 0.4,
+    "difficulty": "5.0",
+    "eventOnly": true
+  },
+  "243949867": {
+    "name": "Loop de Loop",
+    "map": "WATOPIA",
+    "distanceInMeters": 12416.17,
+    "leadinDistanceInMeters": 193.9,
+    "ascentInMeters": 144.42,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "246712730": {
+    "name": "Railways and Rooftops",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 6195.8,
+    "leadinDistanceInMeters": 2174.6,
+    "ascentInMeters": 70.4,
+    "leadinAscentInMeters": 21.1,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "263936293": {
+    "name": "That's Amore",
+    "map": "WATOPIA",
+    "distanceInMeters": 6439.4,
+    "leadinDistanceInMeters": 288.4,
+    "ascentInMeters": 54.7,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "270817258": {
+    "name": "Tides and Temples",
+    "map": "WATOPIA",
+    "distanceInMeters": 36470.82421875,
+    "leadinDistanceInMeters": 2669.4309082031,
+    "ascentInMeters": 459.5827941895,
+    "leadinAscentInMeters": 10.1315555573,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "274639515": {
+    "name": "The 6 Train Reverse",
+    "map": "NEWYORK",
+    "distanceInMeters": 6468.7,
+    "leadinDistanceInMeters": 374.3,
+    "ascentInMeters": 68.9,
+    "leadinAscentInMeters": 1.6,
+    "difficulty": "1.0",
+    "eventOnly": true
+  },
+  "274775181": {
+    "name": "Shuman Trail Reverse",
+    "map": "NEWYORK",
+    "distanceInMeters": 2534.8,
+    "leadinDistanceInMeters": 109.8,
+    "ascentInMeters": 8.993724823,
+    "leadinAscentInMeters": 0.8,
+    "difficulty": "2.0",
+    "eventOnly": true
+  },
+  "319138658": {
+    "name": "Three Musketeers",
+    "map": "FRANCE",
+    "distanceInMeters": 35195.0390625,
+    "leadinDistanceInMeters": 2598.7038574219,
+    "ascentInMeters": 194.7001953125,
+    "leadinAscentInMeters": 14.7093448639,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "352245150": {
+    "name": "Gotham Grind Reverse",
+    "map": "NEWYORK",
+    "distanceInMeters": 9259.2,
+    "leadinDistanceInMeters": 390.5,
+    "ascentInMeters": 96.1,
+    "leadinAscentInMeters": 2.1,
+    "difficulty": "1.5",
+    "eventOnly": true
+  },
+  "358794394": {
+    "name": "Ven-10",
+    "map": "FRANCE",
+    "distanceInMeters": 9999.9541015625,
+    "leadinDistanceInMeters": 1399.4080810547,
+    "ascentInMeters": 779.8205566406,
+    "leadinAscentInMeters": 36.7425498962,
+    "difficulty": "4.0",
+    "eventOnly": false
+  },
+  "377566656": {
+    "name": "BRAEk-fast Crits and Grits",
+    "map": "SCOTLAND",
+    "distanceInMeters": 20791.7734375,
+    "leadinDistanceInMeters": 1352.9694824219,
+    "ascentInMeters": 226.3478088379,
+    "leadinAscentInMeters": 34.5351371765,
+    "difficulty": "3",
+    "eventOnly": false
+  },
+  "387309391": {
+    "name": "Volcano Climb After Party",
+    "map": "WATOPIA",
+    "distanceInMeters": 39853.9,
+    "leadinDistanceInMeters": 465.9,
+    "ascentInMeters": 284.9,
+    "leadinAscentInMeters": 0.5,
+    "difficulty": "2.5",
+    "eventOnly": true
+  },
+  "454871454": {
+    "name": "Deca Dash",
+    "map": "WATOPIA",
+    "distanceInMeters": 48349.75390625,
+    "leadinDistanceInMeters": 4225.6440429688,
+    "ascentInMeters": 483.8056030273,
+    "leadinAscentInMeters": 16.4099998474,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "468624015": {
+    "name": "Fine and Sandy",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 10654.2,
+    "leadinDistanceInMeters": 96.0,
+    "ascentInMeters": 77.1,
+    "leadinAscentInMeters": 1.2,
+    "difficulty": "2",
+    "eventOnly": false
+  },
+  "474781994": {
+    "name": "Greater London Loop Reverse",
+    "map": "LONDON",
+    "distanceInMeters": 20977.7,
+    "leadinDistanceInMeters": 173.4461517334,
+    "ascentInMeters": 254.9850158691,
+    "leadinAscentInMeters": 0.7,
+    "difficulty": "2.5",
+    "eventOnly": true
+  },
+  "480315274": {
+    "name": "Gotham Grind",
+    "map": "NEWYORK",
+    "distanceInMeters": 9256.5,
+    "leadinDistanceInMeters": 46.0,
+    "ascentInMeters": 96.3,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "494933300": {
+    "name": "Avon Flyer Run",
+    "map": "NEWYORK",
+    "distanceInMeters": 3307.150390625,
+    "leadinDistanceInMeters": 1823.318359375,
+    "ascentInMeters": 24.8592281342,
+    "leadinAscentInMeters": 4.7677135468,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "525587103": {
+    "name": "Mech Isle Loop Run",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 4023.6997070312,
+    "leadinDistanceInMeters": 85.2417526245,
+    "ascentInMeters": 38.7638931274,
+    "leadinAscentInMeters": 0.8713084459,
+    "difficulty": "1.5",
+    "eventOnly": false
+  },
+  "525689100": {
+    "name": "Countryside Tour",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 15849.4,
+    "leadinDistanceInMeters": 206.3,
+    "ascentInMeters": 185.2,
+    "leadinAscentInMeters": 0.2,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "553661379": {
+    "name": "Watopia Figure 8 Reverse",
+    "map": "WATOPIA",
+    "distanceInMeters": 29698.2,
+    "leadinDistanceInMeters": 193.2,
+    "ascentInMeters": 254.1,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "2.5",
+    "eventOnly": false
+  },
+  "573843083": {
+    "name": "Macaron",
+    "map": "FRANCE",
+    "distanceInMeters": 2435.7995605469,
+    "leadinDistanceInMeters": 163.6367797852,
+    "ascentInMeters": 12.995344162,
+    "leadinAscentInMeters": 1.7145123482,
+    "difficulty": "1.0",
+    "eventOnly": true
+  },
+  "576953930": {
+    "name": "Country to Coastal",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 33431.0,
+    "leadinDistanceInMeters": 136.7,
+    "ascentInMeters": 274.0,
+    "leadinAscentInMeters": 6.3,
+    "difficulty": "2",
+    "eventOnly": false
+  },
+  "604330868": {
+    "name": "Sand And Sequoias",
+    "map": "WATOPIA",
+    "distanceInMeters": 20149.2,
+    "leadinDistanceInMeters": 2280.0,
+    "ascentInMeters": 174.7,
+    "leadinAscentInMeters": 5.8,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "620436060": {
+    "name": "Harrogate Circuit Reverse",
+    "map": "YORKSHIRE",
+    "distanceInMeters": 13832.9,
+    "leadinDistanceInMeters": 22.3,
+    "ascentInMeters": 245.2,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "2.5",
+    "eventOnly": true
+  },
+  "686828068": {
+    "name": "Volcano Circuit",
+    "map": "WATOPIA",
+    "distanceInMeters": 4103.5,
+    "leadinDistanceInMeters": 2758.1,
+    "ascentInMeters": 20.4,
+    "leadinAscentInMeters": 19.6,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "711818913": {
+    "name": "Flat Irons",
+    "map": "NEWYORK",
+    "distanceInMeters": 14850.2,
+    "leadinDistanceInMeters": 574.3,
+    "ascentInMeters": 146.3,
+    "leadinAscentInMeters": 2.4,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "730052368": {
+    "name": "Spinfinity Ultra",
+    "map": "NEWYORK",
+    "distanceInMeters": 35006.75390625,
+    "leadinDistanceInMeters": 614.591003418,
+    "ascentInMeters": 290.7071838379,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "5.0",
+    "eventOnly": false
+  },
+  "742057576": {
+    "name": "Loch Loop",
+    "map": "SCOTLAND",
+    "distanceInMeters": 8057.05078125,
+    "leadinDistanceInMeters": 48.0687942505,
+    "ascentInMeters": 70.5846572876,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "743730361": {
+    "name": "Jungle Circuit",
+    "map": "WATOPIA",
+    "distanceInMeters": 7862.1,
+    "leadinDistanceInMeters": 5657.9,
+    "ascentInMeters": 82.7,
+    "leadinAscentInMeters": 9.5,
+    "difficulty": "1.5",
+    "eventOnly": false
+  },
+  "750613981": {
+    "name": "Hudson Hustle",
+    "map": "NEWYORK",
+    "distanceInMeters": 20324.017578125,
+    "leadinDistanceInMeters": 50.8252563477,
+    "ascentInMeters": 216.2949981689,
+    "leadinAscentInMeters": 0.0098730484,
+    "difficulty": "2",
+    "eventOnly": true
+  },
+  "762151244": {
+    "name": "Zwift Games 2024 Epic",
+    "map": "WATOPIA",
+    "distanceInMeters": 79725.1171875,
+    "leadinDistanceInMeters": 1944.7218017578,
+    "ascentInMeters": 821.6809692383,
+    "leadinAscentInMeters": 56.7989082336,
+    "difficulty": "4.0",
+    "eventOnly": false
+  },
+  "762747962": {
+    "name": "Repack Rush",
+    "map": "WATOPIA",
+    "distanceInMeters": 2776.3,
+    "leadinDistanceInMeters": 41.8,
+    "ascentInMeters": 27.6,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "2",
+    "eventOnly": true
+  },
+  "764532081": {
+    "name": "London PRL Half",
+    "map": "LONDON",
+    "distanceInMeters": 69158.6,
+    "leadinDistanceInMeters": 456.9,
+    "ascentInMeters": 1009.3,
+    "leadinAscentInMeters": 4.2,
+    "difficulty": "4.5",
+    "eventOnly": false
+  },
+  "772562418": {
+    "name": "Run Path Reverse",
+    "map": "WATOPIA",
+    "distanceInMeters": 4999.0,
+    "leadinDistanceInMeters": 169.0,
+    "ascentInMeters": 30.5,
+    "leadinAscentInMeters": 1.9,
+    "difficulty": "2.0",
+    "eventOnly": true
+  },
+  "806114032": {
+    "name": "Navig8",
+    "map": "WATOPIA",
+    "distanceInMeters": 63856.7265625,
+    "leadinDistanceInMeters": 2279.9704589844,
+    "ascentInMeters": 416.7949829102,
+    "leadinAscentInMeters": 5.8324418068,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "849508252": {
+    "name": "Volcano Climb",
+    "map": "WATOPIA",
+    "distanceInMeters": 22861.3,
+    "leadinDistanceInMeters": 477.8,
+    "ascentInMeters": 203.1,
+    "leadinAscentInMeters": 0.6,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "872351836": {
+    "name": "Roule Ma Poule",
+    "map": "FRANCE",
+    "distanceInMeters": 22887.208984375,
+    "leadinDistanceInMeters": 3091.4123535156,
+    "ascentInMeters": 155.0,
+    "leadinAscentInMeters": 107.8821411133,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "890800649": {
+    "name": "Makuri 40",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 40115.3,
+    "leadinDistanceInMeters": 136.7,
+    "ascentInMeters": 306.6,
+    "leadinAscentInMeters": 6.3,
+    "difficulty": "2",
+    "eventOnly": false
+  },
+  "910684583": {
+    "name": "Electric Loop",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 8941.4296875,
+    "leadinDistanceInMeters": 40.8298339844,
+    "ascentInMeters": 41.7,
+    "leadinAscentInMeters": 0.8,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "913172163": {
+    "name": "London Loop",
+    "map": "LONDON",
+    "distanceInMeters": 14883.8,
+    "leadinDistanceInMeters": 462.1,
+    "ascentInMeters": 230.7,
+    "leadinAscentInMeters": 4.4,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "928793662": {
+    "name": "Greater London Flat",
+    "map": "LONDON",
+    "distanceInMeters": 11677.6,
+    "leadinDistanceInMeters": 5635.7,
+    "ascentInMeters": 53.2,
+    "leadinAscentInMeters": 44.7,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "938096831": {
+    "name": "ZG25 Climb Champs",
+    "map": "LONDON",
+    "distanceInMeters": 4649.6,
+    "leadinDistanceInMeters": 344.6,
+    "ascentInMeters": 155.6,
+    "leadinAscentInMeters": 0.7,
+    "difficulty": "1.0",
+    "eventOnly": true
+  },
+  "941280950": {
+    "name": "Peaky Pav\u00e9",
+    "map": "FRANCE",
+    "distanceInMeters": 30622.15234375,
+    "leadinDistanceInMeters": 187.0313568115,
+    "ascentInMeters": 368.7159423828,
+    "leadinAscentInMeters": 1.8545700312,
+    "difficulty": "3.0",
+    "eventOnly": true
+  },
+  "947394567": {
+    "name": "Downtown Dolphin",
+    "map": "CRITCITY",
+    "distanceInMeters": 1961.8,
+    "leadinDistanceInMeters": 70.8,
+    "ascentInMeters": 17.0,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "1.0",
+    "eventOnly": true
+  },
+  "948831673": {
+    "name": "Richmond Rollercoaster",
+    "map": "RICHMOND",
+    "distanceInMeters": 5058.587890625,
+    "leadinDistanceInMeters": 12062.0693359375,
+    "ascentInMeters": 19.9,
+    "leadinAscentInMeters": 149.9785614014,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "975408707": {
+    "name": "Avon Flyer",
+    "map": "NEWYORK",
+    "distanceInMeters": 3307.150390625,
+    "leadinDistanceInMeters": 1823.318359375,
+    "ascentInMeters": 24.8592281342,
+    "leadinAscentInMeters": 4.7677135468,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "979250573": {
+    "name": "Watts of the Wild",
+    "map": "WATOPIA",
+    "distanceInMeters": 42023.37109375,
+    "leadinDistanceInMeters": 193.9167175293,
+    "ascentInMeters": 308.8671264648,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "4",
+    "eventOnly": false
+  },
+  "982239385": {
+    "name": "Whole Lotta Lava",
+    "map": "WATOPIA",
+    "distanceInMeters": 12294.0,
+    "leadinDistanceInMeters": 4840.2,
+    "ascentInMeters": 160.5,
+    "leadinAscentInMeters": 29.7,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "986252325": {
+    "name": "Douce France",
+    "map": "FRANCE",
+    "distanceInMeters": 24004.4296875,
+    "leadinDistanceInMeters": 779.9232788086,
+    "ascentInMeters": 133.3889160156,
+    "leadinAscentInMeters": 3.3,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "1033940053": {
+    "name": "Castle Crit Run",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 3470.0,
+    "leadinDistanceInMeters": 1500.5,
+    "ascentInMeters": 43.4,
+    "leadinAscentInMeters": 44.4,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "1039983620": {
+    "name": "Richmond 2015 Worlds Reverse",
+    "map": "RICHMOND",
+    "distanceInMeters": 16249.1,
+    "leadinDistanceInMeters": 99.7,
+    "ascentInMeters": 157.6,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "1064303857": {
+    "name": "Watopia's Waistband",
+    "map": "WATOPIA",
+    "distanceInMeters": 25459.5859375,
+    "leadinDistanceInMeters": 2279.9323730469,
+    "ascentInMeters": 95.1,
+    "leadinAscentInMeters": 5.8,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "1082034232": {
+    "name": "Mayan Bridge Loop",
+    "map": "WATOPIA",
+    "distanceInMeters": 5273.5,
+    "leadinDistanceInMeters": 5658.0,
+    "ascentInMeters": 48.3,
+    "leadinAscentInMeters": 9.4,
+    "difficulty": "1.5",
+    "eventOnly": false
+  },
+  "1086718516": {
+    "name": "Tour Of Tewit Well",
+    "map": "YORKSHIRE",
+    "distanceInMeters": 10876.6,
+    "leadinDistanceInMeters": 27.3,
+    "ascentInMeters": 204.5,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "1092181131": {
+    "name": "Loopin Lava",
+    "map": "WATOPIA",
+    "distanceInMeters": 14213.7548828125,
+    "leadinDistanceInMeters": 4181.2939453125,
+    "ascentInMeters": 195.7546691895,
+    "leadinAscentInMeters": 16.0827560425,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "1099226581": {
+    "name": "Double Span Spin",
+    "map": "NEWYORK",
+    "distanceInMeters": 7017.7465820312,
+    "leadinDistanceInMeters": 5567.4873046875,
+    "ascentInMeters": 79.9722137451,
+    "leadinAscentInMeters": 39.7537307739,
+    "difficulty": "4.0",
+    "eventOnly": false
+  },
+  "1115260805": {
+    "name": "Accelerate to Elevate",
+    "map": "WATOPIA",
+    "distanceInMeters": 41265.1015625,
+    "leadinDistanceInMeters": 2280.0,
+    "ascentInMeters": 1152.0,
+    "leadinAscentInMeters": 5.8000001907,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "1127056801": {
+    "name": "Neokyo Crit Course",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 3882.0,
+    "leadinDistanceInMeters": 778.0,
+    "ascentInMeters": 19.7,
+    "leadinAscentInMeters": 4.8,
+    "difficulty": "1.0",
+    "eventOnly": true
+  },
+  "1178708985": {
+    "name": "Green to Screen",
+    "map": "NEWYORK",
+    "distanceInMeters": 28377.314453125,
+    "leadinDistanceInMeters": 72.346321106,
+    "ascentInMeters": 207.1245880127,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "1201172818": {
+    "name": "Power Punches",
+    "map": "WATOPIA",
+    "distanceInMeters": 23479.732421875,
+    "leadinDistanceInMeters": 190.3039550781,
+    "ascentInMeters": 205.3355560303,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "3",
+    "eventOnly": false
+  },
+  "1230300449": {
+    "name": "Leith Hill After Party",
+    "map": "LONDON",
+    "distanceInMeters": 41542.7,
+    "leadinDistanceInMeters": 462.0537414551,
+    "ascentInMeters": 434.3,
+    "leadinAscentInMeters": 4.4,
+    "difficulty": "3.0",
+    "eventOnly": true
+  },
+  "1233527301": {
+    "name": "Duchy Estate",
+    "map": "YORKSHIRE",
+    "distanceInMeters": 2999.7,
+    "leadinDistanceInMeters": 1697.0,
+    "ascentInMeters": 40.6,
+    "leadinAscentInMeters": 29.2,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "1236439870": {
+    "name": "Lutece Express",
+    "map": "PARIS",
+    "distanceInMeters": 6616.5,
+    "leadinDistanceInMeters": 3560.6,
+    "ascentInMeters": 39.4,
+    "leadinAscentInMeters": 25.9,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "1258415487": {
+    "name": "Glasgow Reverse",
+    "map": "SCOTLAND",
+    "distanceInMeters": 3012.0,
+    "leadinDistanceInMeters": 1196.3,
+    "ascentInMeters": 33.1,
+    "leadinAscentInMeters": 6.5,
+    "difficulty": "3.0",
+    "eventOnly": true
+  },
+  "1258526800": {
+    "name": "Flat Out Fast",
+    "map": "WATOPIA",
+    "distanceInMeters": 21381.82421875,
+    "leadinDistanceInMeters": 949.3284301758,
+    "ascentInMeters": 45.7612380981,
+    "leadinAscentInMeters": 3.0440323353,
+    "difficulty": "1",
+    "eventOnly": false
+  },
+  "1295302121": {
+    "name": "The Rattle Battle",
+    "map": "GRAVEL MOUNTAIN",
+    "distanceInMeters": 5183.3466796875,
+    "leadinDistanceInMeters": 212.9765014648,
+    "ascentInMeters": 52.2735061646,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": true
+  },
+  "1327147942": {
+    "name": "Zwift Gran Fondo 2022",
+    "map": "WATOPIA",
+    "distanceInMeters": 92563.6953125,
+    "leadinDistanceInMeters": 193.9161224365,
+    "ascentInMeters": 1114.4089355469,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "Unknown",
+    "eventOnly": true
+  },
+  "1327665278": {
+    "name": "Everything Bagel",
+    "map": "NEWYORK",
+    "distanceInMeters": 34285.4,
+    "leadinDistanceInMeters": 50.8,
+    "ascentInMeters": 545.0,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "3.5",
+    "eventOnly": false
+  },
+  "1366943680": {
+    "name": "Mech Isle Loop",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 4023.2,
+    "leadinDistanceInMeters": 85.9,
+    "ascentInMeters": 38.7,
+    "leadinAscentInMeters": 0.9,
+    "difficulty": "1.5",
+    "eventOnly": false
+  },
+  "1367364772": {
+    "name": "Neon After Party",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 16199.232421875,
+    "leadinDistanceInMeters": 1123.9239501953,
+    "ascentInMeters": 137.1630554199,
+    "leadinAscentInMeters": 4.8508200645,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "1373909093": {
+    "name": "Chili Pepper",
+    "map": "WATOPIA",
+    "distanceInMeters": 7956.9,
+    "leadinDistanceInMeters": 301.7,
+    "ascentInMeters": 47.8,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "1378559127": {
+    "name": "Park To Peak",
+    "map": "NEWYORK",
+    "distanceInMeters": 4576.3,
+    "leadinDistanceInMeters": 139.6,
+    "ascentInMeters": 125.9,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "1384155764": {
+    "name": "Loch Loop Run",
+    "map": "SCOTLAND",
+    "distanceInMeters": 8056.8,
+    "leadinDistanceInMeters": 48.1,
+    "ascentInMeters": 71.0,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "1386460176": {
+    "name": "Ocean Lava Cliffside Loop",
+    "map": "WATOPIA",
+    "distanceInMeters": 19054.4,
+    "leadinDistanceInMeters": 193.2,
+    "ascentInMeters": 156.0,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "1397026382": {
+    "name": "Volcano Flat Reverse",
+    "map": "WATOPIA",
+    "distanceInMeters": 12349.2,
+    "leadinDistanceInMeters": 237.0,
+    "ascentInMeters": 50.0,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "1.0",
+    "eventOnly": true
+  },
+  "1409345545": {
+    "name": "Rapide Run",
+    "map": "FRANCE",
+    "distanceInMeters": 5993.857421875,
+    "leadinDistanceInMeters": 80.6615371704,
+    "ascentInMeters": 38.0902175903,
+    "leadinAscentInMeters": 1.0784378052,
+    "difficulty": "0.0",
+    "eventOnly": false
+  },
+  "1433431343": {
+    "name": "La Reine",
+    "map": "FRANCE",
+    "distanceInMeters": 22456.416015625,
+    "leadinDistanceInMeters": 449.2470092773,
+    "ascentInMeters": 1200.5877685547,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "3.5",
+    "eventOnly": false
+  },
+  "1453570384": {
+    "name": "Neokyo All-Nighter",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 24337.216796875,
+    "leadinDistanceInMeters": 227.8634643555,
+    "ascentInMeters": 167.5841674805,
+    "leadinAscentInMeters": 0.2,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "1454553567": {
+    "name": "Kappa Quest Reverse",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 9086.6,
+    "leadinDistanceInMeters": 5131.1,
+    "ascentInMeters": 139.9,
+    "leadinAscentInMeters": 130.3,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "1457923570": {
+    "name": "Twilight Harbor",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 6854.4,
+    "leadinDistanceInMeters": 248.1,
+    "ascentInMeters": 33.1,
+    "leadinAscentInMeters": 3.9,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "1464561389": {
+    "name": "Climb Control",
+    "map": "WATOPIA",
+    "distanceInMeters": 23672.037109375,
+    "leadinDistanceInMeters": 301.1654663086,
+    "ascentInMeters": 190.5013122559,
+    "leadinAscentInMeters": 0.0069921939,
+    "difficulty": "2",
+    "eventOnly": false
+  },
+  "1472166107": {
+    "name": "Toefield Tornado Run",
+    "map": "NEWYORK",
+    "distanceInMeters": 10218.5322265625,
+    "leadinDistanceInMeters": 72.346321106,
+    "ascentInMeters": 52.8133621216,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "1475638265": {
+    "name": "The Uber Pretzel",
+    "map": "WATOPIA",
+    "distanceInMeters": 128299.2,
+    "leadinDistanceInMeters": 523.1,
+    "ascentInMeters": 2379.9,
+    "leadinAscentInMeters": 1.1,
+    "difficulty": "5.0",
+    "eventOnly": false
+  },
+  "1509089537": {
+    "name": "Astoria Line 8",
+    "map": "NEWYORK",
+    "distanceInMeters": 11569.0,
+    "leadinDistanceInMeters": 420.4,
+    "ascentInMeters": 141.4,
+    "leadinAscentInMeters": 2.7,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "1538375239": {
+    "name": "Gentil 8",
+    "map": "FRANCE",
+    "distanceInMeters": 23180.34375,
+    "leadinDistanceInMeters": 2598.7048339844,
+    "ascentInMeters": 243.4831848145,
+    "leadinAscentInMeters": 14.7091941833,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "1545087483": {
+    "name": "Cobbled Climbs",
+    "map": "RICHMOND",
+    "distanceInMeters": 9178.9,
+    "leadinDistanceInMeters": 284.0,
+    "ascentInMeters": 133.6,
+    "leadinAscentInMeters": 2.5,
+    "difficulty": "1.5",
+    "eventOnly": false
+  },
+  "1552189318": {
+    "name": "The Double Borough",
+    "map": "NEWYORK",
+    "distanceInMeters": 17809.072265625,
+    "leadinDistanceInMeters": 50.8252563477,
+    "ascentInMeters": 146.998336792,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "4.0",
+    "eventOnly": false
+  },
+  "1562187590": {
+    "name": "Kappa Quest",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 9085.6,
+    "leadinDistanceInMeters": 3844.3,
+    "ascentInMeters": 139.8,
+    "leadinAscentInMeters": 121.3,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "1586193601": {
+    "name": "That's Amore Reverse",
+    "map": "WATOPIA",
+    "distanceInMeters": 5829.378906,
+    "leadinDistanceInMeters": 124.6,
+    "ascentInMeters": 53.504631,
+    "leadinAscentInMeters": 0.8,
+    "difficulty": "2.0",
+    "eventOnly": true
+  },
+  "1600198346": {
+    "name": "Croissant",
+    "map": "FRANCE",
+    "distanceInMeters": 9273.3193359375,
+    "leadinDistanceInMeters": 3241.1892089844,
+    "ascentInMeters": 49.2895431519,
+    "leadinAscentInMeters": 23.2191371918,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "1631692097": {
+    "name": "Glyph Heights",
+    "map": "WATOPIA",
+    "distanceInMeters": 25403.92578125,
+    "leadinDistanceInMeters": 8615.4375,
+    "ascentInMeters": 537.4055175781,
+    "leadinAscentInMeters": 80.33959198,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "1635842477": {
+    "name": "Going Coastal",
+    "map": "WATOPIA",
+    "distanceInMeters": 16392.80078125,
+    "leadinDistanceInMeters": 2327.8999023438,
+    "ascentInMeters": 63.0,
+    "leadinAscentInMeters": 6.1999998093,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "1638640398": {
+    "name": "The Fan Flats",
+    "map": "RICHMOND",
+    "distanceInMeters": 5059.5,
+    "leadinDistanceInMeters": 4249.0,
+    "ascentInMeters": 19.8,
+    "leadinAscentInMeters": 20.1,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "1656629976": {
+    "name": "The Big Ring",
+    "map": "WATOPIA",
+    "distanceInMeters": 48865.3,
+    "leadinDistanceInMeters": 2280.0,
+    "ascentInMeters": 268.3,
+    "leadinAscentInMeters": 5.8,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "1671282746": {
+    "name": "Empire Elevation",
+    "map": "NEWYORK",
+    "distanceInMeters": 24154.66796875,
+    "leadinDistanceInMeters": 1823.5837402344,
+    "ascentInMeters": 260.8303222656,
+    "leadinAscentInMeters": 4.7677035332,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "1675611962": {
+    "name": "Downtown Eruption",
+    "map": "WATOPIA",
+    "distanceInMeters": 19440.8,
+    "leadinDistanceInMeters": 498.7,
+    "ascentInMeters": 274.6,
+    "leadinAscentInMeters": 0.8,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "1695691428": {
+    "name": "Epic Run",
+    "map": "WATOPIA",
+    "distanceInMeters": 6213.9877929688,
+    "leadinDistanceInMeters": 4121.2338867188,
+    "ascentInMeters": 261.8344726562,
+    "leadinAscentInMeters": 304.8973388672,
+    "difficulty": "4.0",
+    "eventOnly": false
+  },
+  "1696938496": {
+    "name": "Hilly Route Reverse Run",
+    "map": "WATOPIA",
+    "distanceInMeters": 9192.3818359375,
+    "leadinDistanceInMeters": 193.9167175293,
+    "ascentInMeters": 108.7767333984,
+    "leadinAscentInMeters": 0.095951952,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "1724903700": {
+    "name": "ZG25 Queen",
+    "map": "WATOPIA",
+    "distanceInMeters": 44609.63671875,
+    "leadinDistanceInMeters": 193.9007873535,
+    "ascentInMeters": 893.6876220703,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "3",
+    "eventOnly": false
+  },
+  "1732356505": {
+    "name": "The Highline",
+    "map": "NEWYORK",
+    "distanceInMeters": 10526.0,
+    "leadinDistanceInMeters": 9999.7,
+    "ascentInMeters": 178.8,
+    "leadinAscentInMeters": 202.7,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "1760877317": {
+    "name": "Bridges and Boardwalks",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 6344.640625,
+    "leadinDistanceInMeters": 1922.9895019531,
+    "ascentInMeters": 59.5,
+    "leadinAscentInMeters": 10.990562439,
+    "difficulty": "1.5",
+    "eventOnly": false
+  },
+  "1763213625": {
+    "name": "The Highline Reverse",
+    "map": "NEWYORK",
+    "distanceInMeters": 10528.8,
+    "leadinDistanceInMeters": 10482.1,
+    "ascentInMeters": 178.8,
+    "leadinAscentInMeters": 203.6,
+    "difficulty": "2.0",
+    "eventOnly": true
+  },
+  "1766405776": {
+    "name": "Tour of Fire and Ice",
+    "map": "WATOPIA",
+    "distanceInMeters": 25361.0,
+    "leadinDistanceInMeters": 2764.6,
+    "ascentInMeters": 1164.4,
+    "leadinAscentInMeters": 19.6,
+    "difficulty": "4.5",
+    "eventOnly": false
+  },
+  "1776635757": {
+    "name": "R.G.V.",
+    "map": "FRANCE",
+    "distanceInMeters": 23998.7,
+    "leadinDistanceInMeters": 869.1,
+    "ascentInMeters": 133.3,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "1788218813": {
+    "name": "Yorkshire Double Loop",
+    "map": "YORKSHIRE",
+    "distanceInMeters": 29621.021484375,
+    "leadinDistanceInMeters": 49.4097595215,
+    "ascentInMeters": 547.1735839844,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "1788889233": {
+    "name": "London Loop Reverse",
+    "map": "LONDON",
+    "distanceInMeters": 14834.2,
+    "leadinDistanceInMeters": 171.8934326172,
+    "ascentInMeters": 230.5,
+    "leadinAscentInMeters": 0.7,
+    "difficulty": "2.0",
+    "eventOnly": true
+  },
+  "1790569309": {
+    "name": "Couch To Sky K",
+    "map": "NEWYORK",
+    "distanceInMeters": 6750.3,
+    "leadinDistanceInMeters": 139.6,
+    "ascentInMeters": 67.7,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "1793712753": {
+    "name": "Hell of the North",
+    "map": "FRANCE",
+    "distanceInMeters": 19816.091796875,
+    "leadinDistanceInMeters": 336.4879760742,
+    "ascentInMeters": 241.3106994629,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "1880443431": {
+    "name": "Greatest London Flat",
+    "map": "LONDON",
+    "distanceInMeters": 23608.5,
+    "leadinDistanceInMeters": 7427.5,
+    "ascentInMeters": 163.5,
+    "leadinAscentInMeters": 59.0,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "1917017591": {
+    "name": "Big Flat 8",
+    "map": "WATOPIA",
+    "distanceInMeters": 29211.1,
+    "leadinDistanceInMeters": 2280.0,
+    "ascentInMeters": 103.0,
+    "leadinAscentInMeters": 5.8,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "1919980508": {
+    "name": "Park Perimeter Loop",
+    "map": "NEWYORK",
+    "distanceInMeters": 9762.2,
+    "leadinDistanceInMeters": 406.0,
+    "ascentInMeters": 126.1,
+    "leadinAscentInMeters": 2.5,
+    "difficulty": "1.5",
+    "eventOnly": false
+  },
+  "1941800093": {
+    "name": "Valley to Mountaintop",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 5009.0,
+    "leadinDistanceInMeters": 122.3,
+    "ascentInMeters": 130.5,
+    "leadinAscentInMeters": 0.2,
+    "difficulty": "1.5",
+    "eventOnly": false
+  },
+  "1942591558": {
+    "name": "Times Square Circuit",
+    "map": "NEWYORK",
+    "distanceInMeters": 3500.3317871094,
+    "leadinDistanceInMeters": 614.7109375,
+    "ascentInMeters": 19.9729404449,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "1975694067": {
+    "name": "Ven-10 Run",
+    "map": "FRANCE",
+    "distanceInMeters": 9999.8828125,
+    "leadinDistanceInMeters": 1399.39453125,
+    "ascentInMeters": 779.8211669922,
+    "leadinAscentInMeters": 36.761013031,
+    "difficulty": "4.0",
+    "eventOnly": false
+  },
+  "1988847319": {
+    "name": "Splash and Dash",
+    "map": "WATOPIA",
+    "distanceInMeters": 5932.9321289062,
+    "leadinDistanceInMeters": 320.2565307617,
+    "ascentInMeters": 26.3,
+    "leadinAscentInMeters": 0.3,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "1993374659": {
+    "name": "Handful Of Gravel",
+    "map": "WATOPIA",
+    "distanceInMeters": 6130.4,
+    "leadinDistanceInMeters": 4253.7,
+    "ascentInMeters": 74.9,
+    "leadinAscentInMeters": 18.9,
+    "difficulty": "1.0",
+    "eventOnly": true
+  },
+  "2001106885": {
+    "name": "Knickerbocker Reverse",
+    "map": "NEWYORK",
+    "distanceInMeters": 22545.0,
+    "leadinDistanceInMeters": 50.6,
+    "ascentInMeters": 365.0,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "2007026433": {
+    "name": "2019 Worlds Harrogate Circuit",
+    "map": "YORKSHIRE",
+    "distanceInMeters": 13834.1,
+    "leadinDistanceInMeters": 110.8,
+    "ascentInMeters": 245.2,
+    "leadinAscentInMeters": 1.2,
+    "difficulty": "2.5",
+    "eventOnly": false
+  },
+  "2062126722": {
+    "name": "Tair Dringfa Fechan",
+    "map": "WATOPIA",
+    "distanceInMeters": 31115.353515625,
+    "leadinDistanceInMeters": 949.383972168,
+    "ascentInMeters": 371.9,
+    "leadinAscentInMeters": 3.0441153049,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "2064290391": {
+    "name": "Power to the Tower",
+    "map": "WATOPIA",
+    "distanceInMeters": 44703.53125,
+    "leadinDistanceInMeters": 945.4137573242,
+    "ascentInMeters": 1492.5986328125,
+    "leadinAscentInMeters": 3.0440323353,
+    "difficulty": "5.0",
+    "eventOnly": false
+  },
+  "2101060245": {
+    "name": "Double Parked",
+    "map": "NEWYORK",
+    "distanceInMeters": 42170.59375,
+    "leadinDistanceInMeters": 72.346321106,
+    "ascentInMeters": 329.7257385254,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "2128890027": {
+    "name": "Tempus Fugit",
+    "map": "WATOPIA",
+    "distanceInMeters": 17231.3,
+    "leadinDistanceInMeters": 2355.5,
+    "ascentInMeters": 25.6,
+    "leadinAscentInMeters": 6.2,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "2136907048": {
+    "name": "France Classic Fondo",
+    "map": "FRANCE",
+    "distanceInMeters": 145443.5,
+    "leadinDistanceInMeters": 980.1,
+    "ascentInMeters": 1099.0,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": true
+  },
+  "2139465450": {
+    "name": "Muir And The Mountain",
+    "map": "WATOPIA",
+    "distanceInMeters": 34140.3,
+    "leadinDistanceInMeters": 5108.3,
+    "ascentInMeters": 792.4,
+    "leadinAscentInMeters": 122.0,
+    "difficulty": "4.0",
+    "eventOnly": false
+  },
+  "2139708890": {
+    "name": "Bigger Loop",
+    "map": "WATOPIA",
+    "distanceInMeters": 53197.9,
+    "leadinDistanceInMeters": 506.0,
+    "ascentInMeters": 691.2,
+    "leadinAscentInMeters": 0.9,
+    "difficulty": "4.0",
+    "eventOnly": false
+  },
+  "2140131142": {
+    "name": "Island Hopper",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 17990.728515625,
+    "leadinDistanceInMeters": 157.4537811279,
+    "ascentInMeters": 128.5,
+    "leadinAscentInMeters": 1.8,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "2143464829": {
+    "name": "Bon Voyage",
+    "map": "FRANCE",
+    "distanceInMeters": 28208.48046875,
+    "leadinDistanceInMeters": 3241.1979980469,
+    "ascentInMeters": 131.9863891602,
+    "leadinAscentInMeters": 23.2180366516,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "2165880404": {
+    "name": "London 8 Reverse",
+    "map": "LONDON",
+    "distanceInMeters": 20291.4,
+    "leadinDistanceInMeters": 171.8934326172,
+    "ascentInMeters": 255.7,
+    "leadinAscentInMeters": 0.7,
+    "difficulty": "2.5",
+    "eventOnly": true
+  },
+  "2196019512": {
+    "name": "Richmond UCI Worlds",
+    "map": "RICHMOND",
+    "distanceInMeters": 16248.5,
+    "leadinDistanceInMeters": 284.4,
+    "ascentInMeters": 157.7,
+    "leadinAscentInMeters": 2.5,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "2202609830": {
+    "name": "Park Perimeter Reverse",
+    "map": "NEWYORK",
+    "distanceInMeters": 9762.1,
+    "leadinDistanceInMeters": 153.8,
+    "ascentInMeters": 126.2,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "1.5",
+    "eventOnly": true
+  },
+  "2204461619": {
+    "name": "London PRL FULL",
+    "map": "LONDON",
+    "distanceInMeters": 173335.40625,
+    "leadinDistanceInMeters": 454.2534790039,
+    "ascentInMeters": 2624.0178222656,
+    "leadinAscentInMeters": 4.2,
+    "difficulty": "5.0",
+    "eventOnly": false
+  },
+  "2207442179": {
+    "name": "The Magnificent 8",
+    "map": "WATOPIA",
+    "distanceInMeters": 28932.1,
+    "leadinDistanceInMeters": 204.9,
+    "ascentInMeters": 155.0,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "2218409282": {
+    "name": "WBR Climbing Series",
+    "map": "WATOPIA",
+    "distanceInMeters": 43208.5,
+    "leadinDistanceInMeters": 465.9,
+    "ascentInMeters": 1115.9,
+    "leadinAscentInMeters": 0.5,
+    "difficulty": "4.5",
+    "eventOnly": true
+  },
+  "2244765560": {
+    "name": "Cobbled Crown",
+    "map": "RICHMOND",
+    "distanceInMeters": 24040.439453125,
+    "leadinDistanceInMeters": 264.8991394043,
+    "ascentInMeters": 288.3674926758,
+    "leadinAscentInMeters": 0.0340429582,
+    "difficulty": "3",
+    "eventOnly": true
+  },
+  "2251715424": {
+    "name": "Hot Laps",
+    "map": "WATOPIA",
+    "distanceInMeters": 23279.88671875,
+    "leadinDistanceInMeters": 193.9167175293,
+    "ascentInMeters": 149.0331878662,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "3.0",
+    "eventOnly": true
+  },
+  "2312882507": {
+    "name": "D\u00f9n Dash",
+    "map": "SCOTLAND",
+    "distanceInMeters": 12418.53125,
+    "leadinDistanceInMeters": 47.8429374695,
+    "ascentInMeters": 138.3578491211,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "4.0",
+    "eventOnly": false
+  },
+  "2328501978": {
+    "name": "Shorelines and Summits",
+    "map": "WATOPIA",
+    "distanceInMeters": 46186.01953125,
+    "leadinDistanceInMeters": 4163.3999023438,
+    "ascentInMeters": 772.9612426758,
+    "leadinAscentInMeters": 18.8999996185,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "2330634655": {
+    "name": "Temple Trek",
+    "map": "WATOPIA",
+    "distanceInMeters": 6510.0,
+    "leadinDistanceInMeters": 4200.2998046875,
+    "ascentInMeters": 25.0,
+    "leadinAscentInMeters": 18.8999996185,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "2333249368": {
+    "name": "Itza Climb Finish",
+    "map": "WATOPIA",
+    "distanceInMeters": 30093.8,
+    "leadinDistanceInMeters": 949.1683959961,
+    "ascentInMeters": 290.4,
+    "leadinAscentInMeters": 3.0441153049,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "2372883204": {
+    "name": "NYC KOM After Party",
+    "map": "NEWYORK",
+    "distanceInMeters": 36626.3,
+    "leadinDistanceInMeters": 377.3,
+    "ascentInMeters": 474.7,
+    "leadinAscentInMeters": 1.7,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "2413440572": {
+    "name": "Tire-Bouchon",
+    "map": "FRANCE",
+    "distanceInMeters": 60781.98046875,
+    "leadinDistanceInMeters": 3091.5,
+    "ascentInMeters": 479.2347412109,
+    "leadinAscentInMeters": 107.9,
+    "difficulty": "3.5",
+    "eventOnly": false
+  },
+  "2422779354": {
+    "name": "LaGuardia Loop",
+    "map": "NEWYORK",
+    "distanceInMeters": 2789.692871,
+    "leadinDistanceInMeters": 1423.6071777344,
+    "ascentInMeters": 26.433801651,
+    "leadinAscentInMeters": 18.6,
+    "difficulty": "1.0",
+    "eventOnly": true
+  },
+  "2436095601": {
+    "name": "2022 Cycling Esports World Championships Route",
+    "map": "NEWYORK",
+    "distanceInMeters": 54744.2265625,
+    "leadinDistanceInMeters": 219.9,
+    "ascentInMeters": 940.5689086914,
+    "leadinAscentInMeters": 0.3,
+    "difficulty": "Unknown",
+    "eventOnly": true
+  },
+  "2474227587": {
+    "name": "Beach Island Loop",
+    "map": "WATOPIA",
+    "distanceInMeters": 12781.2,
+    "leadinDistanceInMeters": 193.0,
+    "ascentInMeters": 48.7,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "2494975884": {
+    "name": "Watopia Pretzel",
+    "map": "WATOPIA",
+    "distanceInMeters": 72535.8,
+    "leadinDistanceInMeters": 485.2,
+    "ascentInMeters": 1360.5,
+    "leadinAscentInMeters": 0.7,
+    "difficulty": "5.0",
+    "eventOnly": false
+  },
+  "2569385980": {
+    "name": "Coast Crusher",
+    "map": "WATOPIA",
+    "distanceInMeters": 34567.328125,
+    "leadinDistanceInMeters": 8134.87109375,
+    "ascentInMeters": 174.6878509521,
+    "leadinAscentInMeters": 36.5227851868,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "2573468147": {
+    "name": "Ven-Top",
+    "map": "FRANCE",
+    "distanceInMeters": 20747.326171875,
+    "leadinDistanceInMeters": 153.4347076416,
+    "ascentInMeters": 1534.8,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "4.5",
+    "eventOnly": false
+  },
+  "2590569306": {
+    "name": "Shuman Trail Loop",
+    "map": "NEWYORK",
+    "distanceInMeters": 2534.8,
+    "leadinDistanceInMeters": 312.2,
+    "ascentInMeters": 9.0,
+    "leadinAscentInMeters": 1.6,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "2592027600": {
+    "name": "Innsbruckring",
+    "map": "INNSBRUCK",
+    "distanceInMeters": 8798.9,
+    "leadinDistanceInMeters": 221.5,
+    "ascentInMeters": 77.0,
+    "leadinAscentInMeters": 0.8,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "2595459121": {
+    "name": "Canopies and Coastlines",
+    "map": "WATOPIA",
+    "distanceInMeters": 22606.900390625,
+    "leadinDistanceInMeters": 5184.7001953125,
+    "ascentInMeters": 123.5,
+    "leadinAscentInMeters": 122.1999969482,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "2627606248": {
+    "name": "Three Little Sisters",
+    "map": "WATOPIA",
+    "distanceInMeters": 37736.1,
+    "leadinDistanceInMeters": 689.5,
+    "ascentInMeters": 434.6,
+    "leadinAscentInMeters": 3.1,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "2644664789": {
+    "name": "Triple Twist",
+    "map": "WATOPIA",
+    "distanceInMeters": 19876.505859375,
+    "leadinDistanceInMeters": 4644.5668945312,
+    "ascentInMeters": 180.4370880127,
+    "leadinAscentInMeters": 21.0488796234,
+    "difficulty": "3",
+    "eventOnly": false
+  },
+  "2653858696": {
+    "name": "Two Village Loop",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 12804.2,
+    "leadinDistanceInMeters": 206.3,
+    "ascentInMeters": 88.2,
+    "leadinAscentInMeters": 0.2,
+    "difficulty": "1.5",
+    "eventOnly": false
+  },
+  "2661047295": {
+    "name": "Jarvis Seaside Sprint",
+    "map": "WATOPIA",
+    "distanceInMeters": 12500.646484375,
+    "leadinDistanceInMeters": 2831.1442871094,
+    "ascentInMeters": 95.3124008179,
+    "leadinAscentInMeters": 35.7421340942,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "2663908549": {
+    "name": "Road to Sky",
+    "map": "WATOPIA",
+    "distanceInMeters": 17495.6,
+    "leadinDistanceInMeters": 103.4,
+    "ascentInMeters": 1044.3046875,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "4.5",
+    "eventOnly": false
+  },
+  "2675063596": {
+    "name": "Dust In The Wind",
+    "map": "WATOPIA",
+    "distanceInMeters": 52110.4,
+    "leadinDistanceInMeters": 340.2,
+    "ascentInMeters": 582.6,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "3.5",
+    "eventOnly": false
+  },
+  "2681889340": {
+    "name": "Climb Portal - Volcano",
+    "map": "WATOPIA",
+    "distanceInMeters": 7354.0,
+    "leadinDistanceInMeters": 1990.36,
+    "ascentInMeters": 20.4,
+    "leadinAscentInMeters": 12.2,
+    "difficulty": "1.0",
+    "eventOnly": true
+  },
+  "2694166390": {
+    "name": "London Classique",
+    "map": "LONDON",
+    "distanceInMeters": 5458.5,
+    "leadinDistanceInMeters": 5637.9,
+    "ascentInMeters": 25.2,
+    "leadinAscentInMeters": 44.7,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "2698009951": {
+    "name": "The Classic",
+    "map": "WATOPIA",
+    "distanceInMeters": 4836.0869140625,
+    "leadinDistanceInMeters": 4181.2744140625,
+    "ascentInMeters": 48.4484,
+    "leadinAscentInMeters": 16.0837097168,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "2708527018": {
+    "name": "Handful of Gravel Run",
+    "map": "WATOPIA",
+    "distanceInMeters": 6130.4,
+    "leadinDistanceInMeters": 4253.7,
+    "ascentInMeters": 74.9,
+    "leadinAscentInMeters": 18.9,
+    "difficulty": "1.0",
+    "eventOnly": true
+  },
+  "2737483381": {
+    "name": "Watopia Hilly Route",
+    "map": "WATOPIA",
+    "distanceInMeters": 9193.2431640625,
+    "leadinDistanceInMeters": 501.6069335938,
+    "ascentInMeters": 108.8,
+    "leadinAscentInMeters": 0.5,
+    "difficulty": "1.5",
+    "eventOnly": false
+  },
+  "2746475460": {
+    "name": "Eastern Eight",
+    "map": "WATOPIA",
+    "distanceInMeters": 51678.5,
+    "leadinDistanceInMeters": 2279.5,
+    "ascentInMeters": 406.5,
+    "leadinAscentInMeters": 5.8,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "2748657713": {
+    "name": "Out And Back Again",
+    "map": "WATOPIA",
+    "distanceInMeters": 39900.5078125,
+    "leadinDistanceInMeters": 2279.9079589844,
+    "ascentInMeters": 328.0576171875,
+    "leadinAscentInMeters": 5.8,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "2768300955": {
+    "name": "Coastal Crown Loop",
+    "map": "WATOPIA",
+    "distanceInMeters": 15073.681640625,
+    "leadinDistanceInMeters": 8610.6640625,
+    "ascentInMeters": 185.0473937988,
+    "leadinAscentInMeters": 80.2794723511,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "2773927650": {
+    "name": "Highland Run",
+    "map": "SCOTLAND",
+    "distanceInMeters": 5728.5610351562,
+    "leadinDistanceInMeters": 1138.0936279297,
+    "ascentInMeters": 52.283706665,
+    "leadinAscentInMeters": 6.4413671494,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "2818536273": {
+    "name": "Champs-\u00c9lys\u00e9es Run",
+    "map": "PARIS",
+    "distanceInMeters": 6616.0,
+    "leadinDistanceInMeters": 3185.3,
+    "ascentInMeters": 39.4,
+    "leadinAscentInMeters": 13.3,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "2826340040": {
+    "name": "Outer Scotland",
+    "map": "SCOTLAND",
+    "distanceInMeters": 11113.2,
+    "leadinDistanceInMeters": 248.3,
+    "ascentInMeters": 104.1,
+    "leadinAscentInMeters": 0.4,
+    "difficulty": "2",
+    "eventOnly": false
+  },
+  "2829629527": {
+    "name": "Serpentine 8",
+    "map": "WATOPIA",
+    "distanceInMeters": 19264.6,
+    "leadinDistanceInMeters": 7444.8,
+    "ascentInMeters": 205.9,
+    "leadinAscentInMeters": 33.0,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "2833089100": {
+    "name": "Kaze Kicker",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 16880.5703125,
+    "leadinDistanceInMeters": 398.8188476562,
+    "ascentInMeters": 133.9621582031,
+    "leadinAscentInMeters": 6.3789482117,
+    "difficulty": "2",
+    "eventOnly": true
+  },
+  "2836167073": {
+    "name": "London Calling",
+    "map": "LONDON",
+    "distanceInMeters": 31228.1328125,
+    "leadinDistanceInMeters": 462.0547485352,
+    "ascentInMeters": 207.070022583,
+    "leadinAscentInMeters": 4.3915715218,
+    "difficulty": "2",
+    "eventOnly": false
+  },
+  "2839057126": {
+    "name": "Jungle Circuit Reverse",
+    "map": "WATOPIA",
+    "distanceInMeters": 7861.9,
+    "leadinDistanceInMeters": 6288.7,
+    "ascentInMeters": 82.7,
+    "leadinAscentInMeters": 23.1,
+    "difficulty": "1.5",
+    "eventOnly": true
+  },
+  "2843604888": {
+    "name": "Bologna Time Trial",
+    "map": "BOLOGNATT",
+    "distanceInMeters": 8049.81933,
+    "leadinDistanceInMeters": 0.0,
+    "ascentInMeters": 236.39133,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "2.5",
+    "eventOnly": true
+  },
+  "2852153296": {
+    "name": "Petit Boucle",
+    "map": "FRANCE",
+    "distanceInMeters": 60785.42578125,
+    "leadinDistanceInMeters": 868.9,
+    "ascentInMeters": 483.3600769043,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "3.5",
+    "eventOnly": false
+  },
+  "2866480562": {
+    "name": "Chasing the Sun",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 35056.44921875,
+    "leadinDistanceInMeters": 40.8296432495,
+    "ascentInMeters": 314.6868896484,
+    "leadinAscentInMeters": 0.7,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "2875658892": {
+    "name": "The Bell Lap",
+    "map": "CRITCITY",
+    "distanceInMeters": 1966.6215820312,
+    "leadinDistanceInMeters": 65.0112075806,
+    "ascentInMeters": 16.8581733704,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "1.0",
+    "eventOnly": true
+  },
+  "2878180967": {
+    "name": "Four Horsemen",
+    "map": "WATOPIA",
+    "distanceInMeters": 89788.8,
+    "leadinDistanceInMeters": 595.1,
+    "ascentInMeters": 2108.7,
+    "leadinAscentInMeters": 2.5,
+    "difficulty": "5.0",
+    "eventOnly": false
+  },
+  "2888820995": {
+    "name": "Danger Noodle",
+    "map": "WATOPIA",
+    "distanceInMeters": 32069.6,
+    "leadinDistanceInMeters": 193.9,
+    "ascentInMeters": 414.3,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "2892858917": {
+    "name": "Red Zone Repeats",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 19388.2890625,
+    "leadinDistanceInMeters": 206.5208740234,
+    "ascentInMeters": 87.085319519,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "1",
+    "eventOnly": false
+  },
+  "2896159042": {
+    "name": "Temples and Towers",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 32602.740234375,
+    "leadinDistanceInMeters": 778.5,
+    "ascentInMeters": 318.3,
+    "leadinAscentInMeters": 1.1,
+    "difficulty": "2.5",
+    "eventOnly": false
+  },
+  "2898229208": {
+    "name": "Watts the Limit",
+    "map": "NEWYORK",
+    "distanceInMeters": 29532.3671875,
+    "leadinDistanceInMeters": 1424.1322021484,
+    "ascentInMeters": 200.4643859863,
+    "leadinAscentInMeters": 18.5500621796,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "2900074211": {
+    "name": "Zwift Medio Fondo 2022",
+    "map": "WATOPIA",
+    "distanceInMeters": 79124.5703125,
+    "leadinDistanceInMeters": 193.9161224365,
+    "ascentInMeters": 917.7418823242,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "Unknown",
+    "eventOnly": true
+  },
+  "2905381067": {
+    "name": "Royal Pump Room 8",
+    "map": "YORKSHIRE",
+    "distanceInMeters": 27712.1,
+    "leadinDistanceInMeters": 21.8,
+    "ascentInMeters": 490.5,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "3.5",
+    "eventOnly": false
+  },
+  "2927651296": {
+    "name": "Makuri Pretzel",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 77577.4834375,
+    "leadinDistanceInMeters": 1123.9239501953,
+    "ascentInMeters": 617.6887817383,
+    "leadinAscentInMeters": 4.9,
+    "difficulty": "5.0",
+    "eventOnly": false
+  },
+  "2945813240": {
+    "name": "Grand Central Circuit",
+    "map": "NEWYORK",
+    "distanceInMeters": 6857.4,
+    "leadinDistanceInMeters": 1423.6,
+    "ascentInMeters": 144.3,
+    "leadinAscentInMeters": 18.6,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "2947111049": {
+    "name": "Big Loop",
+    "map": "WATOPIA",
+    "distanceInMeters": 42603.8,
+    "leadinDistanceInMeters": 521.5,
+    "ascentInMeters": 661.7,
+    "leadinAscentInMeters": 1.1,
+    "difficulty": "4.0",
+    "eventOnly": false
+  },
+  "2949228237": {
+    "name": "Times Square Circuit Run",
+    "map": "NEWYORK",
+    "distanceInMeters": 3500.359375,
+    "leadinDistanceInMeters": 614.8049316406,
+    "ascentInMeters": 19.9716815948,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "2953010285": {
+    "name": "Mountain Mash",
+    "map": "WATOPIA",
+    "distanceInMeters": 5789.7,
+    "leadinDistanceInMeters": 209.8,
+    "ascentInMeters": 334.9,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "2954366662": {
+    "name": "Knickerbocker",
+    "map": "NEWYORK",
+    "distanceInMeters": 22545.9,
+    "leadinDistanceInMeters": 154.7,
+    "ascentInMeters": 365.0,
+    "leadinAscentInMeters": 0.2,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "2956533021": {
+    "name": "Gravel Mountain Reverse",
+    "map": "GRAVEL MOUNTAIN",
+    "distanceInMeters": 5183.2944335938,
+    "leadinDistanceInMeters": 55.8005714417,
+    "ascentInMeters": 52.566967,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "0.0",
+    "eventOnly": true
+  },
+  "2966818006": {
+    "name": "Watopia Mountain Route",
+    "map": "WATOPIA",
+    "distanceInMeters": 29723.1,
+    "leadinDistanceInMeters": 465.9,
+    "ascentInMeters": 682.5,
+    "leadinAscentInMeters": 0.5,
+    "difficulty": "4.0",
+    "eventOnly": false
+  },
+  "2967612381": {
+    "name": "Road To Ruins Reverse",
+    "map": "WATOPIA",
+    "distanceInMeters": 29645.6,
+    "leadinDistanceInMeters": 200.5,
+    "ascentInMeters": 275.0,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "2.5",
+    "eventOnly": true
+  },
+  "2969952077": {
+    "name": "Quatch Quest",
+    "map": "WATOPIA",
+    "distanceInMeters": 46470.3,
+    "leadinDistanceInMeters": 330.8,
+    "ascentInMeters": 1706.3,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "5.0",
+    "eventOnly": false
+  },
+  "2980619755": {
+    "name": "Farmland Loop",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 7757.8,
+    "leadinDistanceInMeters": 206.3,
+    "ascentInMeters": 57.3,
+    "leadinAscentInMeters": 0.2,
+    "difficulty": "1.5",
+    "eventOnly": false
+  },
+  "3007266671": {
+    "name": "Queen's Highway",
+    "map": "YORKSHIRE",
+    "distanceInMeters": 2999.3,
+    "leadinDistanceInMeters": 2692.1,
+    "ascentInMeters": 40.6,
+    "leadinAscentInMeters": 41.6,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "3012588561": {
+    "name": "May Field",
+    "map": "WATOPIA",
+    "distanceInMeters": 412.0,
+    "leadinDistanceInMeters": 48.7,
+    "ascentInMeters": 0.0,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "3023359358": {
+    "name": "Climber's Gambit",
+    "map": "WATOPIA",
+    "distanceInMeters": 27823.0,
+    "leadinDistanceInMeters": 204.1,
+    "ascentInMeters": 670.5,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "4.0",
+    "eventOnly": false
+  },
+  "3030004732": {
+    "name": "Power to the Portal",
+    "map": "WATOPIA",
+    "distanceInMeters": 17576.1796875,
+    "leadinDistanceInMeters": 949.383972168,
+    "ascentInMeters": 98.5367584229,
+    "leadinAscentInMeters": 3.0441153049,
+    "difficulty": "4.0",
+    "eventOnly": true
+  },
+  "3051823795": {
+    "name": "The Greenway",
+    "map": "NEWYORK",
+    "distanceInMeters": 36223.1328125,
+    "leadinDistanceInMeters": 582.313659668,
+    "ascentInMeters": 289.7971801758,
+    "leadinAscentInMeters": 2.3214917183,
+    "difficulty": "4.0",
+    "eventOnly": false
+  },
+  "3068694512": {
+    "name": "The Classic Run",
+    "map": "WATOPIA",
+    "distanceInMeters": 4836.0874023438,
+    "leadinDistanceInMeters": 4181.2280273438,
+    "ascentInMeters": 48.4028282166,
+    "leadinAscentInMeters": 16.082408905,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "3078665969": {
+    "name": "Rising Empire",
+    "map": "NEWYORK",
+    "distanceInMeters": 20816.0,
+    "leadinDistanceInMeters": 380.4,
+    "ascentInMeters": 376.9,
+    "leadinAscentInMeters": 1.8,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "3079921742": {
+    "name": "Stay Puft Pursuit",
+    "map": "NEWYORK",
+    "distanceInMeters": 31183.83984375,
+    "leadinDistanceInMeters": 614.8231811523,
+    "ascentInMeters": 415.8245239258,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "4.0",
+    "eventOnly": false
+  },
+  "3099224394": {
+    "name": "Titan's Run",
+    "map": "WATOPIA",
+    "distanceInMeters": 5883.1118164062,
+    "leadinDistanceInMeters": 690.258972168,
+    "ascentInMeters": 121.8812942505,
+    "leadinAscentInMeters": 0.2137989551,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "3101693166": {
+    "name": "InnsbruckConti",
+    "map": "INNSBRUCK",
+    "distanceInMeters": 12477.9,
+    "leadinDistanceInMeters": 463.7,
+    "ascentInMeters": 479.7,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "Unknown",
+    "eventOnly": true
+  },
+  "3114603308": {
+    "name": "2018 Worlds Short Lap",
+    "map": "INNSBRUCK",
+    "distanceInMeters": 23680.9,
+    "leadinDistanceInMeters": 221.5,
+    "ascentInMeters": 494.8,
+    "leadinAscentInMeters": 0.8,
+    "difficulty": "3.5",
+    "eventOnly": false
+  },
+  "3166535632": {
+    "name": "Cobbled Climbs Run",
+    "map": "RICHMOND",
+    "distanceInMeters": 9178.3046875,
+    "leadinDistanceInMeters": 284.8463745117,
+    "ascentInMeters": 133.5875396729,
+    "leadinAscentInMeters": 2.520575285,
+    "difficulty": "1.5",
+    "eventOnly": false
+  },
+  "3219074012": {
+    "name": "Watopia Mountain 8",
+    "map": "WATOPIA",
+    "distanceInMeters": 32255.9,
+    "leadinDistanceInMeters": 492.4,
+    "ascentInMeters": 691.4,
+    "leadinAscentInMeters": 0.7,
+    "difficulty": "4.0",
+    "eventOnly": false
+  },
+  "3250904331": {
+    "name": "London Uprising",
+    "map": "LONDON",
+    "distanceInMeters": 20575.5,
+    "leadinDistanceInMeters": 336.2,
+    "ascentInMeters": 356.2,
+    "leadinAscentInMeters": 0.7,
+    "difficulty": "2",
+    "eventOnly": false
+  },
+  "3261167746": {
+    "name": "Spiral into the Volcano",
+    "map": "WATOPIA",
+    "distanceInMeters": 55634.3,
+    "leadinDistanceInMeters": 193.9,
+    "ascentInMeters": 355.2,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "3262665065": {
+    "name": "London Flat",
+    "map": "LONDON",
+    "distanceInMeters": 11989.2080078125,
+    "leadinDistanceInMeters": 389.0128173828,
+    "ascentInMeters": 114.7068939209,
+    "leadinAscentInMeters": 0.7313725352,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "3276403604": {
+    "name": "Greater London Loop",
+    "map": "LONDON",
+    "distanceInMeters": 21028.8,
+    "leadinDistanceInMeters": 462.1,
+    "ascentInMeters": 255.1,
+    "leadinAscentInMeters": 4.4,
+    "difficulty": "2.5",
+    "eventOnly": false
+  },
+  "3282611437": {
+    "name": "Flatland Loop",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 12855.1,
+    "leadinDistanceInMeters": 199.1,
+    "ascentInMeters": 99.3,
+    "leadinAscentInMeters": 0.2,
+    "difficulty": "1.5",
+    "eventOnly": false
+  },
+  "3302953739": {
+    "name": "Sleepless City",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 9559.708984375,
+    "leadinDistanceInMeters": 50.9555892944,
+    "ascentInMeters": 42.5,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "1.5",
+    "eventOnly": false
+  },
+  "3312037616": {
+    "name": "Two Bridges Loop",
+    "map": "WATOPIA",
+    "distanceInMeters": 7110.2,
+    "leadinDistanceInMeters": 193.2,
+    "ascentInMeters": 80.7,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "3314406972": {
+    "name": "Spinfinity",
+    "map": "NEWYORK",
+    "distanceInMeters": 19284.095703125,
+    "leadinDistanceInMeters": 614.5534057617,
+    "ascentInMeters": 155.4237976074,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "4.0",
+    "eventOnly": false
+  },
+  "3324272424": {
+    "name": "Snowman",
+    "map": "WATOPIA",
+    "distanceInMeters": 44036.94921875,
+    "leadinDistanceInMeters": 193.9179992676,
+    "ascentInMeters": 578.4619750977,
+    "leadinAscentInMeters": 0.0959715024,
+    "difficulty": "4.0",
+    "eventOnly": false
+  },
+  "3330165223": {
+    "name": "Shisa Shakedown",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 49442.52734375,
+    "leadinDistanceInMeters": 4038.2443847656,
+    "ascentInMeters": 494.7147521973,
+    "leadinAscentInMeters": 61.7460021973,
+    "difficulty": "4",
+    "eventOnly": false
+  },
+  "3351665212": {
+    "name": "Glasgow Crit Circuit Run",
+    "map": "SCOTLAND",
+    "distanceInMeters": 3011.0183105469,
+    "leadinDistanceInMeters": 248.5872650146,
+    "ascentInMeters": 33.0887908936,
+    "leadinAscentInMeters": 0.4446093738,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "3356878261": {
+    "name": "Sprinter's Playground",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 12350.890625,
+    "leadinDistanceInMeters": 227.3512115479,
+    "ascentInMeters": 67.3954467773,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "1.5",
+    "eventOnly": false
+  },
+  "3364574135": {
+    "name": "Champs-\u00c9lys\u00e9es",
+    "map": "PARIS",
+    "distanceInMeters": 6616.4,
+    "leadinDistanceInMeters": 3184.9,
+    "ascentInMeters": 39.4,
+    "leadinAscentInMeters": 13.3,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "3366225080": {
+    "name": "Tick Tock",
+    "map": "WATOPIA",
+    "distanceInMeters": 16861.0,
+    "leadinDistanceInMeters": 2279.7,
+    "ascentInMeters": 53.1,
+    "leadinAscentInMeters": 5.8,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "3367186349": {
+    "name": "Suki's Playground",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 18311.1,
+    "leadinDistanceInMeters": 206.3,
+    "ascentInMeters": 149.8,
+    "leadinAscentInMeters": 0.2,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "3368626651": {
+    "name": "Zwift Bambino Fondo 2022",
+    "map": "WATOPIA",
+    "distanceInMeters": 53056.6171875,
+    "leadinDistanceInMeters": 193.9161224365,
+    "ascentInMeters": 396.5840454102,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "Unknown",
+    "eventOnly": true
+  },
+  "3378411990": {
+    "name": "Waisted 8",
+    "map": "WATOPIA",
+    "distanceInMeters": 30686.521484375,
+    "leadinDistanceInMeters": 193.9167175293,
+    "ascentInMeters": 143.9091186523,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "3379779247": {
+    "name": "Three Village Loop",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 10553.9,
+    "leadinDistanceInMeters": 2372.1,
+    "ascentInMeters": 92.6,
+    "leadinAscentInMeters": 5.3,
+    "difficulty": "1.5",
+    "eventOnly": false
+  },
+  "3382019812": {
+    "name": "Watopia Figure 8",
+    "map": "WATOPIA",
+    "distanceInMeters": 29695.4,
+    "leadinDistanceInMeters": 492.4,
+    "ascentInMeters": 254.0,
+    "leadinAscentInMeters": 0.7,
+    "difficulty": "2.5",
+    "eventOnly": false
+  },
+  "3395698268": {
+    "name": "Watopia Flat Route",
+    "map": "WATOPIA",
+    "distanceInMeters": 10268.9,
+    "leadinDistanceInMeters": 456.5,
+    "ascentInMeters": 61.2,
+    "leadinAscentInMeters": 0.4,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "3407362320": {
+    "name": "Neon Flats",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 14725.2,
+    "leadinDistanceInMeters": 260.1,
+    "ascentInMeters": 72.1,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "1.5",
+    "eventOnly": false
+  },
+  "3453194200": {
+    "name": "Triple Flat Loops",
+    "map": "WATOPIA",
+    "distanceInMeters": 33978.8,
+    "leadinDistanceInMeters": 2279.5,
+    "ascentInMeters": 156.6,
+    "leadinAscentInMeters": 5.8,
+    "difficulty": "2.5",
+    "eventOnly": false
+  },
+  "3454338139": {
+    "name": "Seaside Sprint",
+    "map": "WATOPIA",
+    "distanceInMeters": 6291.2,
+    "leadinDistanceInMeters": 2961.9,
+    "ascentInMeters": 46.8,
+    "leadinAscentInMeters": 36.5,
+    "difficulty": "1.0",
+    "eventOnly": true
+  },
+  "3486338362": {
+    "name": "The Epiloch",
+    "map": "SCOTLAND",
+    "distanceInMeters": 8056.966796875,
+    "leadinDistanceInMeters": 3047.8273925781,
+    "ascentInMeters": 70.984085083,
+    "leadinAscentInMeters": 23.3636436462,
+    "difficulty": "1",
+    "eventOnly": true
+  },
+  "3523806426": {
+    "name": "Spirit Forest",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 8447.5,
+    "leadinDistanceInMeters": 4625.4,
+    "ascentInMeters": 134.8,
+    "leadinAscentInMeters": 122.0,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "3532866973": {
+    "name": "Oh Hill No",
+    "map": "WATOPIA",
+    "distanceInMeters": 7889.3916015625,
+    "leadinDistanceInMeters": 163.7703704834,
+    "ascentInMeters": 305.7347106934,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "5.0",
+    "eventOnly": false
+  },
+  "3536020075": {
+    "name": "Three Step Sisters",
+    "map": "WATOPIA",
+    "distanceInMeters": 37859.1796875,
+    "leadinDistanceInMeters": 193.9167175293,
+    "ascentInMeters": 586.4755249023,
+    "leadinAscentInMeters": 0.095951952,
+    "difficulty": "4.0",
+    "eventOnly": true
+  },
+  "3558689342": {
+    "name": "Peak Performance",
+    "map": "WATOPIA",
+    "distanceInMeters": 45817.53125,
+    "leadinDistanceInMeters": 949.3874511719,
+    "ascentInMeters": 725.5638427734,
+    "leadinAscentInMeters": 3.0440323353,
+    "difficulty": "5.0",
+    "eventOnly": false
+  },
+  "3565430790": {
+    "name": "Rooftop Rendezvous",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 3744.6,
+    "leadinDistanceInMeters": 2938.5,
+    "ascentInMeters": 56.3,
+    "leadinAscentInMeters": 25.6,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "3569674525": {
+    "name": "Keith Hill After Party",
+    "map": "LONDON",
+    "distanceInMeters": 36188.4,
+    "leadinDistanceInMeters": 461.2517089844,
+    "ascentInMeters": 431.0,
+    "leadinAscentInMeters": 4.4,
+    "difficulty": "3.0",
+    "eventOnly": true
+  },
+  "3573087582": {
+    "name": "Italian Villas Circuit",
+    "map": "WATOPIA",
+    "distanceInMeters": 1937.2,
+    "leadinDistanceInMeters": 2405.18359375,
+    "ascentInMeters": 15.1,
+    "leadinAscentInMeters": 16.4944210052,
+    "difficulty": "1.0",
+    "eventOnly": true
+  },
+  "3597939700": {
+    "name": "The 6 Train",
+    "map": "NEWYORK",
+    "distanceInMeters": 6467.7,
+    "leadinDistanceInMeters": 50.9,
+    "ascentInMeters": 69.0,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "3599973269": {
+    "name": "London Classique Reverse",
+    "map": "LONDON",
+    "distanceInMeters": 5457.0,
+    "leadinDistanceInMeters": 7462.8,
+    "ascentInMeters": 25.2,
+    "leadinAscentInMeters": 59.5,
+    "difficulty": "1.0",
+    "eventOnly": true
+  },
+  "3600776267": {
+    "name": "Neon Shore Loop",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 32951.0078125,
+    "leadinDistanceInMeters": 1123.9035644531,
+    "ascentInMeters": 252.698928833,
+    "leadinAscentInMeters": 4.8511505127,
+    "difficulty": "2",
+    "eventOnly": false
+  },
+  "3603635554": {
+    "name": "Sea to Tree",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 3272.8,
+    "leadinDistanceInMeters": 572.1,
+    "ascentInMeters": 107.5,
+    "leadinAscentInMeters": 13.8,
+    "difficulty": "1.5",
+    "eventOnly": false
+  },
+  "3621162212": {
+    "name": "Zwift Bambino Fondo",
+    "map": "WATOPIA",
+    "distanceInMeters": 51885.0,
+    "leadinDistanceInMeters": 492.4,
+    "ascentInMeters": 579.7,
+    "leadinAscentInMeters": 0.7,
+    "difficulty": "3.5",
+    "eventOnly": true
+  },
+  "3636436865": {
+    "name": "Tropic Rush",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 41266.55078125,
+    "leadinDistanceInMeters": 1605.9002685547,
+    "ascentInMeters": 327.0883483887,
+    "leadinAscentInMeters": 6.0444369316,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "3649347250": {
+    "name": "Innsbruck KOM After Party",
+    "map": "INNSBRUCK",
+    "distanceInMeters": 36971.234375,
+    "leadinDistanceInMeters": 221.5413208008,
+    "ascentInMeters": 657.0,
+    "leadinAscentInMeters": 0.8,
+    "difficulty": "3.5",
+    "eventOnly": false
+  },
+  "3662705581": {
+    "name": "The Muckle Yin",
+    "map": "SCOTLAND",
+    "distanceInMeters": 23413.90234375,
+    "leadinDistanceInMeters": 248.3587646484,
+    "ascentInMeters": 281.8926391602,
+    "leadinAscentInMeters": 0.442597717,
+    "difficulty": "4.0",
+    "eventOnly": false
+  },
+  "3665959404": {
+    "name": "Hudson Roll",
+    "map": "NEWYORK",
+    "distanceInMeters": 9020.8,
+    "leadinDistanceInMeters": 174.7,
+    "ascentInMeters": 80.2,
+    "leadinAscentInMeters": 1.2,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "3669622170": {
+    "name": "LaGuardia After Party",
+    "map": "NEWYORK",
+    "distanceInMeters": 20740.095703125,
+    "leadinDistanceInMeters": 50.8274307251,
+    "ascentInMeters": 295.0039978027,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "3678866163": {
+    "name": "Fuhgeddaboudit",
+    "map": "NEWYORK",
+    "distanceInMeters": 78904.984375,
+    "leadinDistanceInMeters": 72.346321106,
+    "ascentInMeters": 837.9556884766,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "5.0",
+    "eventOnly": false
+  },
+  "3680493479": {
+    "name": "Southern Coast Cruise",
+    "map": "WATOPIA",
+    "distanceInMeters": 23627.3203125,
+    "leadinDistanceInMeters": 2669.1987304688,
+    "ascentInMeters": 136.4929504395,
+    "leadinAscentInMeters": 10.0624170303,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "3687150686": {
+    "name": "Gravel Mountain",
+    "map": "GRAVEL MOUNTAIN",
+    "distanceInMeters": 5183.2182617188,
+    "leadinDistanceInMeters": 212.9801940918,
+    "ascentInMeters": 52.573296,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "0.0",
+    "eventOnly": true
+  },
+  "3687251774": {
+    "name": "Grand Central Circuit Reverse",
+    "map": "NEWYORK",
+    "distanceInMeters": 6856.9,
+    "leadinDistanceInMeters": 2356.251709,
+    "ascentInMeters": 144.1,
+    "leadinAscentInMeters": 20.580011,
+    "difficulty": "2.0",
+    "eventOnly": true
+  },
+  "3691918883": {
+    "name": "Chain Chomper",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 13615.8,
+    "leadinDistanceInMeters": 2372.1,
+    "ascentInMeters": 183.4,
+    "leadinAscentInMeters": 5.3,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "3694952104": {
+    "name": "Chili Pepper Reverse",
+    "map": "WATOPIA",
+    "distanceInMeters": 7346.97,
+    "leadinDistanceInMeters": 154.9,
+    "ascentInMeters": 46.48,
+    "leadinAscentInMeters": 1.5,
+    "difficulty": "2.0",
+    "eventOnly": true
+  },
+  "3701568815": {
+    "name": "Road to Ruins",
+    "map": "WATOPIA",
+    "distanceInMeters": 29647.2,
+    "leadinDistanceInMeters": 516.9,
+    "ascentInMeters": 274.8,
+    "leadinAscentInMeters": 1.0,
+    "difficulty": "2.5",
+    "eventOnly": false
+  },
+  "3706527503": {
+    "name": "Castle Crit",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 3470.0,
+    "leadinDistanceInMeters": 1500.5,
+    "ascentInMeters": 43.4,
+    "leadinAscentInMeters": 44.4,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "3707791029": {
+    "name": "Surrey Hills",
+    "map": "LONDON",
+    "distanceInMeters": 39125.0,
+    "leadinDistanceInMeters": 4994.2,
+    "ascentInMeters": 877.4,
+    "leadinAscentInMeters": 156.3,
+    "difficulty": "4.0",
+    "eventOnly": false
+  },
+  "3742187716": {
+    "name": "Castle to Castle",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 22379.8,
+    "leadinDistanceInMeters": 817.8,
+    "ascentInMeters": 139.7,
+    "leadinAscentInMeters": 1.0,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "3748780161": {
+    "name": "Zwift Medio Fondo",
+    "map": "WATOPIA",
+    "distanceInMeters": 72503.359375,
+    "leadinDistanceInMeters": 495.833984375,
+    "ascentInMeters": 1005.9686889648,
+    "leadinAscentInMeters": 0.7,
+    "difficulty": "4.5",
+    "eventOnly": true
+  },
+  "3765339356": {
+    "name": "Glasgow Crit Circuit",
+    "map": "SCOTLAND",
+    "distanceInMeters": 3012.0,
+    "leadinDistanceInMeters": 246.9,
+    "ascentInMeters": 33.1,
+    "leadinAscentInMeters": 0.4,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "3774003351": {
+    "name": "LaGuardia Loop Reverse",
+    "map": "NEWYORK",
+    "distanceInMeters": 2790.5041503906,
+    "leadinDistanceInMeters": 2355.6311035156,
+    "ascentInMeters": 26.3579025269,
+    "leadinAscentInMeters": 19.6110210419,
+    "difficulty": "1.0",
+    "eventOnly": true
+  },
+  "3801241714": {
+    "name": "Lutscher CCW",
+    "map": "INNSBRUCK",
+    "distanceInMeters": 13748.8,
+    "leadinDistanceInMeters": 8880.3,
+    "ascentInMeters": 401.7,
+    "leadinAscentInMeters": 425.3,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "3811569265": {
+    "name": "Flat Route Reverse",
+    "map": "WATOPIA",
+    "distanceInMeters": 10269.1,
+    "leadinDistanceInMeters": 200.5,
+    "ascentInMeters": 61.2,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "1.0",
+    "eventOnly": true
+  },
+  "3819095753": {
+    "name": "5K Loop",
+    "map": "WATOPIA",
+    "distanceInMeters": 4999.0,
+    "leadinDistanceInMeters": 306.7,
+    "ascentInMeters": 30.5,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "Unknown",
+    "eventOnly": false
+  },
+  "3835625237": {
+    "name": "Prospect Park Loop Run",
+    "map": "NEWYORK",
+    "distanceInMeters": 5428.0864257812,
+    "leadinDistanceInMeters": 72.346321106,
+    "ascentInMeters": 37.3170509338,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "3848492017": {
+    "name": "The Mega Pretzel",
+    "map": "WATOPIA",
+    "distanceInMeters": 107274.9,
+    "leadinDistanceInMeters": 3709.4,
+    "ascentInMeters": 1638.4,
+    "leadinAscentInMeters": 20.6,
+    "difficulty": "5.0",
+    "eventOnly": false
+  },
+  "3853654821": {
+    "name": "Greatest London Loop",
+    "map": "LONDON",
+    "distanceInMeters": 25666.5,
+    "leadinDistanceInMeters": 461.8,
+    "ascentInMeters": 355.3,
+    "leadinAscentInMeters": 4.4,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "3864857876": {
+    "name": "Legends and Lava",
+    "map": "WATOPIA",
+    "distanceInMeters": 24510.263671875,
+    "leadinDistanceInMeters": 154.9445648193,
+    "ascentInMeters": 352.3399047852,
+    "leadinAscentInMeters": 0.014189464,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "3866241330": {
+    "name": "Volcano Circuit CCW",
+    "map": "WATOPIA",
+    "distanceInMeters": 4103.5,
+    "leadinDistanceInMeters": 4840.2,
+    "ascentInMeters": 20.4,
+    "leadinAscentInMeters": 29.7,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "3871332877": {
+    "name": "Track Meet",
+    "map": "WATOPIA",
+    "distanceInMeters": 6072.822265625,
+    "leadinDistanceInMeters": 462.1184692383,
+    "ascentInMeters": 21.8800640106,
+    "leadinAscentInMeters": 2.5989768505,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "3872978134": {
+    "name": "Mighty Metropolitan",
+    "map": "NEWYORK",
+    "distanceInMeters": 20095.3,
+    "leadinDistanceInMeters": 411.8,
+    "ascentInMeters": 318.4,
+    "leadinAscentInMeters": 2.6,
+    "difficulty": "2.5",
+    "eventOnly": false
+  },
+  "3878295865": {
+    "name": "Queen's Highway Run",
+    "map": "YORKSHIRE",
+    "distanceInMeters": 2995.888671875,
+    "leadinDistanceInMeters": 2695.9331054688,
+    "ascentInMeters": 40.604259491,
+    "leadinAscentInMeters": 41.6511726379,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "3912793970": {
+    "name": "Richmond Loop Around",
+    "map": "RICHMOND",
+    "distanceInMeters": 42551.9296875,
+    "leadinDistanceInMeters": 111.4253616333,
+    "ascentInMeters": 555.5787353516,
+    "leadinAscentInMeters": 0.0340429582,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "3914529041": {
+    "name": "Wandering Flats",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 25101.291015625,
+    "leadinDistanceInMeters": 108.9318161011,
+    "ascentInMeters": 145.6,
+    "leadinAscentInMeters": 0.2,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "3919912289": {
+    "name": "Casse-Pattes",
+    "map": "FRANCE",
+    "distanceInMeters": 22890.3,
+    "leadinDistanceInMeters": 869.0,
+    "ascentInMeters": 155.0,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "3921412335": {
+    "name": "Big Foot Hills",
+    "map": "WATOPIA",
+    "distanceInMeters": 67588.2,
+    "leadinDistanceInMeters": 2280.0,
+    "ascentInMeters": 707.9,
+    "leadinAscentInMeters": 5.8,
+    "difficulty": "4.0",
+    "eventOnly": false
+  },
+  "3961473046": {
+    "name": "Hilltop Hustle",
+    "map": "WATOPIA",
+    "distanceInMeters": 13633.94921875,
+    "leadinDistanceInMeters": 2669.3979492188,
+    "ascentInMeters": 335.8114929199,
+    "leadinAscentInMeters": 10.0587348938,
+    "difficulty": "4.0",
+    "eventOnly": false
+  },
+  "3974965857": {
+    "name": "Knights of the Roundabout",
+    "map": "FRANCE",
+    "distanceInMeters": 51189.05078125,
+    "leadinDistanceInMeters": 3241.1999511719,
+    "ascentInMeters": 336.0079345703,
+    "leadinAscentInMeters": 23.2,
+    "difficulty": "4.0",
+    "eventOnly": false
+  },
+  "3976402826": {
+    "name": "Greatest London Loop Reverse",
+    "map": "LONDON",
+    "distanceInMeters": 25670.845703125,
+    "leadinDistanceInMeters": 171.8934326172,
+    "ascentInMeters": 355.1,
+    "leadinAscentInMeters": 0.7,
+    "difficulty": "3.0",
+    "eventOnly": true
+  },
+  "3994934674": {
+    "name": "Volcano Flat",
+    "map": "WATOPIA",
+    "distanceInMeters": 12349.6,
+    "leadinDistanceInMeters": 492.4,
+    "ascentInMeters": 49.9,
+    "leadinAscentInMeters": 0.7,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "4009130866": {
+    "name": "Jurassic Coast",
+    "map": "WATOPIA",
+    "distanceInMeters": 19315.2,
+    "leadinDistanceInMeters": 224.6,
+    "ascentInMeters": 212.1,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "4009235104": {
+    "name": "Achterbahn",
+    "map": "INNSBRUCK",
+    "distanceInMeters": 47429.7,
+    "leadinDistanceInMeters": 221.5,
+    "ascentInMeters": 989.0,
+    "leadinAscentInMeters": 0.8,
+    "difficulty": "4.5",
+    "eventOnly": false
+  },
+  "4012646479": {
+    "name": "London 8",
+    "map": "LONDON",
+    "distanceInMeters": 20341.3,
+    "leadinDistanceInMeters": 462.1,
+    "ascentInMeters": 255.9,
+    "leadinAscentInMeters": 4.4,
+    "difficulty": "2.5",
+    "eventOnly": false
+  },
+  "4084028627": {
+    "name": "Mayan 8",
+    "map": "WATOPIA",
+    "distanceInMeters": 23071.369140625,
+    "leadinDistanceInMeters": 3077.1877441406,
+    "ascentInMeters": 241.0119934082,
+    "leadinAscentInMeters": 8.277015686,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "4102513789": {
+    "name": "Radio Rendezvous",
+    "map": "WATOPIA",
+    "distanceInMeters": 20520.9453125,
+    "leadinDistanceInMeters": 3077.1989746094,
+    "ascentInMeters": 735.9,
+    "leadinAscentInMeters": 8.2774095535,
+    "difficulty": "5.0",
+    "eventOnly": false
+  },
+  "4107749591": {
+    "name": "City and the Sgurr",
+    "map": "SCOTLAND",
+    "distanceInMeters": 5916.9658203125,
+    "leadinDistanceInMeters": 2724.9758300781,
+    "ascentInMeters": 102.5,
+    "leadinAscentInMeters": 63.4,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "4107844490": {
+    "name": "Big Loop Reverse",
+    "map": "WATOPIA",
+    "distanceInMeters": 42600.76953125,
+    "leadinDistanceInMeters": 211.4873199463,
+    "ascentInMeters": 657.7207641602,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "4.0",
+    "eventOnly": true
+  },
+  "4131664304": {
+    "name": "Itza Party",
+    "map": "WATOPIA",
+    "distanceInMeters": 45752.6,
+    "leadinDistanceInMeters": 496.9965209961,
+    "ascentInMeters": 505.8,
+    "leadinAscentInMeters": 0.799530983,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "4142772830": {
+    "name": "Three Sisters",
+    "map": "WATOPIA",
+    "distanceInMeters": 48010.5,
+    "leadinDistanceInMeters": 456.5,
+    "ascentInMeters": 895.8,
+    "leadinAscentInMeters": 0.4,
+    "difficulty": "4.5",
+    "eventOnly": false
+  },
+  "4149936043": {
+    "name": "Climb Portal - Mont Saint-Michel",
+    "map": "FRANCE",
+    "distanceInMeters": 2469.0342,
+    "leadinDistanceInMeters": 6144.820312,
+    "ascentInMeters": 11.438,
+    "leadinAscentInMeters": 3.101883,
+    "difficulty": "1.0",
+    "eventOnly": true
+  },
+  "4159356920": {
+    "name": "Petite Douleur",
+    "map": "FRANCE",
+    "distanceInMeters": 13901.220703125,
+    "leadinDistanceInMeters": 10872.888671875,
+    "ascentInMeters": 194.4419250488,
+    "leadinAscentInMeters": 192.2793426514,
+    "difficulty": "3.0",
+    "eventOnly": false
+  },
+  "4194352271": {
+    "name": "Cobbled Climbs Reverse",
+    "map": "RICHMOND",
+    "distanceInMeters": 9177.4,
+    "leadinDistanceInMeters": 99.7,
+    "ascentInMeters": 133.6,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "1.5",
+    "eventOnly": true
+  },
+  "4199497144": {
+    "name": "Coast to Coast",
+    "map": "WATOPIA",
+    "distanceInMeters": 24092.42578125,
+    "leadinDistanceInMeters": 2669.4704589844,
+    "ascentInMeters": 153.9337005615,
+    "leadinAscentInMeters": 10.0625829697,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "4210048937": {
+    "name": "Triple Loops",
+    "map": "LONDON",
+    "distanceInMeters": 40945.0,
+    "leadinDistanceInMeters": 462.1,
+    "ascentInMeters": 564.6,
+    "leadinAscentInMeters": 4.4,
+    "difficulty": "3.5",
+    "eventOnly": false
+  },
+  "4227232797": {
+    "name": "Scotland After Party",
+    "map": "SCOTLAND",
+    "distanceInMeters": 13634.404296875,
+    "leadinDistanceInMeters": 1138.3177490234,
+    "ascentInMeters": 189.3475952148,
+    "leadinAscentInMeters": 6.3560400009,
+    "difficulty": "4",
+    "eventOnly": false
+  },
+  "4232620535": {
+    "name": "Toefield Tornado",
+    "map": "NEWYORK",
+    "distanceInMeters": 10216.3515625,
+    "leadinDistanceInMeters": 72.346321106,
+    "ascentInMeters": 52.8133621216,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "4232726854": {
+    "name": "Surfin' Safari",
+    "map": "WATOPIA",
+    "distanceInMeters": 9770.0,
+    "leadinDistanceInMeters": 197.1,
+    "ascentInMeters": 43.4,
+    "leadinAscentInMeters": 0.0,
+    "difficulty": "1.0",
+    "eventOnly": false
+  },
+  "4240327959": {
+    "name": "11.1 Ocean Blvd",
+    "map": "WATOPIA",
+    "distanceInMeters": 10469.4,
+    "leadinDistanceInMeters": 537.3,
+    "ascentInMeters": 47.6,
+    "leadinAscentInMeters": 2.6,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "4258943387": {
+    "name": "Turf N Surf",
+    "map": "MAKURIISLANDS",
+    "distanceInMeters": 24627.90234375,
+    "leadinDistanceInMeters": 75.3,
+    "ascentInMeters": 195.8,
+    "leadinAscentInMeters": 1.9620312452,
+    "difficulty": "2.0",
+    "eventOnly": false
+  },
+  "4263172118": {
+    "name": "Three Sisters Reverse",
+    "map": "WATOPIA",
+    "distanceInMeters": 45692.66796875,
+    "leadinDistanceInMeters": 200.1,
+    "ascentInMeters": 878.3474731445,
+    "leadinAscentInMeters": 0.1,
+    "difficulty": "4.5",
+    "eventOnly": true
+  },
+  "4280627426": {
+    "name": "Mayan Mash",
+    "map": "WATOPIA",
+    "distanceInMeters": 34623.55859375,
+    "leadinDistanceInMeters": 3077.0009765625,
+    "ascentInMeters": 755.1406860352,
+    "leadinAscentInMeters": 8.2768373489,
+    "difficulty": "4.0",
+    "eventOnly": false
+  }
+}
