@@ -28,8 +28,10 @@ from bike_comparison.physics import compare_bike_setups
 from shared.utils import calculate_normalized_power
 from shared.data_fetcher import (
     fetch_rider_telemetry, convert_telemetry_to_dataframe,
-    fetch_race_from_activity
+    fetch_race_from_activity, get_activity_details,
+    _request_with_retry, BASE_URL
 )
+from shared.route_lookup import get_route_info
 from shared import blob_storage
 from shared.zwift_auth import exchange_code_for_tokens, refresh_access_token, ZwiftTokens, get_token_with_password
 
@@ -188,6 +190,171 @@ def bike_comparison():
 def race_replay():
     """Race replay tool."""
     return render_template('race_replay.html')
+
+
+@app.route('/my-activities')
+def my_activities():
+    """My Activities page — shows the logged-in user's recent activities."""
+    if 'tokens' not in session:
+        return redirect(url_for('auth_login', next=url_for('my_activities')))
+    return render_template('my_activities.html')
+
+
+@app.route('/api/my_activities')
+def api_my_activities():
+    """Fetch the logged-in user's recent activities from the Zwift API."""
+    headers = get_headers()
+    if not headers:
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    try:
+        # First get the user's profile ID
+        profile_resp = _request_with_retry(
+            'GET',
+            f'{BASE_URL}/profiles/me',
+            headers=headers,
+            timeout=15,
+        )
+        if profile_resp.status_code != 200:
+            return jsonify({'error': 'Failed to fetch profile'}), profile_resp.status_code
+
+        profile = profile_resp.json()
+        profile_id = profile.get('id')
+        if not profile_id:
+            return jsonify({'error': 'Could not determine profile ID'}), 500
+
+        # Fetch activities — Zwift API: GET /api/profiles/{id}/activities
+        start = int(request.args.get('start', 0))
+        limit = int(request.args.get('limit', 30))
+        resp = _request_with_retry(
+            'GET',
+            f'{BASE_URL}/profiles/{profile_id}/activities',
+            headers=headers,
+            params={'start': start, 'limit': limit},
+            timeout=30,
+        )
+        if resp.status_code != 200:
+            return jsonify({'error': f'Failed to fetch activities: {resp.status_code}'}), resp.status_code
+
+        raw_activities = resp.json()
+
+        activities = []
+        for act in raw_activities:
+            activity_id = act.get('id') or act.get('id_str')
+
+            distance_m = act.get('distanceInMeters', 0)
+
+            # movingTimeInMs is the most reliable duration field
+            moving_ms = act.get('movingTimeInMs', 0)
+            duration_sec = int(moving_ms / 1000) if moving_ms else 0
+
+            sport = act.get('sport', '').upper()
+            name = act.get('name', '')
+            avg_watts = act.get('avgWatts')
+
+            activities.append({
+                'id': str(activity_id) if activity_id else None,
+                'name': name,
+                'sport': sport,
+                'date': act.get('startDate'),
+                'distance_km': round(distance_m / 1000, 2) if distance_m else 0,
+                'duration_sec': duration_sec,
+                'avg_watts': round(avg_watts, 1) if avg_watts else None,
+                'calories': act.get('calories'),
+                # These will be populated by the enrichment endpoint
+                'route_name': None,
+                'avg_hr': None,
+                'normalized_power': None,
+                'is_race': False,
+                'race_name': None,
+                'event_subgroup_id': None,
+            })
+
+        return jsonify({'activities': activities, 'start': start, 'limit': limit})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/activity_enrichment/<activity_id>')
+def api_activity_enrichment(activity_id):
+    """Fetch enriched data for a single activity — route, NP, HR, race info.
+
+    Reuses the race-replay / bike-comparison data pipeline:
+      get_activity_details  →  routeId  →  route name
+      fetch_rider_telemetry →  DataFrame →  NP + avg HR
+    """
+    headers = get_headers()
+    if not headers:
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    try:
+        result = {}
+
+        # --- Step 1: Activity details (route, event/race info) ---
+        activity_data, error = get_activity_details(activity_id, headers)
+        if error:
+            return jsonify({'error': error}), 404
+
+        route_id = activity_data.get('routeId')
+        route_name = None
+
+        # Race detection
+        event_info = activity_data.get('eventInfo') or {}
+        event_subgroup_id = (
+            event_info.get('eventSubGroupId')
+            or event_info.get('eventSubgroupId')
+        )
+        event_id = event_info.get('id') or event_info.get('eventId')
+        result['is_race'] = bool(event_subgroup_id)
+        result['race_name'] = event_info.get('name') if result['is_race'] else None
+        result['event_subgroup_id'] = event_subgroup_id
+        result['event_id'] = event_id
+
+        # If no routeId on the activity, try the event subgroup (races)
+        if not route_id and event_id:
+            try:
+                event_resp = _request_with_retry(
+                    'GET',
+                    f'{BASE_URL}/events/{event_id}',
+                    headers=headers,
+                    timeout=15,
+                )
+                if event_resp.status_code == 200:
+                    event_data = event_resp.json()
+                    for esg in event_data.get('eventSubgroups', []):
+                        if esg.get('id') == event_subgroup_id:
+                            route_id = esg.get('routeId')
+                            break
+            except Exception:
+                pass  # Non-critical
+
+        if route_id:
+            ri = get_route_info(route_id)
+            if ri:
+                route_name = ri.get('name')
+        result['route_name'] = route_name
+
+        # --- Step 2: Telemetry (NP + avg HR) ---
+        telem_data, _, telem_error = fetch_rider_telemetry(int(activity_id), headers)
+        if telem_data:
+            df = convert_telemetry_to_dataframe(telem_data)
+            if len(df) > 0:
+                result['normalized_power'] = calculate_normalized_power(df['power_watts'])
+                hr_vals = df['hr_bpm']
+                hr_nonzero = hr_vals[hr_vals > 0]
+                result['avg_hr'] = round(float(hr_nonzero.mean()), 0) if len(hr_nonzero) > 0 else None
+            else:
+                result['normalized_power'] = None
+                result['avg_hr'] = None
+        else:
+            result['normalized_power'] = None
+            result['avg_hr'] = None
+
+        return jsonify(result)
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 
 def detect_cooldown_start(df: pd.DataFrame, power_col: str = 'power_watts') -> int:

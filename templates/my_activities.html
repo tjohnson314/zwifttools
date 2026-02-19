@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Activities - Zwift Tools</title>
+    <link rel="stylesheet" href="/static/css/my_activities.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header-bar">
+            <div>
+                <a href="/" class="back-link">&#8592; Back to Tools</a>
+                <h1>&#x1F4CA; My Activities</h1>
+                <p class="subtitle">Your recent Zwift activities</p>
+            </div>
+            <div class="auth-section">
+                <span id="authStatus" class="auth-status">Checking...</span>
+                <a id="logoutBtn" href="/auth/logout" class="btn-auth logout" style="display:none;">Log out</a>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div id="loadingState" class="loading-msg">
+                <div class="spinner"></div>
+                <div>Loading activities...</div>
+            </div>
+            <div id="errorState" class="error-msg" style="display:none;"></div>
+            <div id="emptyState" class="empty-msg" style="display:none;">No activities found.</div>
+
+            <div id="tableContainer" class="table-container" style="display:none;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Name</th>
+                            <th class="num">Distance</th>
+                            <th class="num">Time</th>
+                            <th class="num">NP</th>
+                            <th class="num">Avg HR</th>
+                            <th>Links</th>
+                        </tr>
+                    </thead>
+                    <tbody id="activitiesBody"></tbody>
+                </table>
+            </div>
+
+            <div id="loadMoreContainer" class="load-more-container" style="display:none;">
+                <button id="loadMoreBtn" class="btn btn-secondary" onclick="loadMore()">Load more</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentStart = 0;
+        const PAGE_SIZE = 30;
+        const ENRICH_CONCURRENCY = 3;
+        let allLoaded = false;
+
+        // ---- Helpers ----
+        function formatDuration(sec) {
+            if (!sec) return '—';
+            const h = Math.floor(sec / 3600);
+            const m = Math.floor((sec % 3600) / 60);
+            const s = Math.floor(sec % 60);
+            if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+            return `${m}:${String(s).padStart(2,'0')}`;
+        }
+
+        function formatDate(iso) {
+            if (!iso) return '—';
+            const d = new Date(iso);
+            return d.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' }) +
+                   ' ' + d.toLocaleTimeString(undefined, { hour:'2-digit', minute:'2-digit' });
+        }
+
+        function sportIcon(sport) {
+            if (!sport) return '';
+            const s = sport.toUpperCase();
+            if (s.includes('RUN')) return '<span class="sport-icon">&#x1F3C3;</span>';
+            return '<span class="sport-icon">&#x1F6B4;</span>';
+        }
+
+        // ---- Auth check ----
+        async function checkAuth() {
+            try {
+                const resp = await fetch('/auth/status');
+                const data = await resp.json();
+                const statusEl = document.getElementById('authStatus');
+                const logoutEl = document.getElementById('logoutBtn');
+                if (data.authenticated) {
+                    statusEl.textContent = 'Logged in';
+                    statusEl.classList.add('logged-in');
+                    logoutEl.style.display = '';
+                } else {
+                    statusEl.textContent = 'Not logged in';
+                    window.location.href = '/auth/login?next=/my-activities';
+                }
+            } catch(e) {
+                console.error('Auth check failed', e);
+            }
+        }
+
+        // ---- Fetch activities list ----
+        async function fetchActivities(start, limit) {
+            const resp = await fetch(`/api/my_activities?start=${start}&limit=${limit}`);
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                throw new Error(err.error || `HTTP ${resp.status}`);
+            }
+            return resp.json();
+        }
+
+        // ---- Render a table row (basic data, placeholders for enriched fields) ----
+        function renderRow(act) {
+            const tr = document.createElement('tr');
+            tr.dataset.activityId = act.id || '';
+
+            // Date
+            const tdDate = document.createElement('td');
+            tdDate.textContent = formatDate(act.date);
+            tr.appendChild(tdDate);
+
+            // Name
+            const tdName = document.createElement('td');
+            tdName.className = 'col-name';
+            let displayName = (act.name || '\u2014').replace(/^Zwift - /i, '').replace(/ in (Watopia|France|London|Richmond|New York|Innsbruck|Bologna|Yorkshire|Crit City|Makuri Islands|Paris|Scotland|Gravel Mountain)$/i, '');
+            tdName.textContent = displayName;
+            tr.appendChild(tdName);
+
+            // Distance
+            const tdDist = document.createElement('td');
+            tdDist.className = 'num';
+            tdDist.textContent = act.distance_km ? `${act.distance_km.toFixed(1)} km` : '—';
+            tr.appendChild(tdDist);
+
+            // Duration
+            const tdTime = document.createElement('td');
+            tdTime.className = 'num';
+            tdTime.textContent = formatDuration(act.duration_sec);
+            tr.appendChild(tdTime);
+
+            // Avg Watts (shown until NP loads)
+            const tdNP = document.createElement('td');
+            tdNP.className = 'num col-np';
+            if (act.avg_watts) {
+                tdNP.innerHTML = `<span class="avg-watts-placeholder" title="Average watts (loading NP…)">${Math.round(act.avg_watts)} W<span class="placeholder-dot inline"></span></span>`;
+            } else {
+                tdNP.innerHTML = '<span class="placeholder-dot"></span>';
+            }
+            tr.appendChild(tdNP);
+
+            // Avg HR (placeholder — enrichment fills it)
+            const tdHR = document.createElement('td');
+            tdHR.className = 'num col-hr';
+            tdHR.innerHTML = '<span class="placeholder-dot"></span>';
+            tr.appendChild(tdHR);
+
+            // Links column — icons for each tool + external sites
+            const tdActions = document.createElement('td');
+            tdActions.className = 'col-actions';
+            if (act.id) {
+                // Bike Comparison (bike icon)
+                const bikeLink = document.createElement('a');
+                bikeLink.href = `/bike-comparison?activity_id=${act.id}`;
+                bikeLink.className = 'action-link';
+                bikeLink.title = 'Bike Comparison';
+                bikeLink.innerHTML = '&#x1F6B2;';
+                tdActions.appendChild(bikeLink);
+
+                // Zwift activity page (orange Z logo)
+                const zwiftLink = document.createElement('a');
+                zwiftLink.href = `https://www.zwift.com/activity/${act.id}`;
+                zwiftLink.target = '_blank';
+                zwiftLink.rel = 'noopener';
+                zwiftLink.className = 'action-link logo-link';
+                zwiftLink.title = 'View on Zwift';
+                zwiftLink.innerHTML = '<img src="/static/img/zwift.ico" alt="Zwift" class="logo-icon">';
+                tdActions.appendChild(zwiftLink);
+
+                // ZwiftPower link is added during enrichment (only for races)
+            }
+            tr.appendChild(tdActions);
+
+            return tr;
+        }
+
+        // ---- Enrich a single row with data from the enrichment endpoint ----
+        async function enrichRow(tr) {
+            const activityId = tr.dataset.activityId;
+            if (!activityId) return;
+
+            try {
+                const resp = await fetch(`/api/activity_enrichment/${activityId}`);
+                if (!resp.ok) return;
+                const data = await resp.json();
+
+                // NP
+                const tdNP = tr.querySelector('.col-np');
+                tdNP.textContent = data.normalized_power ? `${Math.round(data.normalized_power)} W` : '—';
+
+                // Avg HR
+                const tdHR = tr.querySelector('.col-hr');
+                tdHR.textContent = data.avg_hr ? `${Math.round(data.avg_hr)} bpm` : '—';
+
+                // Race badge + Race Replay link (flag icon)
+                const tdName = tr.querySelector('.col-name');
+                const tdActions = tr.querySelector('.col-actions');
+                if (data.is_race) {
+                    tdName.innerHTML += '<span class="badge-race">Race</span>';
+                    // Insert race replay icon before the Zwift logo link
+                    const raceLink = document.createElement('a');
+                    raceLink.href = `/race-replay?activity_id=${activityId}`;
+                    raceLink.className = 'action-link race';
+                    raceLink.title = 'Race Replay';
+                    raceLink.innerHTML = '&#x1F3C1;';
+                    // Insert after the bike icon (first child)
+                    const firstLogo = tdActions.querySelector('.logo-link');
+                    if (firstLogo) {
+                        tdActions.insertBefore(raceLink, firstLogo);
+                    } else {
+                        tdActions.appendChild(raceLink);
+                    }
+
+                    // ZwiftPower link (race events only)
+                    if (data.event_id) {
+                        const zpLink = document.createElement('a');
+                        zpLink.href = `https://zwiftpower.com/events.php?zid=${data.event_id}`;
+                        zpLink.target = '_blank';
+                        zpLink.rel = 'noopener';
+                        zpLink.className = 'action-link logo-link';
+                        zpLink.title = 'View on ZwiftPower';
+                        zpLink.innerHTML = '<img src="/static/img/zwiftpower.svg" alt="ZwiftPower" class="logo-icon zp-logo">';
+                        tdActions.appendChild(zpLink);
+                    }
+                }
+            } catch(e) {
+                console.warn(`Enrichment failed for ${activityId}:`, e);
+                // Leave placeholders as-is — replace dots with dashes
+                tr.querySelectorAll('.placeholder-dot').forEach(el => {
+                    el.replaceWith('—');
+                });
+            }
+        }
+
+        // ---- Enrich rows with limited concurrency ----
+        async function enrichAllRows(rows) {
+            const queue = [...rows];
+            async function worker() {
+                while (queue.length > 0) {
+                    const row = queue.shift();
+                    await enrichRow(row);
+                }
+            }
+            const workers = [];
+            for (let i = 0; i < ENRICH_CONCURRENCY; i++) {
+                workers.push(worker());
+            }
+            await Promise.all(workers);
+        }
+
+        // ---- Load & display activities ----
+        async function loadActivities() {
+            const loadingEl = document.getElementById('loadingState');
+            const errorEl = document.getElementById('errorState');
+            const emptyEl = document.getElementById('emptyState');
+            const tableEl = document.getElementById('tableContainer');
+            const loadMoreEl = document.getElementById('loadMoreContainer');
+
+            loadingEl.style.display = '';
+            errorEl.style.display = 'none';
+            emptyEl.style.display = 'none';
+            tableEl.style.display = 'none';
+            loadMoreEl.style.display = 'none';
+
+            try {
+                const data = await fetchActivities(0, PAGE_SIZE);
+                loadingEl.style.display = 'none';
+
+                const acts = data.activities || [];
+                if (acts.length === 0) {
+                    emptyEl.style.display = '';
+                    return;
+                }
+
+                const tbody = document.getElementById('activitiesBody');
+                tbody.innerHTML = '';
+                const newRows = [];
+                acts.forEach(a => {
+                    const row = renderRow(a);
+                    tbody.appendChild(row);
+                    if (a.id) newRows.push(row);
+                });
+
+                tableEl.style.display = '';
+                currentStart = acts.length;
+
+                if (acts.length >= PAGE_SIZE) {
+                    loadMoreEl.style.display = '';
+                }
+
+                // Enrich rows progressively
+                enrichAllRows(newRows);
+            } catch(e) {
+                loadingEl.style.display = 'none';
+                errorEl.textContent = `Error: ${e.message}`;
+                errorEl.style.display = '';
+            }
+        }
+
+        async function loadMore() {
+            const btn = document.getElementById('loadMoreBtn');
+            btn.disabled = true;
+            btn.textContent = 'Loading...';
+
+            try {
+                const data = await fetchActivities(currentStart, PAGE_SIZE);
+                const acts = data.activities || [];
+
+                const tbody = document.getElementById('activitiesBody');
+                const newRows = [];
+                acts.forEach(a => {
+                    const row = renderRow(a);
+                    tbody.appendChild(row);
+                    if (a.id) newRows.push(row);
+                });
+
+                currentStart += acts.length;
+                if (acts.length < PAGE_SIZE) {
+                    document.getElementById('loadMoreContainer').style.display = 'none';
+                    allLoaded = true;
+                }
+
+                // Enrich the new rows
+                enrichAllRows(newRows);
+            } catch(e) {
+                console.error('Load more failed', e);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Load more';
+            }
+        }
+
+        // ---- Init ----
+        checkAuth();
+        loadActivities();
+    </script>
+</body>
+</html>
