@@ -27,6 +27,12 @@ h1 {
     -webkit-text-fill-color: transparent;
 }
 
+h1 .header-icon {
+    -webkit-background-clip: initial;
+    -webkit-text-fill-color: initial;
+    background: none;
+}
+
 .subtitle {
     text-align: left;
     color: #888;
