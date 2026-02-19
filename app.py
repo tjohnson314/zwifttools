@@ -1361,14 +1361,18 @@ def api_race_data(race_id):
         }
         riders.append(rider_json)
 
-    # Load race start time from metadata
+    # Load race metadata (start time, event IDs)
     race_start_time = None
+    event_id = None
+    event_subgroup_id = None
     meta_path = Path('race_data') / race_id / 'race_meta.json'
     if meta_path.exists():
         try:
             with open(meta_path) as f:
                 meta = json.load(f)
             race_start_time = meta.get('race_start_time')
+            event_id = meta.get('event_id')
+            event_subgroup_id = meta.get('event_subgroup_id')
         except Exception:
             pass
 
@@ -1395,6 +1399,8 @@ def api_race_data(race_id):
         'route_slug': race_data.route_slug,
         'source_activity_id': str(race_data.source_activity_id) if race_data.source_activity_id else None,
         'race_start_time': race_start_time,
+        'event_id': event_id,
+        'event_subgroup_id': event_subgroup_id,
         'finish_line_km': float(race_data.finish_line_km),
         'min_time': int(race_data.min_time),
         'max_time': int(race_data.max_time),

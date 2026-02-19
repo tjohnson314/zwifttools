@@ -438,6 +438,20 @@ function initRaceData(data) {
     document.getElementById('info-finish').textContent = data.finish_line_km.toFixed(2) + ' km';
     document.getElementById('info-duration').textContent = formatTime(data.max_time - data.min_time);
 
+    // Results links (Zwift + ZwiftPower)
+    const resultsContainer = document.getElementById('info-results-links');
+    if (data.event_id) {
+        const links = [];
+        if (data.event_subgroup_id) {
+            links.push(`<a href="https://www.zwift.com/events/view/${data.event_id}/${data.event_subgroup_id}/1#results" target="_blank" rel="noopener">Zwift</a>`);
+        }
+        links.push(`<a href="https://zwiftpower.com/events.php?zid=${data.event_id}" target="_blank" rel="noopener">ZwiftPower</a>`);
+        document.getElementById('info-results').innerHTML = links.join(' · ');
+        resultsContainer.style.display = '';
+    } else {
+        resultsContainer.style.display = 'none';
+    }
+
     // Slider
     const slider = document.getElementById('time-slider');
     slider.min = Math.floor(data.min_time);
