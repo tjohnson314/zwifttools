@@ -535,7 +535,7 @@ def align_riders_to_route(riders: List[Dict], route: RouteData,
     # from race_meta.json.  Riders who started their activity well after the
     # race began are late joiners — they ride a different lead-in path whose
     # altitude data does not match the elevation profile.
-    LATE_JOINER_THRESHOLD_SEC = 300  # >5 min after race start = late joiner
+    LATE_JOINER_THRESHOLD_SEC = 0  # any activity starting after race start = late joiner
     late_joiner_set = set()  # rider indices flagged as late joiners
     
     # Parse the reference time: prefer official race start, fall back to median
