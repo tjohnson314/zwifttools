@@ -238,7 +238,8 @@ def project_to_route(route: RouteData, lat: float, lng: float) -> Tuple[float, f
 
 def align_riders_to_route(riders: List[Dict], route: RouteData, 
                           max_deviation_m: float = 50,
-                          leadin_distance_m: Optional[float] = None) -> tuple:
+                          leadin_distance_m: Optional[float] = None,
+                          race_start_time: Optional[str] = None) -> tuple:
     """
     Align all rider GPS coordinates to official route distances.
     Uses vectorized KD-tree queries for performance.
@@ -530,28 +531,45 @@ def align_riders_to_route(riders: List[Dict], route: RouteData,
               f"route_total={route_total:.0f}m, gap={start_end_gap:.0f}m")
     
     # --- Detect late joiners by activity start time ---
-    # Compute median start time; riders who started significantly later are
-    # late joiners regardless of route type.  This catches cases where the
-    # spatial offset check (loop-only) cannot reach.
-    LATE_JOINER_THRESHOLD_SEC = 300  # >5 min after median = late joiner
+    # Compare each rider's activity_start_time to the official race start time
+    # from race_meta.json.  Riders who started their activity well after the
+    # race began are late joiners — they ride a different lead-in path whose
+    # altitude data does not match the elevation profile.
+    LATE_JOINER_THRESHOLD_SEC = 300  # >5 min after race start = late joiner
     late_joiner_set = set()  # rider indices flagged as late joiners
+    
+    # Parse the reference time: prefer official race start, fall back to median
+    def _parse_iso(s: str) -> Optional[float]:
+        """Parse ISO 8601 timestamp to epoch seconds."""
+        try:
+            ts = s.replace('+0000', '+00:00')  # fix for fromisoformat
+            return datetime.fromisoformat(ts).timestamp()
+        except (ValueError, TypeError):
+            return None
+    
+    reference_epoch = None
+    if race_start_time:
+        reference_epoch = _parse_iso(race_start_time)
+        if reference_epoch is not None:
+            print(f"  Race start time: {race_start_time}")
+    
     start_times = []  # (rider_idx, epoch_seconds)
     for idx, rider in enumerate(riders):
         ast = rider.get('activity_start_time')
         if ast:
-            try:
-                # Parse ISO 8601 with timezone, e.g. "2026-02-12T08:00:18.588+0000"
-                ts = ast.replace('+0000', '+00:00')  # fix for fromisoformat
-                dt = datetime.fromisoformat(ts)
-                start_times.append((idx, dt.timestamp()))
-            except (ValueError, TypeError):
-                pass
+            epoch = _parse_iso(ast)
+            if epoch is not None:
+                start_times.append((idx, epoch))
     
-    if start_times:
+    # Fall back to median activity start time if no race start time available
+    if reference_epoch is None and start_times:
         epochs = np.array([t for _, t in start_times])
-        median_start = np.median(epochs)
+        reference_epoch = float(np.median(epochs))
+        print(f"  No race start time available, using median activity start as reference")
+    
+    if reference_epoch is not None and start_times:
         for rider_idx, epoch in start_times:
-            delay = epoch - median_start
+            delay = epoch - reference_epoch
             if delay > LATE_JOINER_THRESHOLD_SEC:
                 late_joiner_set.add(rider_idx)
                 rider = riders[rider_idx]
@@ -1220,7 +1238,19 @@ def clean_race_data(
         if route_data:
             print(f"Using ZwiftMap route data for alignment: {route_data.route_name}")
             print(f"  Route length: {route_data.total_distance_m/1000:.2f} km, {len(route_data.distance)} points")
-            riders, loop_start_offset = align_riders_to_route(riders, route_data, leadin_distance_m=leadin_distance_m)
+            # Read race start time from metadata for late joiner detection
+            race_start_time = None
+            meta_path = data_path / 'race_meta.json'
+            if meta_path.exists():
+                try:
+                    with open(meta_path) as f:
+                        meta = json.load(f)
+                    race_start_time = meta.get('race_start_time')
+                except Exception:
+                    pass
+            riders, loop_start_offset = align_riders_to_route(
+                riders, route_data, leadin_distance_m=leadin_distance_m,
+                race_start_time=race_start_time)
             # Use race metadata for finish line (more reliable than route total,
             # especially on loop routes where the segment includes lead-in)
             finish_line = determine_finish_line(riders, data_path)
