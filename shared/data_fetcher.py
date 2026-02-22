@@ -487,6 +487,7 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
             'weight_kg': p.get('weight_kg', 75.0),
             'player_id': p.get('player_id'),
             'file_id': file_id,
+            'activity_start_time': act_data.get('startDate') if act_data else None,
             'status': 'SUCCESS',
             'duration_sec': df['time_sec'].max() if len(df) > 0 else 0,
             'avg_power': round(df['power_watts'].mean(), 1) if len(df) > 0 else 0,

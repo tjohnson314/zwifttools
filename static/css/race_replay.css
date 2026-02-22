@@ -261,6 +261,18 @@ h1 .header-icon {
     text-decoration: underline;
 }
 
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: #ccc;
+}
+.checkbox-label input[type="checkbox"] {
+    accent-color: #4fc3f7;
+}
+
 /* Playback controls */
 .playback-controls {
     display: flex;

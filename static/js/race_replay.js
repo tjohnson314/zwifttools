@@ -22,6 +22,7 @@ let lastFrameTs = null;       // For requestAnimationFrame delta
 let animFrameId = null;
 let selectedRank = null;      // Clicked rider rank
 let checkedRanks = new Set();  // Checked riders for highlighting
+let hideLateJoiners = true;    // Hide late joiners by default
 let sortField = 'position';
 let sortAsc = true;
 
@@ -373,7 +374,7 @@ function initRaceData(data) {
             name: r.name,
             team: r.team,
             weight_kg: r.weight_kg || 75.0,
-            is_finisher: r.is_finisher,
+            is_late_joiner: r.is_late_joiner || false,
             finish_time_sec: r.finish_time_sec,
             time_sec: new Float64Array(r.time_sec),
             distance_km: toF64(r.distance_km),
@@ -434,7 +435,25 @@ function initRaceData(data) {
     } else {
         routeEl.textContent = routeName;
     }
+    const lateJoinerCount = data.riders.filter(r => r.is_late_joiner).length;
     document.getElementById('info-riders').textContent = data.riders.length;
+
+    // Show/hide late joiner checkbox (only when there are late joiners)
+    const lateJoinerEl = document.getElementById('info-late-joiners');
+    if (lateJoinerCount > 0) {
+        lateJoinerEl.style.display = '';
+        document.getElementById('late-joiner-label').textContent =
+            `Hide ${lateJoinerCount} late joiner${lateJoinerCount === 1 ? '' : 's'}`;
+        const cb = document.getElementById('hide-late-joiners');
+        cb.checked = true;
+        hideLateJoiners = true;
+        cb.addEventListener('change', () => {
+            hideLateJoiners = cb.checked;
+            updateFrame();
+        });
+    } else {
+        lateJoinerEl.style.display = 'none';
+    }
     document.getElementById('info-finish').textContent = data.finish_line_km.toFixed(2) + ' km';
     document.getElementById('info-duration').textContent = formatTime(data.max_time - data.min_time);
 
@@ -576,6 +595,7 @@ function getRiderPositions(t) {
     for (const r of raceData.riders) {
         const rl = riderLookup[r.rank];
         if (!rl || t < rl.min_time || t > rl.max_time) continue;
+        if (hideLateJoiners && rl.is_late_joiner) continue;
 
         // Binary search for the index
         const idx = binarySearch(rl.time_sec, t);
@@ -588,7 +608,6 @@ function getRiderPositions(t) {
             name: r.name,
             team: r.team,
             weight_kg: rl.weight_kg,
-            is_finisher: r.is_finisher,
             finish_time_sec: r.finish_time_sec,
             no_data: noData,
             distance_km: dist,

@@ -135,36 +135,41 @@ def list_races() -> List[dict]:
 
     Returns a list of dicts with at least ``race_id`` and optionally
     ``race_name`` (read from ``race_meta.json``).
+
+    Optimised to only list ``race_meta.json`` blobs so that each race
+    requires exactly one list entry (no extra download per race).
     """
     container = _get_container()
     if container is None:
         return []
 
     try:
-        # Walk blobs looking for race_meta.json files
         races = []
-        seen = set()
-        for blob in container.list_blobs(name_starts_with="race_data_"):
-            parts = blob.name.split('/')
-            if len(parts) < 2:
-                continue
-            race_id = parts[0]
-            if race_id in seen:
-                continue
-            seen.add(race_id)
-
+        # Download meta blobs in bulk — much faster than one download per race
+        meta_blobs = [
+            blob for blob in container.list_blobs(name_starts_with="race_data_")
+            if blob.name.endswith('/race_meta.json')
+        ]
+        for blob in meta_blobs:
+            race_id = blob.name.split('/')[0]
             info: dict = {'race_id': race_id, 'race_name': None}
-
-            # Try to read race_meta.json for the name
             try:
-                meta_blob = f"{race_id}/race_meta.json"
-                data = container.download_blob(meta_blob).readall()
+                data = container.download_blob(blob.name).readall()
                 meta = json.loads(data)
                 info['race_name'] = meta.get('race_name')
             except Exception:
                 pass
-
             races.append(info)
+
+        # Also pick up race dirs that have no race_meta.json
+        seen = {r['race_id'] for r in races}
+        for blob in container.list_blobs(name_starts_with="race_data_"):
+            parts = blob.name.split('/')
+            if len(parts) >= 2:
+                race_id = parts[0]
+                if race_id not in seen:
+                    seen.add(race_id)
+                    races.append({'race_id': race_id, 'race_name': None})
 
         return races
     except Exception as e:

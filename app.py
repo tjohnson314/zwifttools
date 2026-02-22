@@ -19,8 +19,10 @@ import requests
 import traceback
 import gzip
 import json
+import time
 import queue
 import threading
+from datetime import datetime
 from scipy.ndimage import uniform_filter1d
 
 from bike_comparison.bike_data import get_bike_database, get_bike_stats
@@ -1261,44 +1263,6 @@ def find_best_bikes():
 _race_data_cache = {}
 
 
-@app.route('/api/race/fetch', methods=['POST'])
-def api_race_fetch():
-    """Fetch race data from Zwift API by activity URL or ID (non-streaming fallback)."""
-    headers = get_headers()
-    if not headers:
-        return jsonify({'error': 'Not authenticated. Please log in first.'}), 401
-
-    data = request.json
-    activity_url_or_id = data.get('activity_id')
-    if not activity_url_or_id:
-        return jsonify({'error': 'activity_id required'}), 400
-
-    force_refresh = data.get('force_refresh', False)
-
-    try:
-        race_data_dir = Path('race_data')
-        race_data_dir.mkdir(exist_ok=True)
-
-        def log_progress(current, total, name):
-            print(f"  [{current}/{total}] Fetching {name}...")
-
-        output_dir, message = fetch_race_from_activity(
-            activity_url_or_id, headers,
-            output_base_dir=str(race_data_dir),
-            progress_callback=log_progress,
-            force_refresh=force_refresh
-        )
-
-        if not output_dir:
-            return jsonify({'error': message}), 400
-
-        race_id = Path(output_dir).name
-        return jsonify({'success': True, 'race_id': race_id, 'message': message})
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
-
-
 @app.route('/api/race/fetch_stream')
 def api_race_fetch_stream():
     """SSE endpoint — streams progress while fetching race data."""
@@ -1342,6 +1306,9 @@ def api_race_fetch_stream():
                 race_id = Path(output_dir).name
                 # Clear in-memory cleaned data cache so it gets regenerated
                 _race_data_cache.pop(race_id, None)
+                # Invalidate race list cache so the new race appears immediately
+                global _race_list_cache
+                _race_list_cache = None
                 q.put({'success': True, 'race_id': race_id, 'message': message})
         except Exception as e:
             traceback.print_exc()
@@ -1363,9 +1330,22 @@ def api_race_fetch_stream():
                     headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
 
+_race_list_cache = None
+_race_list_cache_time = 0
+_RACE_LIST_TTL = 120  # seconds
+
 @app.route('/api/race/list')
 def api_race_list():
-    """List available race data directories (local + blob storage)."""
+    """List available race data directories (local + blob storage).
+
+    Results are cached in memory for up to 120 seconds to avoid
+    re-reading CSV files and querying blob storage on every request.
+    """
+    global _race_list_cache, _race_list_cache_time
+    now = time.time()
+    if _race_list_cache is not None and (now - _race_list_cache_time) < _RACE_LIST_TTL:
+        return jsonify({'races': _race_list_cache})
+
     race_dirs = []
     seen_ids = set()
     race_data_dir = Path('race_data')
@@ -1389,9 +1369,10 @@ def api_race_list():
                         pass
                 if summary_file.exists():
                     try:
-                        summary = pd.read_csv(summary_file)
-                        info['rider_count'] = len(summary)
-                        info['riders'] = summary[['rank', 'name']].to_dict('records') if 'name' in summary.columns else []
+                        # Count lines directly — much faster than reading full CSV with pandas
+                        with open(summary_file) as f:
+                            rider_count = sum(1 for _ in f) - 1  # subtract header
+                        info['rider_count'] = max(rider_count, 0)
                     except Exception:
                         pass
                 race_dirs.append(info)
@@ -1406,6 +1387,8 @@ def api_race_list():
                 'race_name': blob_info.get('race_name'),
             })
 
+    _race_list_cache = race_dirs
+    _race_list_cache_time = now
     return jsonify({'races': race_dirs})
 
 
@@ -1449,7 +1432,6 @@ def api_race_load():
                     'rank': int(r.rank),
                     'name': r.name,
                     'team': r.team,
-                    'is_finisher': bool(r.is_finisher),
                     'finish_time_sec': float(r.finish_time_sec) if r.finish_time_sec is not None else None,
                 }
                 for r in race_data.riders
@@ -1500,35 +1482,7 @@ def api_race_data(race_id):
         'altitude_m': elev['altitude_m'].tolist(),
     }
 
-    # Build rider data — each rider's full time series
-    riders = []
-    def safe_list(series):
-        """Convert pandas Series to list, replacing NaN with None for valid JSON."""
-        return [None if pd.isna(v) else v for v in series]
-
-    for r in race_data.riders:
-        df = r.data.reset_index()  # time_sec is the index
-        rider_json = {
-            'rank': int(r.rank),
-            'name': r.name,
-            'team': r.team,
-            'activity_id': str(r.activity_id),
-            'player_id': int(r.player_id) if r.player_id else None,
-            'weight_kg': float(r.weight_kg),
-            'is_finisher': bool(r.is_finisher),
-            'finish_time_sec': float(r.finish_time_sec) if r.finish_time_sec is not None else None,
-            'time_sec': df['time_sec'].tolist(),
-            'distance_km': safe_list(df['distance_km']),
-            'altitude_m': safe_list(df['altitude_m']) if 'altitude_m' in df.columns else [],
-            'speed_kmh': safe_list(df['speed_kmh']) if 'speed_kmh' in df.columns else [],
-            'power_watts': safe_list(df['power_watts']) if 'power_watts' in df.columns else [],
-            'hr_bpm': safe_list(df['hr_bpm']) if 'hr_bpm' in df.columns else [],
-            'lat': safe_list(df['lat']) if 'lat' in df.columns else [],
-            'lng': safe_list(df['lng']) if 'lng' in df.columns else [],
-        }
-        riders.append(rider_json)
-
-    # Load race metadata (start time, event IDs)
+    # Load race metadata (start time, event IDs) — needed for late joiner detection
     race_start_time = None
     event_id = None
     event_subgroup_id = None
@@ -1542,6 +1496,56 @@ def api_race_data(race_id):
             event_subgroup_id = meta.get('event_subgroup_id')
         except Exception:
             pass
+
+    # Build rider data — each rider's full time series
+    riders = []
+    def safe_list(series):
+        """Convert pandas Series to list, replacing NaN with None for valid JSON."""
+        return [None if pd.isna(v) else v for v in series]
+
+    # Detect late joiners by comparing each rider's activity start time against
+    # the official race start time.  Anyone who started their activity after the
+    # race gun is flagged.
+    race_start_dt = None
+    if race_start_time:
+        try:
+            # Parse the ISO 8601 race start time
+            ts = race_start_time.replace('+0000', '+00:00').replace('Z', '+00:00')
+            race_start_dt = datetime.fromisoformat(ts)
+        except Exception:
+            pass
+
+    for i, r in enumerate(race_data.riders):
+        df = r.data.reset_index()  # time_sec is the index
+
+        # Late joiner: activity started after the race start
+        is_late_joiner = False
+        if race_start_dt and r.activity_start_time:
+            try:
+                ts = r.activity_start_time.replace('+0000', '+00:00').replace('Z', '+00:00')
+                rider_start_dt = datetime.fromisoformat(ts)
+                is_late_joiner = rider_start_dt > race_start_dt
+            except Exception:
+                pass
+        rider_json = {
+            'rank': int(r.rank),
+            'name': r.name,
+            'team': r.team,
+            'activity_id': str(r.activity_id),
+            'player_id': int(r.player_id) if r.player_id else None,
+            'weight_kg': float(r.weight_kg),
+            'is_late_joiner': is_late_joiner,
+            'finish_time_sec': float(r.finish_time_sec) if r.finish_time_sec is not None else None,
+            'time_sec': df['time_sec'].tolist(),
+            'distance_km': safe_list(df['distance_km']),
+            'altitude_m': safe_list(df['altitude_m']) if 'altitude_m' in df.columns else [],
+            'speed_kmh': safe_list(df['speed_kmh']) if 'speed_kmh' in df.columns else [],
+            'power_watts': safe_list(df['power_watts']) if 'power_watts' in df.columns else [],
+            'hr_bpm': safe_list(df['hr_bpm']) if 'hr_bpm' in df.columns else [],
+            'lat': safe_list(df['lat']) if 'lat' in df.columns else [],
+            'lng': safe_list(df['lng']) if 'lng' in df.columns else [],
+        }
+        riders.append(rider_json)
 
     # Build world map configuration
     map_config = None
@@ -1672,4 +1676,6 @@ if __name__ == '__main__':
     
     print("Starting Zwift Tools Web App...")
     print("Open http://localhost:5000 in your browser")
-    app.run(debug=True, port=5000, threaded=True)
+    app.run(debug=True, port=5000, threaded=True,
+            use_reloader=True, reloader_type='stat',
+            exclude_patterns=['*\\Lib\\*', '*/Lib/*', 'race_data/*'])

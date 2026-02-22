@@ -6,7 +6,6 @@ Handles:
 - Aligning start times with race results
 - Cutting off cooldown data after finish line
 - Route-based distance alignment using ZwiftMap coordinates
-- Interpolation to 1-second intervals
 - Caching cleaned data
 """
 
@@ -19,11 +18,9 @@ from dataclasses import dataclass
 from scipy.interpolate import interp1d
 from scipy.spatial import cKDTree
 
-from .utils.interpolation import interpolate_telemetry, create_time_grid, fix_timestamp_offsets
 
-
-# Map of Strava segment IDs for each route (from ZwiftMap)
-# Loaded from route_strava_segments.json — regenerate with extract_routes.py
+# Map of Strava segment IDs for each route (sourced from ZwiftMap / ZwiftInsider)
+# Loaded from route_strava_segments.json
 def _load_route_strava_segments() -> Dict[str, int]:
     seg_file = Path(__file__).parent.parent / 'route_strava_segments.json'
     if seg_file.exists():
@@ -41,11 +38,11 @@ class RiderData:
     activity_id: str
     name: str
     team: str
-    data: pd.DataFrame  # Interpolated telemetry with is_interpolated column
+    data: pd.DataFrame  # Telemetry data (1-second intervals from Zwift API)
     finish_time_sec: Optional[float]  # Time when rider crossed finish line
-    is_finisher: bool  # True if rider completed the race
     weight_kg: float = 75.0  # Rider weight in kg
     player_id: Optional[int] = None  # Numeric Zwift profile ID
+    activity_start_time: Optional[str] = None  # ISO 8601 UTC when activity started
 
 
 @dataclass
@@ -63,8 +60,8 @@ class CleanedRaceData:
     world: Optional[str] = None  # Detected Zwift world (WATOPIA, LONDON, etc.)
 
 
-def haversine(lat1, lng1, lat2, lng2) -> float:
-    """Calculate distance in meters between two lat/lng points."""
+def haversine(lat1, lng1, lat2, lng2):
+    """Calculate distance in meters between two lat/lng points (scalar or array)."""
     R = 6371000  # Earth radius in meters
     phi1, phi2 = np.radians(lat1), np.radians(lat2)
     dphi = np.radians(lat2 - lat1)
@@ -235,7 +232,8 @@ def project_to_route(route: RouteData, lat: float, lng: float) -> Tuple[float, f
 
 
 def align_riders_to_route(riders: List[Dict], route: RouteData, 
-                          max_deviation_m: float = 50) -> tuple:
+                          max_deviation_m: float = 50,
+                          leadin_distance_m: Optional[float] = None) -> tuple:
     """
     Align all rider GPS coordinates to official route distances.
     Uses vectorized KD-tree queries for performance.
@@ -310,64 +308,197 @@ def align_riders_to_route(riders: List[Dict], route: RouteData,
         route_distances = np.empty(n_points)
         deviations = np.empty(n_points)
         
-        # First pass: compute start offset from first few points (nearest neighbor)
-        n_start = min(10, n_points)
-        start_dists = route.distance[kd_indices[:n_start, 0]]
-        initial_offset = np.median(start_dists)
+        # Compute start offset: account for race lead-in distance.
+        # During the lead-in, riders are NOT on the official route, so the
+        # first GPS points may be far from any route point. We scan for the
+        # first point that is close to the route (<50m) and use its
+        # nearest-neighbor route distance vs raw traveled distance to
+        # estimate the offset.
+        #
+        # If the known lead-in distance is available (from routes_cache.json),
+        # we use it to skip ahead to approximately the right index and only
+        # search a window around it. This avoids scanning thousands of
+        # off-route GPS points on routes with long lead-ins (up to ~12 km).
         
-        for i in range(n_points):
-            # Expected route distance for this point
+        # Determine the search range for finding where the rider joins the route
+        if leadin_distance_m is not None and leadin_distance_m > 50 and raw_traveled_m is not None:
+            # Known lead-in: skip ahead to where raw_traveled_m ≈ leadin_distance_m
+            # Search from 80% of lead-in to 150% (margin for GPS jitter / speed variation)
+            search_start_m = leadin_distance_m * 0.8
+            search_end_m = leadin_distance_m * 1.5
+            search_start_idx = int(np.searchsorted(raw_traveled_m, search_start_m))
+            search_end_idx = int(np.searchsorted(raw_traveled_m, search_end_m))
+            # Clamp and ensure we check at least some points
+            search_start_idx = max(0, min(search_start_idx, n_points - 1))
+            search_end_idx = min(n_points, max(search_end_idx, search_start_idx + 50))
+        else:
+            # No known lead-in or very short: search from the beginning
+            # Use a generous range to handle up to ~12 km lead-ins (~1200 points)
+            search_start_idx = 0
+            search_end_idx = min(1500, n_points)
+        
+        # Compute haversine deviations only for the search range (vectorized)
+        search_slice = slice(search_start_idx, search_end_idx)
+        nn_indices_search = kd_indices[search_slice, 0]
+        geo_devs_search = haversine(
+            lats[search_slice], lngs[search_slice],
+            route.latlng[nn_indices_search, 0], route.latlng[nn_indices_search, 1]
+        )
+        close_mask = geo_devs_search < 50  # within 50m of route
+        leadin_end_idx = 0  # index where rider first reaches the route
+        if np.any(close_mask) and raw_traveled_m is not None:
+            # Map back to absolute indices
+            close_indices = np.where(close_mask)[0] + search_start_idx
+            leadin_end_idx = close_indices[0]
+            # Use several close points for robustness
+            sample = close_indices[:min(20, len(close_indices))]
+            offsets = route.distance[kd_indices[sample, 0]] - raw_traveled_m[sample]
+            initial_offset = np.median(offsets)
+            leadin_est = -initial_offset if initial_offset < 0 else 0
+            if leadin_est > 50:
+                print(f"  Rider {rider['rank']}: detected ~{leadin_est:.0f}m lead-in "
+                      f"(first on-route point at idx {leadin_end_idx}, "
+                      f"raw dist {raw_traveled_m[leadin_end_idx]:.0f}m)")
+        else:
+            # Fallback: use first few points as before
+            n_start = min(10, n_points)
+            start_dists = route.distance[kd_indices[:n_start, 0]]
+            initial_offset = np.median(start_dists)
+        
+        # ---- Vectorized alignment (replaces per-point Python loop) ----
+        
+        # 1. Lead-in points: assign offset + raw_traveled, deviation=999
+        if leadin_end_idx > 0 and raw_traveled_m is not None:
+            leadin_slice = slice(0, leadin_end_idx)
+            route_distances[leadin_slice] = initial_offset + raw_traveled_m[leadin_slice]
+            deviations[leadin_slice] = 999
+        
+        # 2. On-route points: vectorized KNN scoring
+        on_route = slice(leadin_end_idx, n_points)
+        or_indices = kd_indices[on_route]    # shape (N_or, K)
+        or_kd_dists = kd_dists[on_route]     # shape (N_or, K)
+        or_lats = lats[on_route]
+        or_lngs = lngs[on_route]
+        n_or = len(or_lats)
+        
+        if n_or > 0:
+            # Route distances for each KNN candidate: (N_or, K)
+            cand_dists = route.distance[or_indices]
+            
             if raw_traveled_m is not None:
-                expected_m = initial_offset + raw_traveled_m[i]
-                # For loop routes, also consider wrapped variants
+                # Expected distance for each on-route point: (N_or,)
+                expected_m = initial_offset + raw_traveled_m[on_route]
+                
                 if is_loop:
-                    expected_candidates = [expected_m + k * route_total for k in range(-2, 3)]
+                    # Wrap offsets for expected: shape (5,)
+                    wrap_k = np.arange(-2, 3, dtype=np.float64)
+                    # expected_candidates: (N_or, 5)
+                    expected_all = expected_m[:, None] + wrap_k[None, :] * route_total
+                    # candidate with wrap offsets: (N_or, K, 5)
+                    cand_all = cand_dists[:, :, None] + wrap_k[None, None, :] * route_total
+                    # Absolute differences: (N_or, K, 5, 5) — each cand+wrap vs each expected+wrap
+                    # But this is equivalent to: for each (cand+k1*T) vs each (exp+k2*T)
+                    # = |cand - exp + (k1-k2)*T|. Since k1,k2 ∈ {-2..2}, k1-k2 ∈ {-4..4}
+                    # Simplification: compute |cand - exp + m*T| for m in {-4..4}
+                    wrap_m = np.arange(-4, 5, dtype=np.float64)
+                    # diff: (N_or, K, 9)
+                    diff = cand_dists[:, :, None] - expected_m[:, None, None] + wrap_m[None, None, :] * route_total
+                    scores = np.min(np.abs(diff), axis=2)  # (N_or, K) — best wrap per candidate
                 else:
-                    expected_candidates = [expected_m]
+                    # Non-loop: single expected, no wrapping
+                    # |cand_dist - expected_m| → (N_or, K)
+                    scores = np.abs(cand_dists - expected_m[:, None])
             else:
-                expected_candidates = None
+                # No raw distance: use KD-tree geometric distance as score
+                scores = or_kd_dists
             
-            best_dist = route.distance[kd_indices[i, 0]]
-            best_dev = kd_dists[i, 0] if k_actual == 1 else kd_dists[i, 0]
-            best_score = float('inf')
+            # Pick the best candidate (lowest score) per point
+            best_j = np.argmin(scores, axis=1)  # (N_or,)
+            row_idx = np.arange(n_or)
+            best_route_idx = or_indices[row_idx, best_j]  # route point indices
+            best_dists = route.distance[best_route_idx]    # (N_or,)
             
-            for j in range(k_actual):
-                idx = kd_indices[i, j] if k_actual > 1 else kd_indices[i]
-                candidate_dist = route.distance[idx]
-                geo_dist = kd_dists[i, j] if k_actual > 1 else kd_dists[i]
+            # 3. Vectorized segment interpolation for sub-point precision
+            # For each best route point, try projecting onto both neighbor segments
+            route_ll = route.latlng  # (R, 2)
+            route_d = route.distance  # (R,)
+            n_route = len(route_d)
+            
+            # Best route point coordinates
+            best_lat = route_ll[best_route_idx, 0]
+            best_lng = route_ll[best_route_idx, 1]
+            
+            # Haversine from rider to best route point (vectorized)
+            best_dev_m = haversine(or_lats, or_lngs, best_lat, best_lng)
+            interp_dist = best_dists.copy()
+            
+            # Try both neighbors (idx-1 and idx+1)
+            for delta in [-1, 1]:
+                nbr_idx = best_route_idx + delta
+                # Mask for valid neighbors (within route bounds)
+                valid = (nbr_idx >= 0) & (nbr_idx < n_route)
+                if not np.any(valid):
+                    continue
                 
-                if expected_candidates is not None:
-                    # Score = how close this candidate's route distance is to
-                    # the expected distance, considering all wrap variants
-                    route_error = min(abs(candidate_dist - ec) for ec in expected_candidates)
-                    # Also consider candidates shifted by route_total (for laps)
-                    if is_loop:
-                        for k in range(-2, 3):
-                            route_error = min(route_error, 
-                                            min(abs(candidate_dist + k * route_total - ec) 
-                                                for ec in expected_candidates))
-                    score = route_error
-                else:
-                    score = geo_dist
+                vi = np.where(valid)[0]  # indices into on-route arrays
+                bi = best_route_idx[vi]
+                ni = nbr_idx[vi]
                 
-                if score < best_score:
-                    best_score = score
-                    best_dist = candidate_dist
-                    best_dev = geo_dist
+                # Segment vector: best - neighbor (in scaled coords)
+                r_lat = route_ll[bi, 0] - route_ll[ni, 0]
+                r_lng = (route_ll[bi, 1] - route_ll[ni, 1]) * lng_scale
+                # Vector from neighbor to rider
+                p_lat = or_lats[vi] - route_ll[ni, 0]
+                p_lng = (or_lngs[vi] - route_ll[ni, 1]) * lng_scale
+                
+                seg_len_sq = r_lat * r_lat + r_lng * r_lng
+                # Only project where segment has non-zero length
+                has_len = seg_len_sq > 0
+                vi2 = vi[has_len]
+                if len(vi2) == 0:
+                    continue
+                    
+                t = (p_lat[has_len] * r_lat[has_len] + p_lng[has_len] * r_lng[has_len]) / seg_len_sq[has_len]
+                t = np.clip(t, 0.0, 1.0)
+                
+                # Only consider interior projections (0 < t < 1)
+                interior = (t > 0) & (t < 1)
+                vi3 = vi2[interior]
+                if len(vi3) == 0:
+                    continue
+                t_int = t[interior]
+                bi3 = best_route_idx[vi3]
+                ni3 = nbr_idx[vi3]
+                
+                # Interpolated route distance
+                d1 = route_d[ni3]
+                d2 = route_d[bi3]
+                cand_interp = d1 + t_int * (d2 - d1)
+                
+                # Projected point on segment
+                proj_lat = route_ll[ni3, 0] + t_int * (route_ll[bi3, 0] - route_ll[ni3, 0])
+                proj_lng = route_ll[ni3, 1] + t_int * (route_ll[bi3, 1] - route_ll[ni3, 1])
+                proj_dev = haversine(or_lats[vi3], or_lngs[vi3], proj_lat, proj_lng)
+                
+                # Use interpolated distance where projection is closer
+                improved = proj_dev < best_dev_m[vi3]
+                imp_idx = vi3[improved]
+                interp_dist[imp_idx] = cand_interp[improved]
+                best_dev_m[imp_idx] = proj_dev[improved]
             
-            route_distances[i] = best_dist
-            # Convert scaled KD-tree distance to actual meters for deviation
-            dev_idx = kd_indices[i, 0] if k_actual > 1 else kd_indices[i]
-            nearest_lat = route.latlng[dev_idx, 0]
-            nearest_lng = route.latlng[dev_idx, 1]
-            deviations[i] = haversine(lats[i], lngs[i], nearest_lat, nearest_lng)
+            route_distances[on_route] = interp_dist
+            
+            # 4. Vectorized deviation: haversine to nearest route point
+            nn_idx = or_indices[:, 0]  # nearest neighbor (first KD result)
+            deviations[on_route] = haversine(
+                or_lats, or_lngs,
+                route_ll[nn_idx, 0], route_ll[nn_idx, 1]
+            )
         
         # Collect per-rider start offset for loop routes
         if is_loop and raw_dist_km is not None:
             all_start_offsets.append(initial_offset)
-            rider_projections.append((route_distances, deviations, raw_dist_km))
-        else:
-            rider_projections.append((route_distances, deviations, None))
+        rider_projections.append((route_distances, deviations, raw_dist_km))
     
     # Compute global start offset for loop routes
     if is_loop and all_start_offsets:
@@ -390,23 +521,56 @@ def align_riders_to_route(riders: List[Dict], route: RouteData,
             # Use the global start offset for all riders
             expected = loop_start_offset + raw_traveled_m
             
-            # For each point, pick the wrap variant closest to expected
-            for i in range(len(route_distances)):
-                rd = route_distances[i]
-                candidates = [rd + k * route_total for k in range(-2, 3)]
-                route_distances[i] = min(candidates, key=lambda c: abs(c - expected[i]))
+            # For each point, pick the wrap variant closest to expected (vectorized)
+            wrap_k = np.arange(-2, 3, dtype=np.float64)
+            # (N, 5) candidates
+            candidates = route_distances[:, None] + wrap_k[None, :] * route_total
+            diffs = np.abs(candidates - expected[:, None])
+            best_wrap = np.argmin(diffs, axis=1)
+            route_distances = candidates[np.arange(len(route_distances)), best_wrap]
             
             # Rebase with the global offset so all riders share the same reference
             route_distances -= loop_start_offset
+        
+        # Smooth route distances using Zwift distance deltas to eliminate
+        # route-point quantization (~13m steps). The KD-tree alignment gives
+        # the correct segment of the route but snaps to discrete points.
+        # We use the rider's actual Zwift distance deltas (cm precision) for
+        # smooth sub-meter positioning, with a gentle pull toward the aligned
+        # values to prevent cumulative drift.
+        if raw_dist_km is not None and len(raw_dist_km) == len(route_distances):
+            raw_deltas_m = np.diff(raw_dist_km) * 1000  # meters per step
+            smooth = np.empty_like(route_distances)
+            smooth[0] = route_distances[0]
+            alpha = 0.05  # 5% drift correction toward route alignment per step
+            for i in range(1, len(smooth)):
+                delta = max(raw_deltas_m[i - 1], 0.0)  # never go backwards
+                predicted = smooth[i - 1] + delta
+                smooth[i] = predicted + alpha * (route_distances[i] - predicted)
+            route_distances = smooth
+        elif 'speed_kmh' in df.columns and 'time_sec' in df.columns:
+            # Fallback: use speed * dt
+            speeds_mps = df['speed_kmh'].values / 3.6
+            times = df['time_sec'].values
+            smooth = np.empty_like(route_distances)
+            smooth[0] = route_distances[0]
+            alpha = 0.05
+            for i in range(1, len(smooth)):
+                dt = max(times[i] - times[i - 1], 0)
+                predicted = smooth[i - 1] + speeds_mps[i] * dt
+                smooth[i] = predicted + alpha * (route_distances[i] - predicted)
+            route_distances = smooth
         
         rider['data'] = df.copy()
         rider['data']['distance_km'] = route_distances / 1000.0
         rider['data']['route_deviation_m'] = deviations
         
-        # Report alignment quality
-        avg_deviation = np.mean(deviations)
-        if avg_deviation > 20:
-            print(f"  Warning: Rider {rider['rank']} has high avg route deviation: {avg_deviation:.1f}m")
+        # Report alignment quality (exclude lead-in markers where deviation=999)
+        on_route_mask = deviations < 900
+        if np.any(on_route_mask):
+            avg_deviation = np.mean(deviations[on_route_mask])
+            if avg_deviation > 20:
+                print(f"  Warning: Rider {rider['rank']} has high avg route deviation: {avg_deviation:.1f}m")
     
     return riders, loop_start_offset
 
@@ -575,6 +739,95 @@ def align_rider_distances(riders: List[Dict], landmarks: List[Dict]) -> Tuple[Li
     return riders, offsets
 
 
+# ---------------------------------------------------------------------------
+# Timestamp offset correction
+# ---------------------------------------------------------------------------
+
+# Minimum jump factor to consider a timestamp offset (relative to normal tick)
+OFFSET_JUMP_FACTOR = 10
+
+
+def fix_timestamp_offsets(df: pd.DataFrame) -> pd.DataFrame:
+    """Detect and correct timestamp offsets where the server clock jumped
+    but the telemetry (distance, speed, power, HR) remained continuous.
+
+    This happens when Zwift's server reassigns a world-time reference mid-ride.
+    The actual ride was uninterrupted — only ``timeInSec`` is wrong.
+
+    Returns a new DataFrame with corrected ``time_sec``.
+    """
+    times = df['time_sec'].values.copy()
+    if len(times) < 3:
+        return df
+
+    diffs = np.diff(times)
+    normal_tick = float(np.median(diffs))
+    if normal_tick <= 0:
+        return df
+
+    threshold = normal_tick * OFFSET_JUMP_FACTOR
+    jump_indices = np.where(diffs > threshold)[0]
+
+    if len(jump_indices) == 0:
+        return df
+
+    cumulative_correction = 0.0
+    corrected = times.copy().astype(float)
+
+    for ji in jump_indices:
+        actual_jump = diffs[ji]
+
+        # Check telemetry continuity across the jump
+        if not _is_continuous_across_jump(df, ji, normal_tick):
+            continue  # genuine gap — don't correct
+
+        excess = actual_jump - normal_tick
+        cumulative_correction += excess
+
+        # Shift everything after this index back
+        corrected[ji + 1:] -= excess
+
+    if cumulative_correction == 0:
+        return df
+
+    result = df.copy()
+    result['time_sec'] = corrected
+    return result
+
+
+def _is_continuous_across_jump(df: pd.DataFrame, idx: int, normal_tick: float) -> bool:
+    """Return True if the telemetry is continuous across a time jump at *idx*."""
+    if idx + 1 >= len(df):
+        return False
+
+    row_before = df.iloc[idx]
+    row_after = df.iloc[idx + 1]
+
+    speed_before = row_before.get('speed_kmh', 0)
+    speed_after = row_after.get('speed_kmh', 0)
+    avg_speed_ms = ((speed_before + speed_after) / 2) / 3.6
+
+    dist_before = row_before.get('distance_km', 0) * 1000
+    dist_after = row_after.get('distance_km', 0) * 1000
+    actual_dist_delta = dist_after - dist_before
+
+    expected_dist_delta = avg_speed_ms * normal_tick
+
+    if expected_dist_delta <= 0:
+        return False
+
+    ratio = actual_dist_delta / expected_dist_delta
+    if ratio < 0.2 or ratio > 3.0:
+        return False
+
+    if speed_before > 0:
+        speed_ratio = speed_after / speed_before
+        if speed_ratio < 0.5 or speed_ratio > 2.0:
+            return False
+
+    return True
+
+
 def load_raw_rider_data(csv_path: Path, json_path: Path) -> Dict[str, Any]:
     """Load raw rider data from CSV and JSON files."""
     df = pd.read_csv(csv_path)
@@ -612,15 +865,18 @@ def load_raw_rider_data(csv_path: Path, json_path: Path) -> Dict[str, Any]:
     }
 
 
-def detect_route(riders: List[Dict], data_path: Path) -> Tuple[str, Optional[str]]:
+def detect_route(riders: List[Dict], data_path: Path) -> Tuple[str, Optional[str], Optional[float]]:
     """
     Detect the route from race metadata, rider data, or GPS coordinates.
     
     Returns:
-        (route_name, route_slug) - route_slug may be None if unknown
+        (route_name, route_slug, leadin_distance_m)
+        route_slug may be None if unknown
+        leadin_distance_m is the known lead-in distance in meters, or None
     """
     route_name = ""
     route_slug = None
+    leadin_distance_m = None
     
     # Method 0: Check race_meta.json for route_id from event API
     meta_path = data_path / 'race_meta.json'
@@ -636,8 +892,9 @@ def detect_route(riders: List[Dict], data_path: Path) -> Tuple[str, Optional[str
                     if route_info:
                         route_name = route_info['name']
                         route_slug = route_name.lower().replace(' ', '-').replace("'", "")
+                        leadin_distance_m = route_info.get('leadinDistanceInMeters')
                         print(f"Detected route from event metadata: {route_name} (ID {route_id})")
-                        return route_name, route_slug
+                        return route_name, route_slug, leadin_distance_m
                 except ImportError:
                     pass
         except Exception as e:
@@ -666,6 +923,7 @@ def detect_route(riders: List[Dict], data_path: Path) -> Tuple[str, Optional[str
                         for rname, rid in candidates:
                             if rname.lower() in race_name_lower:
                                 route_name = rname
+                                leadin_distance_m = routes_cache[rid].get('leadinDistanceInMeters')
                                 print(f"Detected route from race name: {route_name} (matched in '{race_name}')")
                                 break
             except Exception as e:
@@ -713,6 +971,7 @@ def detect_route(riders: List[Dict], data_path: Path) -> Tuple[str, Optional[str
                             
                             if best_match and best_diff < 3000:  # Within 3km
                                 route_name = best_match['name']
+                                leadin_distance_m = best_match.get('leadinDistanceInMeters')
                                 print(f"Detected route from GPS + distance matching: {route_name} (diff: {best_diff:.0f}m)")
         except ImportError:
             pass
@@ -723,7 +982,7 @@ def detect_route(riders: List[Dict], data_path: Path) -> Tuple[str, Optional[str
     if route_name:
         route_slug = route_name.lower().replace(' ', '-').replace("'", "")
     
-    return route_name, route_slug
+    return route_name, route_slug, leadin_distance_m
 
 
 def detect_world_from_coords(lat: float, lng: float) -> Optional[str]:
@@ -788,7 +1047,7 @@ def clean_race_data(
     
     # Find all rider files
     csv_files = sorted(data_path.glob('rank*_*.csv'))
-    total_steps = len(csv_files) + 3  # +3 for alignment, interpolation, elevation
+    total_steps = len(csv_files) + 3  # +3 for alignment, processing, elevation
     
     if progress_callback:
         progress_callback(0, total_steps, "Loading riders...")
@@ -813,6 +1072,7 @@ def clean_race_data(
         team = ""
         weight_kg = 75.0
         player_id = None
+        activity_start_time = None
         if summary is not None:
             match = summary[summary['rank'] == rank]
             if len(match) > 0:
@@ -821,6 +1081,8 @@ def clean_race_data(
                 weight_kg = float(match['weight_kg'].values[0]) if 'weight_kg' in match.columns else 75.0
                 if 'player_id' in match.columns and pd.notna(match['player_id'].values[0]):
                     player_id = int(match['player_id'].values[0])
+                if 'activity_start_time' in match.columns and pd.notna(match['activity_start_time'].values[0]):
+                    activity_start_time = str(match['activity_start_time'].values[0])
         
         riders.append({
             'rank': rank,
@@ -829,6 +1091,7 @@ def clean_race_data(
             'team': team,
             'weight_kg': weight_kg,
             'player_id': player_id,
+            'activity_start_time': activity_start_time,
             'data': rider_data['data'],
             'metadata': rider_data['metadata']
         })
@@ -840,7 +1103,7 @@ def clean_race_data(
         raise ValueError(f"No rider data found in {data_dir}")
     
     # Try to detect the route
-    route_name, route_slug = detect_route(riders, data_path)
+    route_name, route_slug, leadin_distance_m = detect_route(riders, data_path)
     
     # Detect the world from GPS coordinates for surface/CRR lookup
     world = None
@@ -864,7 +1127,7 @@ def clean_race_data(
         if route_data:
             print(f"Using ZwiftMap route data for alignment: {route_data.route_name}")
             print(f"  Route length: {route_data.total_distance_m/1000:.2f} km, {len(route_data.distance)} points")
-            riders, loop_start_offset = align_riders_to_route(riders, route_data)
+            riders, loop_start_offset = align_riders_to_route(riders, route_data, leadin_distance_m=leadin_distance_m)
             # Use race metadata for finish line (more reliable than route total,
             # especially on loop routes where the segment includes lead-in)
             finish_line = determine_finish_line(riders, data_path)
@@ -882,12 +1145,11 @@ def clean_race_data(
         finish_line = determine_finish_line(riders, data_path)
     
     if progress_callback:
-        progress_callback(len(csv_files) + 2, total_steps, "Interpolating telemetry...")
+        progress_callback(len(csv_files) + 2, total_steps, "Processing riders...")
     
     # Find global time range
     min_time = min(r['data']['time_sec'].min() for r in riders)
     max_time = max(r['data']['time_sec'].max() for r in riders)
-    target_times = create_time_grid(min_time, max_time)
     
     # Process each rider
     cleaned_riders = []
@@ -895,52 +1157,46 @@ def clean_race_data(
     for rider in riders:
         df = rider['data']
         
-        # Cut off at finish line (with 100m tolerance for GPS noise)
+        # Cut off at finish line (with 30m tolerance for alignment noise)
+        # All riders from the Zwift API are finishers — detect crossing time for cooldown cutoff
         finish_time = None
-        is_finisher = False
-        finish_tolerance_km = 0.1  # 100m tolerance
+        finish_tolerance_km = 0.03  # 30m tolerance
         if finish_line:
             crossed = df[df['distance_km'] >= (finish_line - finish_tolerance_km)]
             if len(crossed) > 0:
                 finish_time = crossed['time_sec'].min()
-                is_finisher = True
                 # Keep data only up to finish + a small buffer
                 df = df[df['time_sec'] <= finish_time + 5].copy()
                 finish_times.append(finish_time)
         
-        # Interpolate
-        rider_times = target_times[(target_times >= df['time_sec'].min()) & 
-                                   (target_times <= df['time_sec'].max())]
-        interpolated = interpolate_telemetry(df, rider_times)
-        
         # Compute per-point CRR from GPS surface polygons
-        if world and 'lat' in interpolated.columns and 'lng' in interpolated.columns:
+        if world and 'lat' in df.columns and 'lng' in df.columns:
             try:
                 from shared.surface_lookup import compute_crr_array
-                interpolated['crr'] = compute_crr_array(
-                    interpolated['lat'].values,
-                    interpolated['lng'].values,
+                df['crr'] = compute_crr_array(
+                    df['lat'].values,
+                    df['lng'].values,
                     world
                 )
             except Exception as e:
                 print(f"Warning: Could not compute CRR for {rider['name']}: {e}")
-                interpolated['crr'] = 0.004
+                df['crr'] = 0.004
         else:
-            interpolated['crr'] = 0.004
+            df['crr'] = 0.004
         
         # Set time_sec as index for O(1) lookups
-        interpolated = interpolated.set_index('time_sec')
+        df = df.set_index('time_sec')
         
         cleaned_riders.append(RiderData(
             rank=rider['rank'],
             activity_id=rider['activity_id'],
             name=rider['name'],
             team=rider['team'],
-            data=interpolated,
+            data=df,
             finish_time_sec=finish_time,
-            is_finisher=is_finisher,
             weight_kg=rider.get('weight_kg', 75.0),
             player_id=rider.get('player_id'),
+            activity_start_time=rider.get('activity_start_time'),
         ))
     
     # Cap max_time to the last finisher's time (+ buffer) so the timeline
@@ -971,6 +1227,46 @@ def clean_race_data(
             elev_dist = shifted_dist[sort_idx] / 1000.0
             elev_alt = route_alt[sort_idx]
             
+            # Detect lead-in: if the ref rider has off-route points (deviation=999)
+            # at the start, the race has a lead-in that isn't covered by the route
+            # data. Use the ref rider's telemetry altitude for that portion and
+            # offset the loop data to start where the lead-in ends.
+            leadin_offset_km = 0.0
+            leadin_elev = None
+            ref_data = ref_rider['data']
+            if 'route_deviation_m' in ref_data.columns and 'altitude_m' in ref_data.columns:
+                dev = ref_data['route_deviation_m'].values
+                # Lead-in points have deviation=999 (set in align_riders_to_route)
+                leadin_mask = dev >= 500
+                if leadin_mask.any() and not leadin_mask.all():
+                    # Find where lead-in ends (first on-route point)
+                    first_onroute_idx = np.argmax(~leadin_mask)
+                    leadin_offset_km = ref_data['distance_km'].iloc[first_onroute_idx]
+                    
+                    if leadin_offset_km > 0.1:  # Significant lead-in (>100m)
+                        # Extract telemetry for the lead-in portion
+                        leadin_data = ref_data.iloc[:first_onroute_idx]
+                        leadin_dist = leadin_data['distance_km'].values
+                        leadin_alt = leadin_data['altitude_m'].values
+                        
+                        # Resample lead-in at regular 10m intervals for smoothness
+                        leadin_range = np.arange(0, leadin_offset_km, 0.01)
+                        if len(leadin_range) > 0 and len(leadin_dist) > 1:
+                            leadin_interp = interp1d(
+                                leadin_dist, leadin_alt,
+                                kind='linear', bounds_error=False,
+                                fill_value=(leadin_alt[0], leadin_alt[-1])
+                            )
+                            leadin_elev = pd.DataFrame({
+                                'distance_km': leadin_range,
+                                'altitude_m': leadin_interp(leadin_range)
+                            })
+                            print(f"  Lead-in elevation: {leadin_offset_km:.2f} km from rider telemetry "
+                                  f"(alt {leadin_alt.min():.0f}-{leadin_alt.max():.0f}m)")
+            
+            # Offset loop elevation to start after the lead-in
+            elev_dist = elev_dist + leadin_offset_km
+            
             # Extend to cover full race distance (riders may go beyond one loop)
             max_rider_dist = max(r['data']['distance_km'].max() for r in riders if len(r['data']) > 0)
             if max_rider_dist > elev_dist[-1]:
@@ -983,10 +1279,18 @@ def clean_race_data(
                 elev_dist = np.concatenate(all_dist)
                 elev_alt = np.concatenate(all_alt)
             
-            elevation_profile = pd.DataFrame({
-                'distance_km': elev_dist,
-                'altitude_m': elev_alt
-            })
+            # Combine lead-in telemetry + loop route data
+            if leadin_elev is not None:
+                loop_profile = pd.DataFrame({
+                    'distance_km': elev_dist,
+                    'altitude_m': elev_alt
+                })
+                elevation_profile = pd.concat([leadin_elev, loop_profile], ignore_index=True)
+            else:
+                elevation_profile = pd.DataFrame({
+                    'distance_km': elev_dist,
+                    'altitude_m': elev_alt
+                })
         else:
             elevation_profile = pd.DataFrame({
                 'distance_km': route_data.distance / 1000.0,
@@ -1118,8 +1422,8 @@ def save_to_cache(data: CleanedRaceData, cache_path: Path):
             'team': str(rider.team) if rider.team else "",
             'weight_kg': float(rider.weight_kg),
             'player_id': int(rider.player_id) if rider.player_id else None,
+            'activity_start_time': rider.activity_start_time,
             'finish_time_sec': to_python(rider.finish_time_sec) if rider.finish_time_sec is not None else None,
-            'is_finisher': bool(rider.is_finisher),
             'data_file': rider_file.name
         })
     
@@ -1170,9 +1474,9 @@ def load_from_cache(cache_path: Path) -> Optional[CleanedRaceData]:
                 team=rider_info['team'],
                 data=data,
                 finish_time_sec=rider_info['finish_time_sec'],
-                is_finisher=rider_info['is_finisher'],
                 weight_kg=rider_info.get('weight_kg', 75.0),
                 player_id=rider_info.get('player_id'),
+                activity_start_time=rider_info.get('activity_start_time'),
             ))
         
         # Load elevation
