@@ -21,7 +21,7 @@ from scipy.spatial import cKDTree
 
 # Bump this version when data cleaning logic changes in a way that invalidates
 # previously cached results.  The cache loader will discard stale caches.
-CLEANING_VERSION = 1
+CLEANING_VERSION = 2
 
 # Map of Strava segment IDs for each route (sourced from ZwiftMap / ZwiftInsider)
 # Loaded from route_strava_segments.json
@@ -319,13 +319,31 @@ def align_riders_to_route(riders: List[Dict], route: RouteData,
         # nearest-neighbor route distance vs raw traveled distance to
         # estimate the offset.
         #
+        # Late joiners may start directly on the route (no lead-in at all).
+        # We first check if the rider's initial GPS points are already on the
+        # route; if so, skip the lead-in search entirely.
+        #
         # If the known lead-in distance is available (from routes_cache.json),
         # we use it to skip ahead to approximately the right index and only
         # search a window around it. This avoids scanning thousands of
         # off-route GPS points on routes with long lead-ins (up to ~12 km).
         
+        # Quick check: are the rider's first GPS points already on the route?
+        # (Handles late joiners who start mid-race with no lead-in)
+        n_quick = min(10, n_points)
+        nn_quick = kd_indices[:n_quick, 0]
+        quick_devs = haversine(
+            lats[:n_quick], lngs[:n_quick],
+            route.latlng[nn_quick, 0], route.latlng[nn_quick, 1]
+        )
+        rider_starts_on_route = np.median(quick_devs) < 50  # most of first 10 pts within 50m
+        
         # Determine the search range for finding where the rider joins the route
-        if leadin_distance_m is not None and leadin_distance_m > 50 and raw_traveled_m is not None:
+        if rider_starts_on_route:
+            # Rider is already on the route from the start (late joiner or no lead-in)
+            search_start_idx = 0
+            search_end_idx = min(50, n_points)
+        elif leadin_distance_m is not None and leadin_distance_m > 50 and raw_traveled_m is not None:
             # Known lead-in: skip ahead to where raw_traveled_m ≈ leadin_distance_m
             # Search from 80% of lead-in to 150% (margin for GPS jitter / speed variation)
             search_start_m = leadin_distance_m * 0.8
@@ -502,7 +520,7 @@ def align_riders_to_route(riders: List[Dict], route: RouteData,
         # Collect per-rider start offset for loop routes
         if is_loop and raw_dist_km is not None:
             all_start_offsets.append(initial_offset)
-        rider_projections.append((route_distances, deviations, raw_dist_km))
+        rider_projections.append((route_distances, deviations, raw_dist_km, initial_offset))
     
     # Compute global start offset for loop routes
     if is_loop and all_start_offsets:
@@ -515,8 +533,26 @@ def align_riders_to_route(riders: List[Dict], route: RouteData,
         if proj is None:
             continue
         
-        route_distances, deviations, raw_dist_km = proj
+        route_distances, deviations, raw_dist_km, rider_offset = proj
         df = rider['data']
+        
+        # --- Detect late joiners on loop routes (flag only, trim after unwrap) ---
+        # Late joiners start from a different pen and ride a different lead-in
+        # path.  Their lead-in distance values overlap with the route loop data
+        # at wrong altitudes, making them appear off the elevation profile.
+        # We flag them here but trim AFTER unwrap/rebase because the unwrap
+        # needs the full raw_traveled_m (starting from ride start) to compute
+        # correct expected values.
+        late_joiner_mask = None
+        if is_loop and loop_start_offset is not None:
+            offset_diff = abs(rider_offset - loop_start_offset)
+            if offset_diff > route_total * 0.1:  # >10% of loop = different start
+                leadin_mask = deviations >= 500
+                if leadin_mask.any() and not leadin_mask.all():
+                    n_dropped = leadin_mask.sum()
+                    print(f"  Rider {rider['rank']}: late joiner (offset diff "
+                          f"{offset_diff:.0f}m), dropping {n_dropped} lead-in points")
+                    late_joiner_mask = ~leadin_mask  # True = on-route (keep)
         
         # --- Fix loop-route ambiguity ---
         if is_loop and raw_dist_km is not None:
@@ -535,6 +571,14 @@ def align_riders_to_route(riders: List[Dict], route: RouteData,
             
             # Rebase with the global offset so all riders share the same reference
             route_distances -= loop_start_offset
+        
+        # --- Apply late joiner trim (after unwrap/rebase, before smoothing) ---
+        if late_joiner_mask is not None:
+            df = df.iloc[np.where(late_joiner_mask)[0]].copy()
+            route_distances = route_distances[late_joiner_mask]
+            deviations = deviations[late_joiner_mask]
+            if raw_dist_km is not None:
+                raw_dist_km = raw_dist_km[late_joiner_mask]
         
         # Smooth route distances using Zwift distance deltas to eliminate
         # route-point quantization (~13m steps). The KD-tree alignment gives
