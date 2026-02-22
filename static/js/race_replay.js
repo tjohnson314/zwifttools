@@ -225,44 +225,72 @@ async function fetchRace(forceRefresh = false) {
 
     let url = `/api/race/fetch_stream?activity_id=${encodeURIComponent(input)}`;
     if (forceRefresh) url += '&force_refresh=1';
-    const evtSource = new EventSource(url);
 
-    evtSource.onmessage = async function(event) {
-        let data;
-        try { data = JSON.parse(event.data); } catch { return; }
-
-        if (data.progress) {
-            const pct = Math.round((data.current / data.total) * 100);
-            showLoading(`Fetching rider ${data.current}/${data.total}: ${data.name}`);
-            showProgress(data.current, data.total, data.name);
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            hideProgress();
+            hideLoading();
+            showStatus(`Server error: ${response.status}`, 'error');
             return;
         }
 
-        // Final message — either success or error
-        evtSource.close();
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let finalData = null;
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+
+            // Parse SSE events from buffer (delimited by blank lines)
+            let idx;
+            while ((idx = buffer.indexOf('\n\n')) !== -1) {
+                const chunk = buffer.slice(0, idx);
+                buffer = buffer.slice(idx + 2);
+                for (const line of chunk.split('\n')) {
+                    if (!line.startsWith('data: ')) continue;
+                    try {
+                        const data = JSON.parse(line.slice(6));
+                        if (data.progress) {
+                            showLoading(`Fetching rider ${data.current}/${data.total}: ${data.name}`);
+                            showProgress(data.current, data.total, data.name);
+                        } else {
+                            finalData = data;
+                        }
+                    } catch {}
+                }
+            }
+        }
+
         hideProgress();
         hideLoading();
 
-        if (data.error) {
-            console.error('Race fetch error:', data.error);
-            showStatus(data.error, 'error');
+        if (!finalData) {
+            showStatus('No response received from server.', 'error');
             return;
         }
 
-        if (data.success) {
-            showStatus(data.message, 'success');
+        if (finalData.error) {
+            console.error('Race fetch error:', finalData.error);
+            showStatus(finalData.error, 'error');
+            return;
+        }
+
+        if (finalData.success) {
+            showStatus(finalData.message, 'success');
             await loadRaceList();
-            document.getElementById('race-select').value = data.race_id;
-            await loadRaceById(data.race_id);
+            document.getElementById('race-select').value = finalData.race_id;
+            await loadRaceById(finalData.race_id);
         }
-    };
-
-    evtSource.onerror = function() {
-        evtSource.close();
+    } catch (e) {
         hideProgress();
         hideLoading();
+        console.error('Fetch stream error:', e);
         showStatus('Connection lost while fetching race data.', 'error');
-    };
+    }
 }
 
 // ---------------------------------------------------------------------------
