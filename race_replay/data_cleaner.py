@@ -12,6 +12,7 @@ Handles:
 import json
 import numpy as np
 import pandas as pd
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass
@@ -21,7 +22,7 @@ from scipy.spatial import cKDTree
 
 # Bump this version when data cleaning logic changes in a way that invalidates
 # previously cached results.  The cache loader will discard stale caches.
-CLEANING_VERSION = 2
+CLEANING_VERSION = 3
 
 # Map of Strava segment IDs for each route (sourced from ZwiftMap / ZwiftInsider)
 # Loaded from route_strava_segments.json
@@ -528,31 +529,75 @@ def align_riders_to_route(riders: List[Dict], route: RouteData,
         print(f"  Loop route: global start_offset={loop_start_offset:.0f}m, "
               f"route_total={route_total:.0f}m, gap={start_end_gap:.0f}m")
     
+    # --- Detect late joiners by activity start time ---
+    # Compute median start time; riders who started significantly later are
+    # late joiners regardless of route type.  This catches cases where the
+    # spatial offset check (loop-only) cannot reach.
+    LATE_JOINER_THRESHOLD_SEC = 300  # >5 min after median = late joiner
+    late_joiner_set = set()  # rider indices flagged as late joiners
+    start_times = []  # (rider_idx, epoch_seconds)
+    for idx, rider in enumerate(riders):
+        ast = rider.get('activity_start_time')
+        if ast:
+            try:
+                # Parse ISO 8601 with timezone, e.g. "2026-02-12T08:00:18.588+0000"
+                ts = ast.replace('+0000', '+00:00')  # fix for fromisoformat
+                dt = datetime.fromisoformat(ts)
+                start_times.append((idx, dt.timestamp()))
+            except (ValueError, TypeError):
+                pass
+    
+    if start_times:
+        epochs = np.array([t for _, t in start_times])
+        median_start = np.median(epochs)
+        for rider_idx, epoch in start_times:
+            delay = epoch - median_start
+            if delay > LATE_JOINER_THRESHOLD_SEC:
+                late_joiner_set.add(rider_idx)
+                rider = riders[rider_idx]
+                name = rider.get('name', '?')
+                try:
+                    print(f"  Rider {rider['rank']} ({name}): "
+                          f"late joiner by start time (+{delay:.0f}s)")
+                except UnicodeEncodeError:
+                    print(f"  Rider {rider['rank']}: "
+                          f"late joiner by start time (+{delay:.0f}s)")
+    
     # Pass 2: Apply unwrapping and rebasing with the global offset
-    for rider, proj in zip(riders, rider_projections):
+    for rider_idx, (rider, proj) in enumerate(zip(riders, rider_projections)):
         if proj is None:
             continue
         
         route_distances, deviations, raw_dist_km, rider_offset = proj
         df = rider['data']
         
-        # --- Detect late joiners on loop routes (flag only, trim after unwrap) ---
+        # --- Detect late joiners (flag only, trim after unwrap) ---
         # Late joiners start from a different pen and ride a different lead-in
         # path.  Their lead-in distance values overlap with the route loop data
         # at wrong altitudes, making them appear off the elevation profile.
         # We flag them here but trim AFTER unwrap/rebase because the unwrap
         # needs the full raw_traveled_m (starting from ride start) to compute
         # correct expected values.
-        late_joiner_mask = None
-        if is_loop and loop_start_offset is not None:
+        #
+        # Detection signals (any one is sufficient):
+        #   1. Start time: rider started >2 min after median (works on all routes)
+        #   2. Spatial offset: per-rider offset differs >10% of route_total from
+        #      global offset (loop routes only)
+        is_late = rider_idx in late_joiner_set
+        
+        if not is_late and is_loop and loop_start_offset is not None:
             offset_diff = abs(rider_offset - loop_start_offset)
-            if offset_diff > route_total * 0.1:  # >10% of loop = different start
-                leadin_mask = deviations >= 500
-                if leadin_mask.any() and not leadin_mask.all():
-                    n_dropped = leadin_mask.sum()
-                    print(f"  Rider {rider['rank']}: late joiner (offset diff "
-                          f"{offset_diff:.0f}m), dropping {n_dropped} lead-in points")
-                    late_joiner_mask = ~leadin_mask  # True = on-route (keep)
+            if offset_diff > route_total * 0.1:
+                is_late = True
+        
+        late_joiner_mask = None
+        if is_late:
+            leadin_mask = deviations >= 500
+            if leadin_mask.any() and not leadin_mask.all():
+                n_dropped = leadin_mask.sum()
+                print(f"  Rider {rider['rank']}: trimming {n_dropped} "
+                      f"lead-in points (late joiner)")
+                late_joiner_mask = ~leadin_mask  # True = on-route (keep)
         
         # --- Fix loop-route ambiguity ---
         if is_loop and raw_dist_km is not None:
