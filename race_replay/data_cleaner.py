@@ -19,6 +19,10 @@ from scipy.interpolate import interp1d
 from scipy.spatial import cKDTree
 
 
+# Bump this version when data cleaning logic changes in a way that invalidates
+# previously cached results.  The cache loader will discard stale caches.
+CLEANING_VERSION = 1
+
 # Map of Strava segment IDs for each route (sourced from ZwiftMap / ZwiftInsider)
 # Loaded from route_strava_segments.json
 def _load_route_strava_segments() -> Dict[str, int]:
@@ -1433,6 +1437,7 @@ def save_to_cache(data: CleanedRaceData, cache_path: Path):
     
     # Save metadata
     meta = {
+        'cleaning_version': CLEANING_VERSION,
         'race_id': str(data.race_id),
         'route_name': str(data.route_name) if data.route_name else "",
         'route_slug': str(data.route_slug) if data.route_slug else None,
@@ -1455,6 +1460,12 @@ def load_from_cache(cache_path: Path) -> Optional[CleanedRaceData]:
         
         with open(cache_path) as f:
             meta = json.load(f)
+        
+        # Check cleaning version — discard stale caches
+        cached_version = meta.get('cleaning_version', 0)
+        if cached_version != CLEANING_VERSION:
+            print(f"Cache version mismatch (cached={cached_version}, current={CLEANING_VERSION}) — re-cleaning")
+            return None
         
         # Load riders
         riders = []
