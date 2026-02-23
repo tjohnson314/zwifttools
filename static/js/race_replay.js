@@ -1399,9 +1399,24 @@ function fitMapToRoute() {
         lngMax = cfg.lng_max;
     }
 
-    // Center the view
-    mapState.viewLat = (latMin + latMax) / 2;
-    mapState.viewLng = (lngMin + lngMax) / 2;
+    // Center the view on a rider if possible, otherwise on route center
+    let centered = false;
+    if (raceData && riderLookup) {
+        const t = Math.round(currentTime || raceData.min_time);
+        const positions = getRiderPositions(t);
+        // Prefer selected rider, then fall back to any rider with valid coords
+        const target = (selectedRank !== null && positions.find(p => p.rank === selectedRank && !p.no_data && !isNaN(p.lat) && !isNaN(p.lng)))
+                     || positions.find(p => !p.no_data && !isNaN(p.lat) && !isNaN(p.lng));
+        if (target) {
+            mapState.viewLat = target.lat;
+            mapState.viewLng = target.lng;
+            centered = true;
+        }
+    }
+    if (!centered) {
+        mapState.viewLat = (latMin + latMax) / 2;
+        mapState.viewLng = (lngMin + lngMax) / 2;
+    }
 
     // Calculate scale to fit the route bounds in the canvas
     const canvas = mapState.canvas;
@@ -1413,12 +1428,14 @@ function fitMapToRoute() {
     const routeImgW = (lngMax - lngMin) / (cfg.lng_max - cfg.lng_min) * imgNatW;
     const routeImgH = (latMax - latMin) / (cfg.lat_max - cfg.lat_min) * imgNatH;
 
-    // We need: routeImgW * fitScale * viewScale <= canvas.width
-    //          routeImgH * fitScale * viewScale <= canvas.height
-    const scaleByW = canvas.width / (routeImgW * fitScale);
-    const scaleByH = canvas.height / (routeImgH * fitScale);
-    // Zoom in beyond route-fit for a closer default view, but never below 1.0
-    mapState.viewScale = Math.max(1.0, Math.min(scaleByW, scaleByH) * 2.8);
+    // Set initial zoom so the visible canvas width spans ~2 km
+    const TARGET_KM = 4;
+    const cosLat = Math.cos(mapState.viewLat * Math.PI / 180);
+    const degPerKm = 1 / (111.32 * cosLat);       // longitude degrees per km
+    const targetDegLng = TARGET_KM * degPerKm;     // degrees of longitude for 2 km
+    const targetImgPx = targetDegLng / (cfg.lng_max - cfg.lng_min) * imgNatW;
+    const desiredScale = canvas.width / (targetImgPx * fitScale);
+    mapState.viewScale = Math.max(1.0, desiredScale);
 }
 
 /**
