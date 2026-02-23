@@ -143,15 +143,13 @@ def find_matching_streams(
         )
         
         if stream_info:
-            # Apply per-streamer fine-tune offset (e.g. to account for lead-in)
-            adjust = streamer.get('offset_adjust_sec', 0)
             results.append({
                 'streamer_name': streamer.get('name', 'Unknown'),
                 'zwift_player_id': streamer['zwift_player_id'],
                 'youtube_url': f"https://www.youtube.com/watch?v={stream_info['video_id']}",
                 'video_id': stream_info['video_id'],
                 'stream_title': stream_info['title'],
-                'offset_seconds': stream_info['offset_seconds'] + adjust,
+                'offset_seconds': stream_info['offset_seconds'],
             })
 
     return results
