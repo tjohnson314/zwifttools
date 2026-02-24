@@ -1564,6 +1564,19 @@ def api_race_data(race_id):
         except Exception as e:
             print(f"Could not load route latlng: {e}")
 
+    # Collect dev warnings for localhost debugging
+    dev_warnings = []
+    if race_data.route_slug:
+        from race_replay.data_cleaner import ROUTE_STRAVA_SEGMENTS
+        if race_data.route_slug not in ROUTE_STRAVA_SEGMENTS:
+            dev_warnings.append(f"Missing Strava segment ID for route: {race_data.route_slug}")
+    try:
+        from shared.youtube_streams import get_api_key
+        if not get_api_key():
+            dev_warnings.append('YOUTUBE_API_KEY environment variable is not set')
+    except Exception:
+        dev_warnings.append('Could not check YouTube API key')
+
     return jsonify({
         'race_id': race_id,
         'route_name': race_data.route_name,
@@ -1579,6 +1592,7 @@ def api_race_data(race_id):
         'riders': riders,
         'map_config': map_config,
         'route_latlng': route_latlng,
+        'dev_warnings': dev_warnings,
     })
 
 

@@ -378,6 +378,19 @@ function initRaceData(data) {
     isPlaying = false;
     selectedRank = null;
     checkedRanks.clear();
+
+    // Show dev warnings on localhost only
+    const warningsEl = document.getElementById('dev-warnings');
+    if (warningsEl) {
+        const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+        if (isLocal && data.dev_warnings && data.dev_warnings.length > 0) {
+            warningsEl.innerHTML = '<div class="dev-warnings-title">⚠ Dev Warnings</div><ul>' +
+                data.dev_warnings.map(w => `<li>${w}</li>`).join('') + '</ul>';
+            warningsEl.style.display = 'block';
+        } else {
+            warningsEl.style.display = 'none';
+        }
+    }
     data.riders.forEach(r => checkedRanks.add(r.rank));
     riderLookup = {};
 
