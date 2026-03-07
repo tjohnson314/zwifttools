@@ -1,0 +1,171 @@
+// ==========================================================================
+// Zwift Games Analytics -- KQL Table Definitions
+//
+// Execute these commands against the ZwiftGames KQL database in the
+// ADX cluster. The deploy.ps1 script runs them automatically.
+//
+// Compatible with the free ADX tier.
+// ==========================================================================
+
+// --------------------------------------------------------------------------
+// Fact Tables -- append-only
+// --------------------------------------------------------------------------
+
+// -- Rider telemetry: ~2,000 rows per rider per race --
+.create-merge table RiderTelemetry (
+    event_subgroup_id: long,
+    activity_id: string,
+    player_id: long,
+    time_sec: int,
+    power_watts: int,
+    hr_bpm: int,
+    cadence_rpm: int,
+    speed_kmh: real,
+    distance_km: real,
+    altitude_m: real
+)
+
+
+// -- Race summary: one row per rider per race --
+.create-merge table RaceSummary (
+    event_subgroup_id: long,
+    activity_id: string,
+    rank: int,
+    name: string,
+    weight_kg: real,
+    player_id: long,
+    file_id: string,
+    activity_start_time: datetime,
+    status: string,
+    duration_sec: real,
+    avg_power: real,
+    normalized_power: real,
+    max_power: real,
+    avg_hr: real,
+    data_points: long
+)
+
+
+// -- Race events: one row per event subgroup --
+.create-merge table RaceEvents (
+    event_subgroup_id: long,
+    event_id: long,
+    race_name: string,
+    race_start_time: datetime,
+    world_id: int,
+    route_id: long,
+    ingested_at: datetime
+)
+
+
+// --------------------------------------------------------------------------
+// Dimension / Reference Tables -- small, full-replace on updates
+// --------------------------------------------------------------------------
+
+// -- Bike frames --
+.create-merge table Frames (
+    frameid: string,
+    framemake: string,
+    framemodel: string,
+    frameprice: long,
+    framelevel: int,
+    frameaero: int,
+    frameweight: int,
+    frametype: string,
+    framewheeltype: string,
+    frameflatspeed: dynamic,
+    frameclimbspeed: dynamic
+)
+
+// -- Wheels --
+.create-merge table Wheels (
+    wheelid: string,
+    wheelmake: string,
+    wheelmodel: string,
+    wheelprice: long,
+    wheellevel: int,
+    wheelaero: int,
+    wheelweight: int,
+    wheelfitsframe: string,
+    wheelflatspeedonroadframe: real,
+    wheelclimbspeedonroadframe: real,
+    wheelflatspeedonttframe: real,
+    wheelclimbspeedonttframe: real,
+    wheelflatrank: int,
+    wheelclimbrank: int
+)
+
+// -- Bike configurations (frame + wheel combos with drag/weight arrays) --
+.create-merge table BikeConfigs (
+    frameid: string,
+    wheelid: string,
+    cd: dynamic,
+    weight: dynamic
+)
+
+// -- Routes --
+.create-merge table Routes (
+    route_id: string,
+    name: string,
+    distance_m: real,
+    leadin_distance_m: real,
+    ascent_m: real,
+    leadin_ascent_m: real,
+    difficulty: string,
+    event_only: bool
+)
+
+// -- Route GPS points (latitude/longitude polyline for each route) --
+.create-merge table RoutePoints (
+    route_slug: string,
+    route_name: string,
+    strava_segment_id: long,
+    total_distance_m: real,
+    point_index: int,
+    latitude: real,
+    longitude: real
+)
+
+// -- Worlds (map bounds and metadata) --
+.create-merge table Worlds (
+    world_name: string,
+    slug: string,
+    lat_min: real,
+    lat_max: real,
+    lng_min: real,
+    lng_max: real,
+    bg_color: string
+)
+
+// -- Surface rolling resistance coefficients --
+.create-merge table SurfaceCrr (
+    bike_type: string,
+    surface_type: string,
+    crr_value: real
+)
+
+// -- Route-to-Strava segment mapping --
+.create-merge table RouteStravaSegments (
+    route_slug: string,
+    strava_segment_id: long
+)
+
+
+// --------------------------------------------------------------------------
+// Stored function -- equivalent of the materialized view, run on demand
+// --------------------------------------------------------------------------
+
+// Average telemetry per distance bin per race (for "avg power at each point")
+// Usage: RaceTelemetryByDistance(6773826)
+.create-or-alter function RaceTelemetryByDistance(eventSubgroupId: long) {
+    RiderTelemetry
+    | where event_subgroup_id == eventSubgroupId
+    | summarize
+        avg_power = avg(power_watts),
+        avg_hr = avg(hr_bpm),
+        avg_cadence = avg(cadence_rpm),
+        avg_speed = avg(speed_kmh),
+        rider_count = dcount(activity_id)
+      by distance_bin = bin(distance_km, 0.05)
+    | order by distance_bin asc
+}

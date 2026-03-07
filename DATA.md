@@ -255,7 +255,9 @@ Renders `race_replay.html`.
 
 ### `GET /api/race/fetch_stream`
 
-**Purpose:** Fetch all race data from Zwift API given an activity URL or ID, streaming progress via **Server-Sent Events (SSE)**.**
+**Purpose:** Fetch all race data from Zwift API given an activity URL or ID, streaming progress via **Server-Sent Events (SSE)**.
+
+**Params:** `activity_url` (required), `force_refresh` (optional, `1` to bypass cache and re-fetch from Zwift API)
 
 1. **Extract activity ID** from URL or raw ID
 2. **Get activity details** — `GET /api/activities/{id}` → extract `eventInfo.eventSubGroupId`
@@ -263,7 +265,7 @@ Renders `race_replay.html`.
 4. **Check blob storage** — `race_exists_in_blob(race_id)` → download if available
 5. **Fetch event subgroup** — `GET /api/events/subgroups/{subgroupId}` → race name, start time, route ID, segment distance
 6. **Fetch race results** — `get_race_entries(subgroup_id, headers)`:
-   - Paginated `GET /api/events/subgroups/{id}/results?start={n}&limit=50`
+   - Paginated `GET /api/race-results/entries?event_subgroup_id={id}&start={n}&limit=50`
    - Extract rank, name, activity_id, weight, player_id per participant
    - `deduplicate_ranks()` to fix duplicate rank numbers
 7. **Fetch all rider telemetry** — 5 concurrent threads, each calls:
@@ -490,7 +492,10 @@ Clamp `max_time` to last finisher's time + 10 seconds to exclude cooldown/post-r
 6. **Build per-rider JSON** — `{ rank, name, team, activity_id, player_id, weight_kg, is_late_joiner, finish_time_sec, time_sec: [...], distance_km: [...], altitude_m: [...], speed_kmh: [...], power_watts: [...], hr_bpm: [...], lat: [...], lng: [...] }`
 7. **World map config** — `get_world_map_config(world)` → map image, GPS bounds, background color
 8. **Route polyline** — `load_route_data(route_slug).latlng` → official route lat/lng array
-9. **Return** `{ race_id, route_name, route_slug, source_activity_id, race_start_time, event_id, event_subgroup_id, finish_line_km, min_time, max_time, elevation_profile, riders: [...], map_config, route_latlng }`
+9. **Developer warnings** — `dev_warnings` array (only shown on localhost):
+   - Missing Strava segment ID for the route
+   - `YOUTUBE_API_KEY` environment variable not set
+10. **Return** `{ race_id, route_name, route_slug, source_activity_id, race_start_time, event_id, event_subgroup_id, finish_line_km, min_time, max_time, elevation_profile, riders: [...], map_config, route_latlng, dev_warnings }`
 
 ### `GET /api/race/streams/<race_id>`
 
@@ -519,6 +524,7 @@ Clamp `max_time` to last finisher's time + 10 seconds to exclude cooldown/post-r
 ### Zwift API (`shared/data_fetcher.py`)
 
 - **Base URL:** `https://us-or-rly101.zwift.com/api`
+- **User-Agent headers:** Mimics the official Zwift mobile client (`Zwift/115 CFNetwork/758.0.2 Darwin/15.0.0`). Without these, the API may return 406.
 - **`_request_with_retry()`** — HTTP wrapper with retry on 5xx/429 errors, auto-sets `Accept: application/json`
 - **`extract_activity_id()`** — extracts numeric ID from Zwift activity URLs
 
@@ -541,7 +547,11 @@ Clamp `max_time` to last finisher's time + 10 seconds to exclude cooldown/post-r
 
 - **`surface_data.json`** — polygon definitions for non-tarmac surfaces per world
 - `compute_surface_types_array(lats, lngs, world)` — for each GPS point, ray-cast against polygons to determine surface type
-- `surface_types_to_crr(surface_types, bike_type)` — CRR by surface × bike type:
+- `surface_types_to_crr(surface_types, bike_type)` — CRR by surface × bike type
+- `compute_crr_array(lats, lngs, world, bike_type)` — combined helper: surface detection + CRR lookup in one call
+- `get_bike_type_for_frame(frame_type)` — maps Zwift frame types (`Standard`, `TT`, `Gravel`, `MTB`) to CRR bike categories (`road_bike`, `mtb`, `gravel_bike`)
+
+CRR values:
 
 | Surface | Road Bike | MTB   | Gravel |
 | ------- | --------- | ----- | ------ |
@@ -552,12 +562,13 @@ Clamp `max_time` to last finisher's time + 10 seconds to exclude cooldown/post-r
 
 ### World Config (`shared/world_config.py`)
 
-Static config for 13 Zwift worlds: map image path, GPS bounding box (lat/lng min/max), background color. Used by the race replay map overlay.
+Static config for 12 Zwift worlds (Watopia, Richmond, London, New York, Innsbruck, Bologna, Yorkshire, Crit City, Makuri, France, Paris, Scotland): map image path, GPS bounding box (lat/lng min/max), background color. Used by the race replay map overlay.
 
 ### Blob Storage (`shared/blob_storage.py`)
 
 Azure Blob Storage wrapper — **no-op when `AZURE_STORAGE_CONNECTION_STRING` is not set**.
 - `upload_race_dir()` / `download_race_dir()` — persist/restore full race data directories
+- `upload_file()` — upload a single file (e.g. `stream_cache.json`)
 - `race_exists_in_blob()` — checks for `complete_race_summary.csv` sentinel
 - `list_races()` — enumerate all stored races (race_id + name from `race_meta.json`)
 

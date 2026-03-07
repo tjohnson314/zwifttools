@@ -10,6 +10,7 @@ import requests
 import pandas as pd
 import json
 import os
+import logging
 import time as _time
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -17,7 +18,17 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from .utils import calculate_normalized_power
 from . import blob_storage
 
+logger = logging.getLogger(__name__)
+
 BASE_URL = "https://us-or-rly101.zwift.com/api"
+
+# Default headers matching the official Zwift mobile client SDK.
+# Without a recognised User-Agent the real API may return 406.
+_ZWIFT_DEFAULT_HEADERS = {
+    'User-Agent':       'Zwift/115 CFNetwork/758.0.2 Darwin/15.0.0',
+    'Accept-Encoding':  'gzip',
+    'Connection':       'keep-alive',
+}
 
 # Max retries for transient Zwift API errors (5xx)
 _MAX_RETRIES = 3
@@ -37,6 +48,9 @@ def _request_with_retry(method, url, **kwargs):
     else:
         headers = dict(headers)  # don't mutate caller's dict
     headers.setdefault('Accept', 'application/json')
+    # Merge in Zwift client headers (User-Agent, Accept-Encoding, Connection)
+    for k, v in _ZWIFT_DEFAULT_HEADERS.items():
+        headers.setdefault(k, v)
     kwargs['headers'] = headers
 
     last_response = None
@@ -227,10 +241,10 @@ def get_race_entries(event_subgroup_id, headers, limit=50):
     # Log the first entry's keys so we know what the API returns
     if all_entries:
         first = all_entries[0]
-        print(f"Race result entry keys: {list(first.keys())}")
+        logger.debug("Race result entry keys: %s", list(first.keys()))
         ad = first.get('activityData', {})
         if ad:
-            print(f"  activityData keys: {list(ad.keys())}")
+            logger.debug("  activityData keys: %s", list(ad.keys()))
 
     participants = []
     for entry in all_entries:
@@ -392,7 +406,7 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
     if top_results:
         segment_distance_cm = top_results[0].get('segmentDistanceInCentimeters')
         if segment_distance_cm:
-            print(f"Race segment distance from subgroupResults: {segment_distance_cm / 100000:.2f} km")
+            logger.info("Race segment distance from subgroupResults: %.2f km", segment_distance_cm / 100000)
     
     # Get event details (start time, route) from the parent event API
     event_start_time = None
@@ -409,14 +423,14 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
                         event_start_time = esg.get('eventSubgroupStart')
                         route_id = esg.get('routeId')
                         if event_start_time:
-                            print(f"Event start time: {event_start_time}")
+                            logger.info("Event start time: %s", event_start_time)
                         if route_id:
-                            print(f"Event route ID: {route_id}")
+                            logger.info("Event route ID: %s", route_id)
                         break
             else:
-                print(f"Could not fetch event {event_id}: {event_resp.status_code}")
+                logger.warning("Could not fetch event %s: %s", event_id, event_resp.status_code)
         except Exception as e:
-            print(f"Could not fetch event details: {e}")
+            logger.warning("Could not fetch event details: %s", e)
     
     meta = {
         'race_name': race_name,

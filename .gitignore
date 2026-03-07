@@ -14,7 +14,7 @@ venv/
 env/
 
 # IDE
-.vscode/
+
 .idea/
 *.swp
 *.swo
@@ -31,3 +31,6 @@ race_data/
 
 # Logs
 *.log
+
+# Deployment artifacts
+*.zip

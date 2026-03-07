@@ -13,8 +13,11 @@ Configuration (environment variables):
 
 import os
 import json
+import logging
 from pathlib import Path
 from typing import List, Optional
+
+logger = logging.getLogger(__name__)
 
 # Lazy-initialised client (created on first use)
 _container_client = None
@@ -40,9 +43,9 @@ def _get_container():
         # Create the container if it doesn't exist
         if not _container_client.exists():
             _container_client.create_container()
-        print(f"Blob storage configured: container={container_name}")
+        logger.info("Blob storage configured: container=%s", container_name)
     except Exception as e:
-        print(f"Warning: Blob storage init failed: {e}")
+        logger.warning("Blob storage init failed: %s", e)
         _container_client = None
 
     return _container_client
@@ -80,7 +83,7 @@ def upload_race_dir(race_id: str, local_dir: str | Path) -> bool:
                 container.upload_blob(blob_name, f, overwrite=True)
         return True
     except Exception as e:
-        print(f"Blob upload failed for {race_id}: {e}")
+        logger.error("Blob upload failed for %s: %s", race_id, e)
         return False
 
 
@@ -109,7 +112,7 @@ def download_race_dir(race_id: str, local_dir: str | Path) -> bool:
                 f.write(data)
         return True
     except Exception as e:
-        print(f"Blob download failed for {race_id}: {e}")
+        logger.error("Blob download failed for %s: %s", race_id, e)
         return False
 
 
@@ -173,7 +176,7 @@ def list_races() -> List[dict]:
 
         return races
     except Exception as e:
-        print(f"Blob list_races failed: {e}")
+        logger.error("Blob list_races failed: %s", e)
         return []
 
 
@@ -196,5 +199,5 @@ def upload_file(race_id: str, local_path: str | Path, blob_relative: Optional[st
             container.upload_blob(blob_name, f, overwrite=True)
         return True
     except Exception as e:
-        print(f"Blob upload_file failed for {blob_name}: {e}")
+        logger.error("Blob upload_file failed for %s: %s", blob_name, e)
         return False

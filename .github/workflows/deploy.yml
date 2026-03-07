@@ -3,6 +3,10 @@ name: Deploy to Azure App Service
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "azure_function/**"
+      - "infra/**"
+      - "*.md"
   workflow_dispatch: # Allow manual triggers
 
 jobs:

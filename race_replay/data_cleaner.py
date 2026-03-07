@@ -10,6 +10,7 @@ Handles:
 """
 
 import json
+import logging
 import numpy as np
 import pandas as pd
 from datetime import datetime, timezone
@@ -18,6 +19,8 @@ from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass
 from scipy.interpolate import interp1d
 from scipy.spatial import cKDTree
+
+logger = logging.getLogger(__name__)
 
 
 # Bump this version when data cleaning logic changes in a way that invalidates
@@ -106,7 +109,7 @@ def load_route_data(route_slug: str) -> Optional[RouteData]:
         # Try to fetch from ZwiftMap
         strava_id = ROUTE_STRAVA_SEGMENTS.get(route_slug)
         if not strava_id:
-            print(f"No Strava segment ID known for route: {route_slug}")
+            logger.info("No Strava segment ID known for route: %s", route_slug)
             return None
         
         route_data = fetch_route_from_zwiftmap(strava_id, route_slug)
@@ -170,7 +173,7 @@ def fetch_route_from_zwiftmap(strava_segment_id: int, route_slug: str) -> Option
             'altitude': altitude
         }
     except Exception as e:
-        print(f"Failed to fetch route data from ZwiftMap: {e}")
+        logger.warning("Failed to fetch route data from ZwiftMap: %s", e)
         return None
 
 
@@ -380,9 +383,10 @@ def align_riders_to_route(riders: List[Dict], route: RouteData,
             initial_offset = np.median(offsets)
             leadin_est = -initial_offset if initial_offset < 0 else 0
             if leadin_est > 50:
-                print(f"  Rider {rider['rank']}: detected ~{leadin_est:.0f}m lead-in "
-                      f"(first on-route point at idx {leadin_end_idx}, "
-                      f"raw dist {raw_traveled_m[leadin_end_idx]:.0f}m)")
+                logger.info("  Rider %s: detected ~%.0fm lead-in "
+                      "(first on-route point at idx %d, "
+                      "raw dist %.0fm)", rider['rank'], leadin_est, leadin_end_idx,
+                      raw_traveled_m[leadin_end_idx])
         else:
             # Fallback: use first few points as before
             n_start = min(10, n_points)
@@ -527,8 +531,8 @@ def align_riders_to_route(riders: List[Dict], route: RouteData,
     # Compute global start offset for loop routes
     if is_loop and all_start_offsets:
         loop_start_offset = np.median(all_start_offsets)
-        print(f"  Loop route: global start_offset={loop_start_offset:.0f}m, "
-              f"route_total={route_total:.0f}m, gap={start_end_gap:.0f}m")
+        logger.info("  Loop route: global start_offset=%.0fm, "
+              "route_total=%.0fm, gap=%.0fm", loop_start_offset, route_total, start_end_gap)
     
     # --- Detect late joiners by activity start time ---
     # Compare each rider's activity_start_time to the official race start time
@@ -551,7 +555,7 @@ def align_riders_to_route(riders: List[Dict], route: RouteData,
     if race_start_time:
         reference_epoch = _parse_iso(race_start_time)
         if reference_epoch is not None:
-            print(f"  Race start time: {race_start_time}")
+            logger.info("  Race start time: %s", race_start_time)
     
     start_times = []  # (rider_idx, epoch_seconds)
     for idx, rider in enumerate(riders):
@@ -565,7 +569,7 @@ def align_riders_to_route(riders: List[Dict], route: RouteData,
     if reference_epoch is None and start_times:
         epochs = np.array([t for _, t in start_times])
         reference_epoch = float(np.median(epochs))
-        print(f"  No race start time available, using median activity start as reference")
+        logger.info("  No race start time available, using median activity start as reference")
     
     if reference_epoch is not None and start_times:
         for rider_idx, epoch in start_times:
@@ -575,11 +579,11 @@ def align_riders_to_route(riders: List[Dict], route: RouteData,
                 rider = riders[rider_idx]
                 name = rider.get('name', '?')
                 try:
-                    print(f"  Rider {rider['rank']} ({name}): "
-                          f"late joiner by start time (+{delay:.0f}s)")
+                    logger.info("  Rider %s (%s): "
+                          "late joiner by start time (+%.0fs)", rider['rank'], name, delay)
                 except UnicodeEncodeError:
-                    print(f"  Rider {rider['rank']}: "
-                          f"late joiner by start time (+{delay:.0f}s)")
+                    logger.info("  Rider %s: "
+                          "late joiner by start time (+%.0fs)", rider['rank'], delay)
     
     # Pass 2: Apply unwrapping and rebasing with the global offset
     for rider_idx, (rider, proj) in enumerate(zip(riders, rider_projections)):
@@ -613,8 +617,8 @@ def align_riders_to_route(riders: List[Dict], route: RouteData,
             leadin_mask = deviations >= 500
             if leadin_mask.any() and not leadin_mask.all():
                 n_dropped = leadin_mask.sum()
-                print(f"  Rider {rider['rank']}: trimming {n_dropped} "
-                      f"lead-in points (late joiner)")
+                logger.info("  Rider %s: trimming %d "
+                      "lead-in points (late joiner)", rider['rank'], n_dropped)
                 late_joiner_mask = ~leadin_mask  # True = on-route (keep)
         
         # --- Fix loop-route ambiguity ---
@@ -681,7 +685,7 @@ def align_riders_to_route(riders: List[Dict], route: RouteData,
         if np.any(on_route_mask):
             avg_deviation = np.mean(deviations[on_route_mask])
             if avg_deviation > 20:
-                print(f"  Warning: Rider {rider['rank']} has high avg route deviation: {avg_deviation:.1f}m")
+                logger.warning("  Rider %s has high avg route deviation: %.1fm", rider['rank'], avg_deviation)
     
     return riders, loop_start_offset
 
@@ -1004,12 +1008,12 @@ def detect_route(riders: List[Dict], data_path: Path) -> Tuple[str, Optional[str
                         route_name = route_info['name']
                         route_slug = route_name.lower().replace(' ', '-').replace("'", "")
                         leadin_distance_m = route_info.get('leadinDistanceInMeters')
-                        print(f"Detected route from event metadata: {route_name} (ID {route_id})")
+                        logger.info("Detected route from event metadata: %s (ID %s)", route_name, route_id)
                         return route_name, route_slug, leadin_distance_m
                 except ImportError:
                     pass
         except Exception as e:
-            print(f"Warning: Could not read race_meta.json: {e}")
+            logger.warning("Could not read race_meta.json: %s", e)
     
     # Method 1: Match route name from race_name in metadata (most reliable when route name is in race title)
     if not route_name:
@@ -1035,10 +1039,10 @@ def detect_route(riders: List[Dict], data_path: Path) -> Tuple[str, Optional[str
                             if rname.lower() in race_name_lower:
                                 route_name = rname
                                 leadin_distance_m = routes_cache[rid].get('leadinDistanceInMeters')
-                                print(f"Detected route from race name: {route_name} (matched in '{race_name}')")
+                                logger.info("Detected route from race name: %s (matched in '%s')", route_name, race_name)
                                 break
             except Exception as e:
-                print(f"Warning: Route detection from race name failed: {e}")
+                logger.warning("Route detection from race name failed: %s", e)
     
     # Method 2: Check routes_cache.json for matching GPS coordinates + distance (fallback)
     if not route_name:
@@ -1064,7 +1068,8 @@ def detect_route(riders: List[Dict], data_path: Path) -> Tuple[str, Optional[str
                         
                         world = detect_world_from_coords(sample_lat, sample_lng)
                         if world:
-                            print(f"Detected world: {world}, median rider distance (top {len(top_riders)}): {rider_distance/1000:.1f} km")
+                            logger.info("Detected world: %s, median rider distance (top %d): %.1f km",
+                                       world, len(top_riders), rider_distance/1000)
                             
                             best_match = None
                             best_diff = float('inf')
@@ -1083,11 +1088,11 @@ def detect_route(riders: List[Dict], data_path: Path) -> Tuple[str, Optional[str
                             if best_match and best_diff < 3000:  # Within 3km
                                 route_name = best_match['name']
                                 leadin_distance_m = best_match.get('leadinDistanceInMeters')
-                                print(f"Detected route from GPS + distance matching: {route_name} (diff: {best_diff:.0f}m)")
+                                logger.info("Detected route from GPS + distance matching: %s (diff: %.0fm)", route_name, best_diff)
         except ImportError:
             pass
         except Exception as e:
-            print(f"Warning: Route detection from GPS failed: {e}")
+            logger.warning("Route detection from GPS failed: %s", e)
     
     # Convert route name to slug
     if route_name:
@@ -1224,7 +1229,7 @@ def clean_race_data(
         sample_lng = ref_rider['data']['lng'].iloc[len(ref_rider['data']) // 2]
         world = detect_world_from_coords(sample_lat, sample_lng)
         if world:
-            print(f"Detected world: {world}")
+            logger.info("Detected world: %s", world)
     
     if progress_callback:
         progress_callback(len(csv_files) + 1, total_steps, "Aligning distances...")
@@ -1236,8 +1241,8 @@ def clean_race_data(
     if route_slug:
         route_data = load_route_data(route_slug)
         if route_data:
-            print(f"Using ZwiftMap route data for alignment: {route_data.route_name}")
-            print(f"  Route length: {route_data.total_distance_m/1000:.2f} km, {len(route_data.distance)} points")
+            logger.info("Using ZwiftMap route data for alignment: %s", route_data.route_name)
+            logger.info("  Route length: %.2f km, %d points", route_data.total_distance_m/1000, len(route_data.distance))
             # Read race start time from metadata for late joiner detection
             race_start_time = None
             meta_path = data_path / 'race_meta.json'
@@ -1257,11 +1262,11 @@ def clean_race_data(
             if not finish_line:
                 # Fallback to route total if metadata unavailable
                 finish_line = route_data.total_distance_m / 1000.0
-            print(f"  Finish line set to: {finish_line:.3f} km")
+            logger.info("  Finish line set to: %.3f km", finish_line)
     
     # Fallback to landmark-based alignment if no route data
     if route_data is None:
-        print("No route data available, using landmark-based alignment")
+        logger.info("No route data available, using landmark-based alignment")
         ref_rider = max(riders, key=lambda r: len(r['data']))
         landmarks = find_course_landmarks(ref_rider['data'])
         riders, offsets = align_rider_distances(riders, landmarks)
@@ -1302,7 +1307,7 @@ def clean_race_data(
                     world
                 )
             except Exception as e:
-                print(f"Warning: Could not compute CRR for {rider['name']}: {e}")
+                logger.warning("Could not compute CRR for %s: %s", rider['name'], e)
                 df['crr'] = 0.004
         else:
             df['crr'] = 0.004
@@ -1384,8 +1389,8 @@ def clean_race_data(
                                 'distance_km': leadin_range,
                                 'altitude_m': leadin_interp(leadin_range)
                             })
-                            print(f"  Lead-in elevation: {leadin_offset_km:.2f} km from rider telemetry "
-                                  f"(alt {leadin_alt.min():.0f}-{leadin_alt.max():.0f}m)")
+                            logger.info("  Lead-in elevation: %.2f km from rider telemetry "
+                                  "(alt %.0f-%.0fm)", leadin_offset_km, leadin_alt.min(), leadin_alt.max())
             
             # Offset loop elevation to start after the lead-in
             elev_dist = elev_dist + leadin_offset_km
@@ -1466,7 +1471,7 @@ def determine_finish_line(riders: List[Dict], data_path: Path) -> Optional[float
             segment_dist_cm = meta.get('segment_distance_cm')
             if segment_dist_cm:
                 finish = segment_dist_cm / 100000.0
-                print(f"Finish line from race segment distance: {finish:.2f} km")
+                logger.info("Finish line from race segment distance: %.2f km", finish)
                 return finish
             
             # Fall back to route_id from event API
@@ -1475,10 +1480,10 @@ def determine_finish_line(riders: List[Dict], data_path: Path) -> Optional[float
                 from shared.route_lookup import get_total_race_distance
                 finish = get_total_race_distance(route_id)
                 if finish:
-                    print(f"Finish line from route data: {finish:.2f} km")
+                    logger.info("Finish line from route data: %.2f km", finish)
                     return finish
         except Exception as e:
-            print(f"Warning: Could not get finish line from meta data: {e}")
+            logger.warning("Could not get finish line from meta data: %s", e)
     
     # Try from metadata segmentDistanceInCentimeters
     for rider in riders:
@@ -1495,7 +1500,7 @@ def determine_finish_line(riders: List[Dict], data_path: Path) -> Optional[float
     top_riders = sorted_riders[:min(5, len(sorted_riders))]
     finish_distances = [r['data']['distance_km'].max() for r in top_riders]
     finish = float(np.median(finish_distances))
-    print(f"Finish line estimated from top {len(top_riders)} riders' max distances: {finish:.2f} km")
+    logger.info("Finish line estimated from top %d riders' max distances: %.2f km", len(top_riders), finish)
     return finish
 
 
@@ -1583,7 +1588,7 @@ def load_from_cache(cache_path: Path) -> Optional[CleanedRaceData]:
         # Check cleaning version — discard stale caches
         cached_version = meta.get('cleaning_version', 0)
         if cached_version != CLEANING_VERSION:
-            print(f"Cache version mismatch (cached={cached_version}, current={CLEANING_VERSION}) — re-cleaning")
+            logger.info("Cache version mismatch (cached=%s, current=%s) — re-cleaning", cached_version, CLEANING_VERSION)
             return None
         
         # Load riders
@@ -1628,5 +1633,5 @@ def load_from_cache(cache_path: Path) -> Optional[CleanedRaceData]:
             world=meta.get('world')
         )
     except Exception as e:
-        print(f"Cache load failed: {e}")
+        logger.warning("Cache load failed: %s", e)
         return None

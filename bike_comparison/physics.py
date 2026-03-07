@@ -111,12 +111,15 @@ def calculate_power_for_speed(
     f_total = f_gravity + f_rolling + f_aero
     
     # Power = Force * velocity, adjusted for drivetrain loss
+    # NOTE: Can be negative on descents (gravity exceeds resistance).
+    # Callers should clip to zero where non-negative power is required,
+    # but the raw value is needed for correct draft estimation.
     if speed_mps > 0:
         power = (f_total * speed_mps) / (1 - DRIVETRAIN_LOSS)
     else:
         power = 0.0
     
-    return max(0, power)  # Can't have negative power requirement
+    return power
 
 
 def compare_bike_setups(
@@ -311,29 +314,36 @@ def compare_bike_setups(
         alternative_watts = actual_watts + power_diff
         alternative_watts = np.maximum(alternative_watts, 0)
         
-        # Draft savings estimation
-        # solo_power is steady-state (no acceleration term). For a rider (solo or drafted):
-        #   actual_watts = solo_power + m*a*v / (1 - eta)   [when solo]
-        #   actual_watts = drafted_power + m*a*v / (1 - eta) [when drafted]
-        # So: draft = solo_power - actual_watts + d(KE)/dt / (1 - eta)
-        # Using d(KE)/dt only (not PE) avoids altitude noise issues since
-        # gravity is already accounted for in solo_power via gradient.
-        ke = 0.5 * total_mass * speed_mps**2
-        dke_dt = np.zeros_like(ke)
-        dke_dt[:-1] = np.diff(ke) / dt[1:]
-        dke_dt[-1] = dke_dt[-2] if len(dke_dt) > 1 else 0
+        # Draft savings estimation — gradient-free formulation
+        #
+        # From energy conservation the drafted rider satisfies:
+        #   P_actual*(1-η) = F_roll*v + F_aero_draft*v + d(KE+PE)/dt
+        #
+        # Draft savings = (F_aero_solo - F_aero_draft)*v / (1-η), which gives:
+        #   draft = (F_aero_solo + F_roll)*v/(1-η) - P_actual + d(KE+PE)/dt/(1-η)
+        #
+        # This avoids estimating gradient entirely.  Gravity enters only
+        # through PE = m·g·h (raw altitude, no differentiation for slope).
+        #
+        # resistance_power_solo and energy_change_rate are already computed
+        # above for the bike-comparison logic, so we reuse them directly.
+        #
+        # Negative values mean unmodeled forces are decelerating the rider
+        # beyond what aero+rolling+gravity predict (e.g. the rider applying
+        # in-game brakes on a descent).  We leave them visible rather than
+        # clamping to zero so the user can see the raw estimate.
+        draft_watts = resistance_power_solo - actual_watts + energy_change_rate / (1 - DRIVETRAIN_LOSS)
         
-        draft_watts = solo_power_actual - actual_watts + dke_dt / (1 - DRIVETRAIN_LOSS)
-        
-        # Smooth to reduce discrete derivative noise
-        draft_window = min(10, len(draft_watts))
+        # Smooth to reduce discrete derivative spikiness.
+        draft_window = min(5, len(draft_watts))
         if draft_window > 1:
             dk = np.ones(draft_window) / draft_window
             draft_watts = np.convolve(draft_watts, dk, mode='same')
     else:
         # No recorded power - use physics model only (original behavior)
-        actual_watts = solo_power_actual
-        alternative_watts = solo_power_alternative
+        # Clip to zero: can't pedal negative watts (freewheeling on descents)
+        actual_watts = np.maximum(solo_power_actual, 0)
+        alternative_watts = np.maximum(solo_power_alternative, 0)
         draft_watts = np.zeros_like(actual_watts)
     
     # Calculate differences

@@ -1,0 +1,6 @@
+azure-functions
+azure-kusto-data==4.*
+azure-kusto-ingest==4.*
+azure-identity
+requests
+pandas

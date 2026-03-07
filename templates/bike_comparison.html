@@ -1049,6 +1049,12 @@
             createDiffChart(data);
         }
         
+        function formatMinSec(decimalMin) {
+            const mins = Math.floor(decimalMin);
+            const secs = Math.round((decimalMin - mins) * 60);
+            return mins + ':' + String(secs).padStart(2, '0');
+        }
+
         function createPowerChart(data) {
             const ctx = document.getElementById('powerChart').getContext('2d');
             
@@ -1057,7 +1063,7 @@
             powerChart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: data.chart_data.time_min.map(t => t.toFixed(1)),
+                    labels: data.chart_data.time_min.map(t => formatMinSec(t)),
                     datasets: [
                         {
                             label: 'Actual Bike',
@@ -1092,14 +1098,36 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
                     plugins: {
                         legend: {
                             labels: { color: '#fff' }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(30, 30, 30, 0.95)',
+                            titleColor: '#fff',
+                            bodyColor: '#ccc',
+                            borderColor: 'rgba(255,255,255,0.2)',
+                            borderWidth: 1,
+                            padding: 10,
+                            callbacks: {
+                                title: function(items) {
+                                    return 'Time: ' + items[0].label;
+                                },
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + context.parsed.y.toFixed(1) + ' W';
+                                }
+                            }
                         }
                     },
                     scales: {
                         x: {
-                            title: { display: true, text: 'Time (min)', color: '#888' },
+                            title: { display: true, text: 'Time (m:ss)', color: '#888' },
                             ticks: { color: '#888', maxTicksLimit: 15 },
                             grid: { color: 'rgba(255,255,255,0.1)' }
                         },
@@ -1126,7 +1154,7 @@
             diffChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: data.chart_data.time_min.map(t => t.toFixed(1)),
+                    labels: data.chart_data.time_min.map(t => formatMinSec(t)),
                     datasets: [
                         {
                             label: 'Watts Difference',
@@ -1139,14 +1167,36 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
                     plugins: {
                         legend: {
                             labels: { color: '#fff' }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(30, 30, 30, 0.95)',
+                            titleColor: '#fff',
+                            bodyColor: '#ccc',
+                            borderColor: 'rgba(255,255,255,0.2)',
+                            borderWidth: 1,
+                            padding: 10,
+                            callbacks: {
+                                title: function(items) {
+                                    return 'Time: ' + items[0].label;
+                                },
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + context.parsed.y.toFixed(1) + ' W';
+                                }
+                            }
                         }
                     },
                     scales: {
                         x: {
-                            title: { display: true, text: 'Time (min)', color: '#888' },
+                            title: { display: true, text: 'Time (m:ss)', color: '#888' },
                             ticks: { color: '#888', maxTicksLimit: 15 },
                             grid: { color: 'rgba(255,255,255,0.1)' }
                         },

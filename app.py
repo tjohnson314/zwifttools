@@ -14,9 +14,9 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 import os
+import logging
 import secrets
 import requests
-import traceback
 import gzip
 import json
 import time
@@ -24,6 +24,8 @@ import queue
 import threading
 from datetime import datetime
 from scipy.ndimage import uniform_filter1d
+
+logger = logging.getLogger(__name__)
 
 from bike_comparison.bike_data import get_bike_database, get_bike_stats
 from bike_comparison.physics import compare_bike_setups
@@ -75,15 +77,14 @@ def get_session_tokens() -> ZwiftTokens | None:
         
         # Refresh if expired
         if tokens.is_expired:
-            print(f"Token expired (expires_at={tokens.expires_at}, now={__import__('time').time()}), refreshing...")
+            logger.info("Token expired (expires_at=%s, now=%s), refreshing...", tokens.expires_at, time.time())
             tokens = refresh_access_token(tokens.refresh_token)
             session['tokens'] = tokens.to_dict()
         
         return tokens
     except Exception as e:
         # Token refresh failed, user needs to re-login
-        print(f"get_session_tokens failed: {e}")
-        traceback.print_exc()
+        logger.exception("get_session_tokens failed")
         session.pop('tokens', None)
         return None
 
@@ -274,7 +275,7 @@ def api_my_activities():
 
         return jsonify({'activities': activities, 'start': start, 'limit': limit})
     except Exception as e:
-        traceback.print_exc()
+        logger.exception("Error fetching activities")
         return jsonify({'error': str(e)}), 500
 
 
@@ -355,7 +356,7 @@ def api_activity_enrichment(activity_id):
 
         return jsonify(result)
     except Exception as e:
-        traceback.print_exc()
+        logger.exception("Error enriching activity")
         return jsonify({'error': str(e)}), 500
 
 
@@ -472,7 +473,7 @@ def get_my_profile():
             'name': f"{profile.get('firstName', '')} {profile.get('lastName', '')}".strip()
         })
     except Exception as e:
-        traceback.print_exc()
+        logger.exception("Error fetching profile")
         return jsonify({'error': str(e)}), 500
 
 
@@ -565,9 +566,9 @@ def fetch_activity():
                     surface_types = compute_surface_types_array(lats, lngs, world)
                     non_default = np.sum(surface_types != 'Tarmac')
                     if non_default > 0:
-                        print(f"Surface types: {non_default} points on non-tarmac surfaces")
+                        logger.info("Surface types: %d points on non-tarmac surfaces", non_default)
             except Exception as e:
-                print(f"Warning: Could not compute surface types: {e}")
+                logger.warning("Could not compute surface types: %s", e)
 
         # Build telemetry response
         telemetry = {
@@ -631,7 +632,7 @@ def fetch_activity():
         return jsonify(response)
         
     except Exception as e:
-        traceback.print_exc()
+        logger.exception("Error fetching activity")
         return jsonify({'error': str(e)}), 500
 
 
@@ -801,9 +802,9 @@ def upload_fit():
                     telemetry['crr'] = surface_types_to_crr(surface_types, 'road_bike').tolist()
                     non_default = int(np.sum(surface_types != 'Tarmac'))
                     if non_default > 0:
-                        print(f"FIT surface types: {non_default} points on non-tarmac surfaces")
+                        logger.info("FIT surface types: %d points on non-tarmac surfaces", non_default)
             except Exception as e:
-                print(f"Warning: Could not compute surface types from FIT GPS: {e}")
+                logger.warning("Could not compute surface types from FIT GPS: %s", e)
 
         return jsonify({
             'success': True,
@@ -817,7 +818,7 @@ def upload_fit():
         })
 
     except Exception as e:
-        traceback.print_exc()
+        logger.exception("Error parsing FIT file")
         return jsonify({'error': str(e)}), 500
 
 
@@ -1268,7 +1269,7 @@ def api_race_fetch_stream():
     """SSE endpoint — streams progress while fetching race data."""
     headers = get_headers()
     if not headers:
-        print(f"SSE fetch_stream: No auth headers. Session keys: {list(session.keys())}")
+        logger.warning("SSE fetch_stream: No auth headers. Session keys: %s", list(session.keys()))
         def err_gen():
             yield f"data: {json.dumps({'error': 'Not authenticated. Please log in first.'})}\n\n"
         return Response(err_gen(), mimetype='text/event-stream')
@@ -1290,7 +1291,7 @@ def api_race_fetch_stream():
             race_data_dir.mkdir(exist_ok=True)
 
             def on_progress(current, total, name):
-                print(f"  [{current}/{total}] Fetching {name}...")
+                logger.info("  [%d/%d] Fetching %s...", current, total, name)
                 q.put({'progress': True, 'current': current, 'total': total, 'name': name})
 
             output_dir, message = fetch_race_from_activity(
@@ -1311,7 +1312,7 @@ def api_race_fetch_stream():
                 _race_list_cache = None
                 q.put({'success': True, 'race_id': race_id, 'message': message})
         except Exception as e:
-            traceback.print_exc()
+            logger.exception("Error in fetch_stream background thread")
             q.put({'error': str(e)})
         finally:
             q.put(None)  # sentinel: stream done
@@ -1438,7 +1439,7 @@ def api_race_load():
             ]
         })
     except Exception as e:
-        traceback.print_exc()
+        logger.exception("Error loading race")
         return jsonify({'error': str(e)}), 500
 
 
@@ -1562,7 +1563,7 @@ def api_race_data(race_id):
             if rd is not None:
                 route_latlng = rd.latlng.tolist()
         except Exception as e:
-            print(f"Could not load route latlng: {e}")
+            logger.warning("Could not load route latlng: %s", e)
 
     # Collect dev warnings for localhost debugging
     dev_warnings = []
@@ -1677,7 +1678,7 @@ def api_race_streams(race_id):
 
         return jsonify(result)
     except Exception as e:
-        traceback.print_exc()
+        logger.exception("Error fetching streams")
         return jsonify({'streams': [], 'error': str(e)})
 
 
