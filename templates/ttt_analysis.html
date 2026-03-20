@@ -552,7 +552,7 @@
     function updateSegmentTimes(teams, lo, hi) {
         const segEl = document.getElementById('segmentTimes');
         segEl.innerHTML = '';
-        const timeParts = [];
+        const entries = [];
         teams.forEach((t, i) => {
             const c = TEAM_COLORS[i % TEAM_COLORS.length];
             let tLo = null, tHi = null;
@@ -563,16 +563,20 @@
                 if (t.lead_time_sec[j] != null && t.distance_km[j] <= hi) { tHi = t.lead_time_sec[j]; break; }
             }
             if (tLo != null && tHi != null) {
-                const elapsed = tHi - tLo;
-                const mins = Math.floor(elapsed / 60);
-                const secs = Math.floor(elapsed % 60);
-                timeParts.push(`<span style="color:${c.line}; font-weight:600;">${t.label}</span> <span style="color:#ccc;">${mins}:${secs.toString().padStart(2, '0')}</span>`);
+                entries.push({ label: t.label, color: c.line, elapsed: tHi - tLo });
             }
         });
-        if (timeParts.length) {
-            segEl.innerHTML = `<div style="display:flex; gap:24px; flex-wrap:wrap; font-size:0.95rem; padding:8px 0;">` +
-                timeParts.map(p => `<div>${p}</div>`).join('') + `</div>`;
-        }
+        if (!entries.length) return;
+        entries.sort((a, b) => a.elapsed - b.elapsed);
+        const fastest = entries[0].elapsed;
+        const fmtTime = s => { const m = Math.floor(s / 60); return m + ':' + String(Math.floor(s % 60)).padStart(2, '0'); };
+        const parts = entries.map(e => {
+            const diff = e.elapsed - fastest;
+            const diffStr = diff > 0 ? ` <span style="color:#999;">(+${fmtTime(diff)})</span>` : '';
+            return `<span style="color:${e.color}; font-weight:600;">${e.label}</span> <span style="color:#ccc;">${fmtTime(e.elapsed)}</span>${diffStr}`;
+        });
+        segEl.innerHTML = `<div style="display:flex; gap:24px; flex-wrap:wrap; font-size:0.95rem; padding:8px 0;">` +
+            parts.map(p => `<div>${p}</div>`).join('') + `</div>`;
     }
 
     function updateChartsRange() {
