@@ -344,6 +344,7 @@
             </div>
 
             <div class="team-colors" id="teamLegend"></div>
+            <div id="segmentTimes" style="margin-bottom:16px;"></div>
 
             <div class="chart-container">
                 <h3>Lead Rider Speed</h3>
@@ -545,6 +546,32 @@
         document.getElementById('bikeInfo').textContent = 'Assumed bike: ' + data.ttt_bike;
 
         const teams = data.teams;
+
+        // Segment time summary
+        const segEl = document.getElementById('segmentTimes');
+        segEl.innerHTML = '';
+        const timeParts = [];
+        teams.forEach((t, i) => {
+            const c = TEAM_COLORS[i % TEAM_COLORS.length];
+            // Find lead_time at closest points to lo and hi
+            let tLo = null, tHi = null;
+            for (let j = 0; j < t.distance_km.length; j++) {
+                if (t.lead_time_sec[j] != null && t.distance_km[j] >= lo) { tLo = t.lead_time_sec[j]; break; }
+            }
+            for (let j = t.distance_km.length - 1; j >= 0; j--) {
+                if (t.lead_time_sec[j] != null && t.distance_km[j] <= hi) { tHi = t.lead_time_sec[j]; break; }
+            }
+            if (tLo != null && tHi != null) {
+                const elapsed = tHi - tLo;
+                const mins = Math.floor(elapsed / 60);
+                const secs = Math.floor(elapsed % 60);
+                timeParts.push(`<span style="color:${c.line}; font-weight:600;">${t.label}</span> <span style="color:#ccc;">${mins}:${secs.toString().padStart(2, '0')}</span>`);
+            }
+        });
+        if (timeParts.length) {
+            segEl.innerHTML = `<div style="display:flex; gap:24px; flex-wrap:wrap; font-size:0.95rem; padding:8px 0;">` +
+                timeParts.map(p => `<div>${p}</div>`).join('') + `</div>`;
+        }
 
         // Legend
         const legendEl = document.getElementById('teamLegend');

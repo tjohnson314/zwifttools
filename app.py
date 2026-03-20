@@ -1977,6 +1977,7 @@ def _build_ttt_team_results(all_processed, team_assignments, tag_order):
         lead_speed = np.full(len(dist_axis), np.nan)
         avg_draft_efficiency = np.full(len(dist_axis), np.nan)
         elevation = np.full(len(dist_axis), np.nan)
+        lead_time = np.full(len(dist_axis), np.nan)
 
         for di, d in enumerate(dist_axis):
             connected_draft = []
@@ -2009,6 +2010,7 @@ def _build_ttt_team_results(all_processed, team_assignments, tag_order):
             lead = rider_states[0]
             lead_speed[di] = lead['speed'] * 3.6
             elevation[di] = lead['rd']['altitude_m'][lead['idx']]
+            lead_time[di] = lead['time']
 
             for rs in rider_states:
                 gap_dist = lead['dist'] - rs['dist']
@@ -2064,6 +2066,7 @@ def _build_ttt_team_results(all_processed, team_assignments, tag_order):
             'lead_speed_kph': [None if np.isnan(v) else round(v, 2) for v in lead_speed],
             'avg_draft_efficiency': [None if np.isnan(v) else round(v, 4) for v in avg_draft_efficiency],
             'elevation_m': [None if np.isnan(v) else round(v, 1) for v in elevation],
+            'lead_time_sec': [None if np.isnan(v) else round(v, 1) for v in lead_time],
         })
 
     return team_results
