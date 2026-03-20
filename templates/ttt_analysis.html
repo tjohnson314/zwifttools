@@ -295,6 +295,20 @@
             background: linear-gradient(90deg, #ff6b35, #f7931e);
         }
 
+        .btn-toggle {
+            padding: 4px 12px;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 6px;
+            background: rgba(255,255,255,0.05);
+            color: #888;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+        .btn-toggle.active {
+            background: rgba(247,147,30,0.25);
+            border-color: #f7931e;
+            color: #f7931e;
+        }
 
     </style>
 </head>
@@ -350,6 +364,19 @@
                 <h3>Lead Rider Speed</h3>
                 <div class="chart-wrapper">
                     <canvas id="speedChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h3>Lead Rider Power</h3>
+                    <div style="display:flex; gap:4px;">
+                        <button id="powerToggleW" class="btn-toggle active" onclick="togglePowerUnit('W')">W</button>
+                        <button id="powerToggleWkg" class="btn-toggle" onclick="togglePowerUnit('Wkg')">W/kg</button>
+                    </div>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="powerChart"></canvas>
                 </div>
             </div>
 
@@ -424,6 +451,7 @@
 
     // ---- Chart instances ----
     let speedChartInstance = null;
+    let powerChartInstance = null;
     let draftChartInstance = null;
     let riderChartInstance = null;
     let lastData = null;  // cached response for slider re-render
@@ -587,7 +615,7 @@
         if (lastData) updateSegmentTimes(lastData.teams, lo, hi);
 
         // Update chart x-axis bounds
-        [speedChartInstance, draftChartInstance, riderChartInstance].forEach(chart => {
+        [speedChartInstance, powerChartInstance, draftChartInstance, riderChartInstance].forEach(chart => {
             if (!chart) return;
             chart.options.scales.x.min = lo;
             chart.options.scales.x.max = hi;
@@ -735,6 +763,86 @@
                     },
                     y: {
                         title: { display: true, text: 'Lead Speed (km/h)', color: '#aaa' },
+                        ticks: { color: '#888' },
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                    },
+                    yAlt: {
+                        position: 'right',
+                        title: { display: true, text: 'Elevation (m)', color: '#aaa' },
+                        ticks: { color: '#666' },
+                        grid: { drawOnChartArea: false },
+                    }
+                }
+            }
+        });
+
+        // Lead power chart
+        if (powerChartInstance) powerChartInstance.destroy();
+        const powerUnit = document.getElementById('powerToggleWkg').classList.contains('active') ? 'Wkg' : 'W';
+        const powerDatasets = [
+            {
+                label: 'Elevation (m)',
+                data: elevData,
+                borderColor: 'rgba(180,180,180,0.3)',
+                backgroundColor: 'rgba(180,180,180,0.08)',
+                borderWidth: 1,
+                pointRadius: 0,
+                tension: 0.3,
+                fill: true,
+                yAxisID: 'yAlt',
+                order: 10,
+            },
+            ...teams.map((t, i) => {
+            const c = TEAM_COLORS[i % TEAM_COLORS.length];
+            const isWkg = powerUnit === 'Wkg';
+            const wt = t.avg_weight_kg || 75;
+            return {
+                label: t.label,
+                data: t.distance_km
+                    .map((d, j) => ({ x: d, y: t.lead_power_watts[j] != null ? (isWkg ? t.lead_power_watts[j] / wt : t.lead_power_watts[j]) : null })),
+                borderColor: c.line,
+                backgroundColor: c.bg,
+                borderWidth: 1.5,
+                pointRadius: 0,
+                tension: 0.3,
+                spanGaps: true,
+                yAxisID: 'y',
+            };
+        }),
+        ];
+
+        const powerCtx = document.getElementById('powerChart').getContext('2d');
+        powerChartInstance = new Chart(powerCtx, {
+            type: 'line',
+            data: { datasets: powerDatasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: true, labels: { color: '#ccc' } },
+                    tooltip: {
+                        callbacks: {
+                            title: items => items.length ? `${items[0].parsed.x.toFixed(1)} km` : '',
+                            label: item => {
+                                const v = item.parsed.y;
+                                if (item.dataset.yAxisID === 'yAlt') return `${item.dataset.label}: ${v != null ? v.toFixed(0) + ' m' : 'N/A'}`;
+                                return `${item.dataset.label}: ${v != null ? (powerUnit === 'Wkg' ? v.toFixed(1) + ' W/kg' : v.toFixed(0) + ' W') : 'N/A'}`;
+                            },
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'linear',
+                        min: lo,
+                        max: hi,
+                        title: { display: true, text: 'Distance (km)', color: '#aaa' },
+                        ticks: { color: '#888' },
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                    },
+                    y: {
+                        title: { display: true, text: powerUnit === 'Wkg' ? 'Lead Power (W/kg)' : 'Lead Power (W)', color: '#aaa' },
                         ticks: { color: '#888' },
                         grid: { color: 'rgba(255,255,255,0.05)' },
                     },
@@ -1046,6 +1154,25 @@
                 },
             },
         });
+    }
+
+    function togglePowerUnit(unit) {
+        document.getElementById('powerToggleW').classList.toggle('active', unit === 'W');
+        document.getElementById('powerToggleWkg').classList.toggle('active', unit === 'Wkg');
+        if (!lastData || !powerChartInstance) return;
+        const teams = lastData.teams;
+        const isWkg = unit === 'Wkg';
+        // Update data in place (skip index 0 = elevation)
+        teams.forEach((t, i) => {
+            const ds = powerChartInstance.data.datasets[i + 1];
+            const wt = t.avg_weight_kg || 75;
+            ds.data = t.distance_km.map((d, j) => ({
+                x: d,
+                y: t.lead_power_watts[j] != null ? (isWkg ? t.lead_power_watts[j] / wt : t.lead_power_watts[j]) : null,
+            }));
+        });
+        powerChartInstance.options.scales.y.title.text = isWkg ? 'Lead Power (W/kg)' : 'Lead Power (W)';
+        powerChartInstance.update('none');
     }
 
 

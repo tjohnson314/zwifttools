@@ -1978,6 +1978,7 @@ def _build_ttt_team_results(all_processed, team_assignments, tag_order):
         avg_draft_efficiency = np.full(len(dist_axis), np.nan)
         elevation = np.full(len(dist_axis), np.nan)
         lead_time = np.full(len(dist_axis), np.nan)
+        lead_power = np.full(len(dist_axis), np.nan)
 
         for di, d in enumerate(dist_axis):
             connected_draft = []
@@ -2011,6 +2012,7 @@ def _build_ttt_team_results(all_processed, team_assignments, tag_order):
             lead_speed[di] = lead['speed'] * 3.6
             elevation[di] = lead['rd']['altitude_m'][lead['idx']]
             lead_time[di] = lead['time']
+            lead_power[di] = lead['rd']['power'][lead['idx']]
 
             for rs in rider_states:
                 gap_dist = lead['dist'] - rs['dist']
@@ -2036,6 +2038,7 @@ def _build_ttt_team_results(all_processed, team_assignments, tag_order):
 
         valid_speed = ~np.isnan(lead_speed)
         valid_draft = ~np.isnan(avg_draft_efficiency)
+        valid_power = ~np.isnan(lead_power)
 
         if valid_speed.sum() > 10:
             smooth_w = min(11, int(valid_speed.sum() / 5))
@@ -2059,6 +2062,19 @@ def _build_ttt_team_results(all_processed, team_assignments, tag_order):
                 de[~valid_draft] = np.nan
                 avg_draft_efficiency = de
 
+        if valid_power.sum() > 10:
+            smooth_w = min(11, int(valid_power.sum() / 5))
+            if smooth_w > 1 and smooth_w % 2 == 0:
+                smooth_w += 1
+            if smooth_w > 1:
+                lp = lead_power.copy()
+                lp[~valid_power] = 0
+                lp = uniform_filter1d(lp, smooth_w)
+                lp[~valid_power] = np.nan
+                lead_power = lp
+
+        avg_weight_kg = round(float(np.mean([rd['weight_kg'] for rd in rider_data])), 1)
+
         team_results.append({
             'label': tag,
             'riders': [{'name': rd['name'], 'weight_kg': rd['weight_kg'], 'activity_id': rd['activity_id']} for rd in rider_data],
@@ -2067,6 +2083,8 @@ def _build_ttt_team_results(all_processed, team_assignments, tag_order):
             'avg_draft_efficiency': [None if np.isnan(v) else round(v, 4) for v in avg_draft_efficiency],
             'elevation_m': [None if np.isnan(v) else round(v, 1) for v in elevation],
             'lead_time_sec': [None if np.isnan(v) else round(v, 1) for v in lead_time],
+            'lead_power_watts': [None if np.isnan(v) else round(v, 0) for v in lead_power],
+            'avg_weight_kg': avg_weight_kg,
         })
 
     return team_results
