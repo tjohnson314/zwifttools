@@ -310,6 +310,43 @@
             color: #f7931e;
         }
 
+        .chart-wrapper canvas { cursor: crosshair; }
+
+        .seg-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+            margin-bottom: 4px;
+        }
+        .seg-table th, .seg-table td {
+            padding: 5px 10px;
+            text-align: center;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        .seg-table th { color: #aaa; font-weight: 500; font-size: 0.8rem; }
+        .seg-table tr:last-child td { border-bottom: none; font-weight: 600; }
+        .seg-table .gap { color: #999; font-size: 0.8rem; }
+        .seg-table tbody tr:last-child td { border-top: 1px solid #555; font-weight: 600; }
+        .seg-remove {
+            cursor: pointer;
+            color: #666;
+            font-size: 0.85rem;
+            padding: 0 4px;
+        }
+        .seg-remove:hover { color: #ef5350; }
+        .seg-clear {
+            cursor: pointer;
+            color: #888;
+            font-size: 0.8rem;
+            margin-left: 12px;
+        }
+        .seg-clear:hover { color: #ef5350; }
+        .seg-hint {
+            color: #666;
+            font-size: 0.8rem;
+            font-style: italic;
+        }
+
     </style>
 </head>
 <body>
@@ -457,6 +494,65 @@
     let lastData = null;  // cached response for slider re-render
     let lastRiderData = null;  // cached rider drilldown data for slider re-render
 
+    // ---- Segment points ----
+    let segmentPoints = [];  // sorted array of distance (km) values
+
+    // Chart.js plugin to draw vertical segment lines
+    const segmentLinePlugin = {
+        id: 'segmentLines',
+        afterDraw(chart) {
+            if (!segmentPoints.length) return;
+            const { ctx, chartArea: { top, bottom }, scales: { x } } = chart;
+            ctx.save();
+            ctx.setLineDash([6, 4]);
+            ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+            ctx.lineWidth = 1.5;
+            for (const d of segmentPoints) {
+                const px = x.getPixelForValue(d);
+                if (px >= x.left && px <= x.right) {
+                    ctx.beginPath();
+                    ctx.moveTo(px, top);
+                    ctx.lineTo(px, bottom);
+                    ctx.stroke();
+                }
+            }
+            ctx.restore();
+        }
+    };
+    Chart.register(segmentLinePlugin);
+
+    function onChartClick(e, _elements, chart) {
+        const xVal = chart.scales.x.getValueForPixel(e.x);
+        if (xVal == null || isNaN(xVal)) return;
+        const snapped = Math.round(xVal * 10) / 10;
+        const lo = parseFloat(document.getElementById('distStart').value);
+        const hi = parseFloat(document.getElementById('distEnd').value);
+        if (snapped <= lo || snapped >= hi) return;
+        // Don't add duplicates (within 0.05 km)
+        if (segmentPoints.some(p => Math.abs(p - snapped) < 0.05)) return;
+        segmentPoints.push(snapped);
+        segmentPoints.sort((a, b) => a - b);
+        updateSegmentDisplay();
+    }
+
+    function removeSegmentPoint(idx) {
+        segmentPoints.splice(idx, 1);
+        updateSegmentDisplay();
+    }
+
+    function clearSegmentPoints() {
+        segmentPoints = [];
+        updateSegmentDisplay();
+    }
+
+    function updateSegmentDisplay() {
+        if (lastData) updateSegmentTimes(lastData.teams);
+        // Redraw charts to show/hide segment lines
+        [speedChartInstance, powerChartInstance, draftChartInstance, riderChartInstance].forEach(c => {
+            if (c) c.update('none');
+        });
+    }
+
     // ---- Drag-and-drop state ----
     let currentAssignments = {};  // activity_id (string) -> team tag
     let currentSubgroupId = null;
@@ -511,6 +607,7 @@
             }
             clearStatus();
             lastData = data;
+            segmentPoints = [];
             currentSubgroupId = sgId;
             const url = new URL(window.location);
             url.searchParams.set('subgroup', sgId);
@@ -577,34 +674,131 @@
         updateChartsRange();
     }
 
-    function updateSegmentTimes(teams, lo, hi) {
+    function updateSegmentTimes(teams, loOverride, hiOverride) {
         const segEl = document.getElementById('segmentTimes');
         segEl.innerHTML = '';
-        const entries = [];
-        teams.forEach((t, i) => {
-            const c = TEAM_COLORS[i % TEAM_COLORS.length];
-            let tLo = null, tHi = null;
-            for (let j = 0; j < t.distance_km.length; j++) {
-                if (t.lead_time_sec[j] != null && t.distance_km[j] >= lo) { tLo = t.lead_time_sec[j]; break; }
-            }
-            for (let j = t.distance_km.length - 1; j >= 0; j--) {
-                if (t.lead_time_sec[j] != null && t.distance_km[j] <= hi) { tHi = t.lead_time_sec[j]; break; }
-            }
-            if (tLo != null && tHi != null) {
-                entries.push({ label: t.label, color: c.line, elapsed: tHi - tLo });
-            }
-        });
-        if (!entries.length) return;
-        entries.sort((a, b) => a.elapsed - b.elapsed);
-        const fastest = entries[0].elapsed;
+        const lo = loOverride != null ? loOverride : parseFloat(document.getElementById('distStart').value);
+        const hi = hiOverride != null ? hiOverride : parseFloat(document.getElementById('distEnd').value);
         const fmtTime = s => { const m = Math.floor(s / 60); return m + ':' + String(Math.floor(s % 60)).padStart(2, '0'); };
-        const parts = entries.map(e => {
-            const diff = e.elapsed - fastest;
-            const diffStr = diff > 0 ? ` <span style="color:#999;">(+${fmtTime(diff)})</span>` : '';
-            return `<span style="color:${e.color}; font-weight:600;">${e.label}</span> <span style="color:#ccc;">${fmtTime(e.elapsed)}</span>${diffStr}`;
+
+        // Helper: get lead time at a distance for a team
+        function getTimeAt(t, d) {
+            for (let j = 0; j < t.distance_km.length; j++) {
+                if (t.lead_time_sec[j] != null && t.distance_km[j] >= d) return t.lead_time_sec[j];
+            }
+            return null;
+        }
+
+        // Build ordered team info
+        const teamInfo = teams.map((t, i) => ({
+            label: t.label,
+            color: TEAM_COLORS[i % TEAM_COLORS.length].line,
+            team: t,
+        }));
+
+        // Build segment boundaries
+        const boundaries = [lo];
+        for (const p of segmentPoints) {
+            if (p > lo && p < hi) boundaries.push(p);
+        }
+        boundaries.push(hi);
+
+        if (boundaries.length <= 2 && segmentPoints.length === 0) {
+            // Simple view — no segment points
+            const entries = [];
+            teamInfo.forEach(ti => {
+                const tLo = getTimeAt(ti.team, lo);
+                let tHi = null;
+                for (let j = ti.team.distance_km.length - 1; j >= 0; j--) {
+                    if (ti.team.lead_time_sec[j] != null && ti.team.distance_km[j] <= hi) { tHi = ti.team.lead_time_sec[j]; break; }
+                }
+                if (tLo != null && tHi != null) entries.push({ ...ti, elapsed: tHi - tLo });
+            });
+            if (!entries.length) return;
+            entries.sort((a, b) => a.elapsed - b.elapsed);
+            const fastest = entries[0].elapsed;
+            const parts = entries.map(e => {
+                const diff = e.elapsed - fastest;
+                const diffStr = diff > 0 ? ` <span style="color:#999;">(+${fmtTime(diff)})</span>` : '';
+                return `<span style="color:${e.color}; font-weight:600;">${e.label}</span> <span style="color:#ccc;">${fmtTime(e.elapsed)}</span>${diffStr}`;
+            });
+            segEl.innerHTML = `<div style="display:flex; gap:24px; flex-wrap:wrap; font-size:0.95rem; padding:8px 0;">` +
+                parts.map(p => `<div>${p}</div>`).join('') +
+                `</div><span class="seg-hint">Click on a chart to add segment splits</span>`;
+            return;
+        }
+
+        // Table view — segment points exist
+        // Compute elapsed per segment per team
+        const segments = [];
+        for (let s = 0; s < boundaries.length - 1; s++) {
+            const sLo = boundaries[s], sHi = boundaries[s + 1];
+            const row = { lo: sLo, hi: sHi, times: {} };
+            teamInfo.forEach(ti => {
+                const tLo = getTimeAt(ti.team, sLo);
+                let tHi = null;
+                for (let j = ti.team.distance_km.length - 1; j >= 0; j--) {
+                    if (ti.team.lead_time_sec[j] != null && ti.team.distance_km[j] <= sHi) { tHi = ti.team.lead_time_sec[j]; break; }
+                }
+                row.times[ti.label] = (tLo != null && tHi != null) ? tHi - tLo : null;
+            });
+            segments.push(row);
+        }
+
+        // Overall totals
+        const totals = {};
+        teamInfo.forEach(ti => {
+            totals[ti.label] = segments.reduce((sum, seg) => sum + (seg.times[ti.label] || 0), 0);
         });
-        segEl.innerHTML = `<div style="display:flex; gap:24px; flex-wrap:wrap; font-size:0.95rem; padding:8px 0;">` +
-            parts.map(p => `<div>${p}</div>`).join('') + `</div>`;
+
+        // Build table
+        let html = `<div style="display:flex; align-items:center; margin-bottom:8px;">`;
+        html += `<span style="color:#aaa; font-weight:600; font-size:0.9rem;">Segment Splits</span>`;
+        html += `<span class="seg-clear" onclick="clearSegmentPoints()" title="Remove all splits">&times; Clear all</span>`;
+        html += `</div>`;
+        html += `<table class="seg-table"><thead><tr><th>Segment</th>`;
+        teamInfo.forEach(ti => {
+            html += `<th style="color:${ti.color}">${ti.label}</th>`;
+        });
+        html += `<th></th></tr></thead><tbody>`;
+
+        segments.forEach((seg, si) => {
+            // Find fastest on this segment
+            let minTime = Infinity;
+            teamInfo.forEach(ti => { if (seg.times[ti.label] != null && seg.times[ti.label] < minTime) minTime = seg.times[ti.label]; });
+
+            html += `<tr><td style="color:#aaa; text-align:left;">${seg.lo.toFixed(1)}&ndash;${seg.hi.toFixed(1)} km</td>`;
+            teamInfo.forEach(ti => {
+                const t = seg.times[ti.label];
+                if (t == null) { html += `<td>—</td>`; return; }
+                const diff = t - minTime;
+                const diffStr = diff > 0.5 ? ` <span class="gap">+${fmtTime(diff)}</span>` : '';
+                html += `<td style="color:${ti.color}">${fmtTime(t)}${diffStr}</td>`;
+            });
+            // The X button removes the segment boundary at seg.hi (unless it's the overall end)
+            if (si < segments.length - 1) {
+                const ptIdx = segmentPoints.indexOf(seg.hi);
+                html += `<td><span class="seg-remove" onclick="removeSegmentPoint(${ptIdx})" title="Remove split at ${seg.hi.toFixed(1)} km">&times;</span></td>`;
+            } else {
+                html += `<td></td>`;
+            }
+            html += `</tr>`;
+        });
+
+        // Total row
+        let minTotal = Infinity;
+        teamInfo.forEach(ti => { if (totals[ti.label] < minTotal) minTotal = totals[ti.label]; });
+        html += `<tr><td style="color:#ccc; text-align:left;">Total</td>`;
+        teamInfo.forEach(ti => {
+            const t = totals[ti.label];
+            const diff = t - minTotal;
+            const diffStr = diff > 0.5 ? ` <span class="gap">+${fmtTime(diff)}</span>` : '';
+            html += `<td style="color:${ti.color}">${fmtTime(t)}${diffStr}</td>`;
+        });
+        html += `<td></td></tr>`;
+
+        html += `</tbody></table>`;
+        segEl.innerHTML = html;
     }
 
     function updateChartsRange() {
@@ -612,7 +806,7 @@
         const hi = parseFloat(document.getElementById('distEnd').value);
 
         // Update segment times
-        if (lastData) updateSegmentTimes(lastData.teams, lo, hi);
+        if (lastData) updateSegmentTimes(lastData.teams);
 
         // Update chart x-axis bounds
         [speedChartInstance, powerChartInstance, draftChartInstance, riderChartInstance].forEach(chart => {
@@ -633,7 +827,7 @@
         const teams = data.teams;
 
         // Segment time summary
-        updateSegmentTimes(teams, lo, hi);
+        updateSegmentTimes(teams);
 
         // Legend
         const legendEl = document.getElementById('teamLegend');
@@ -738,6 +932,7 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                onClick: onChartClick,
                 interaction: { mode: 'index', intersect: false },
                 plugins: {
                     legend: { display: true, labels: { color: '#ccc' } },
@@ -818,6 +1013,7 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                onClick: onChartClick,
                 interaction: { mode: 'index', intersect: false },
                 plugins: {
                     legend: { display: true, labels: { color: '#ccc' } },
@@ -895,6 +1091,7 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                onClick: onChartClick,
                 interaction: { mode: 'index', intersect: false },
                 plugins: {
                     legend: { display: true, labels: { color: '#ccc' } },
@@ -1115,6 +1312,7 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                onClick: onChartClick,
                 interaction: { mode: 'index', intersect: false },
                 plugins: {
                     legend: { display: true, labels: { color: '#ccc' } },
