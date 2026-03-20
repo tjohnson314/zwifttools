@@ -416,6 +416,12 @@
     function handleAuth() { window.location.href = '/auth/login'; }
     checkAuth();
 
+    // Pre-fill subgroup ID from URL params
+    (function() {
+        const sg = new URLSearchParams(window.location.search).get('subgroup');
+        if (sg) document.getElementById('subgroupId').value = sg;
+    })();
+
     // ---- Chart instances ----
     let speedChartInstance = null;
     let draftChartInstance = null;
@@ -478,6 +484,9 @@
             clearStatus();
             lastData = data;
             currentSubgroupId = sgId;
+            const url = new URL(window.location);
+            url.searchParams.set('subgroup', sgId);
+            history.replaceState(null, '', url);
             allTeamTags = data.team_tags || [];
             // Build assignments map from team rosters
             currentAssignments = {};
@@ -495,6 +504,9 @@
             btn.textContent = 'Analyze Race';
         }
     }
+
+    // Auto-fetch if subgroup ID was set from URL
+    if (document.getElementById('subgroupId').value) fetchTTT();
 
     function initSlider(data) {
         const maxDist = Math.max(...data.teams.map(t => Math.max(...t.distance_km)));
