@@ -546,26 +546,15 @@
             else endEl.value = lo;
         }
         updateDistLabels();
-        if (lastData) renderResults(lastData);
-        if (lastRiderData) renderRiderChart(lastRiderData);
+        updateChartsRange();
     }
 
-    function renderResults(data) {
-        const lo = parseFloat(document.getElementById('distStart').value);
-        const hi = parseFloat(document.getElementById('distEnd').value);
-        document.getElementById('results').style.display = 'block';
-        document.getElementById('eventTitle').textContent = data.event_name;
-        document.getElementById('bikeInfo').textContent = 'Assumed bike: ' + data.ttt_bike;
-
-        const teams = data.teams;
-
-        // Segment time summary
+    function updateSegmentTimes(teams, lo, hi) {
         const segEl = document.getElementById('segmentTimes');
         segEl.innerHTML = '';
         const timeParts = [];
         teams.forEach((t, i) => {
             const c = TEAM_COLORS[i % TEAM_COLORS.length];
-            // Find lead_time at closest points to lo and hi
             let tLo = null, tHi = null;
             for (let j = 0; j < t.distance_km.length; j++) {
                 if (t.lead_time_sec[j] != null && t.distance_km[j] >= lo) { tLo = t.lead_time_sec[j]; break; }
@@ -584,6 +573,35 @@
             segEl.innerHTML = `<div style="display:flex; gap:24px; flex-wrap:wrap; font-size:0.95rem; padding:8px 0;">` +
                 timeParts.map(p => `<div>${p}</div>`).join('') + `</div>`;
         }
+    }
+
+    function updateChartsRange() {
+        const lo = parseFloat(document.getElementById('distStart').value);
+        const hi = parseFloat(document.getElementById('distEnd').value);
+
+        // Update segment times
+        if (lastData) updateSegmentTimes(lastData.teams, lo, hi);
+
+        // Update chart x-axis bounds
+        [speedChartInstance, draftChartInstance, riderChartInstance].forEach(chart => {
+            if (!chart) return;
+            chart.options.scales.x.min = lo;
+            chart.options.scales.x.max = hi;
+            chart.update('none');
+        });
+    }
+
+    function renderResults(data) {
+        const lo = parseFloat(document.getElementById('distStart').value);
+        const hi = parseFloat(document.getElementById('distEnd').value);
+        document.getElementById('results').style.display = 'block';
+        document.getElementById('eventTitle').textContent = data.event_name;
+        document.getElementById('bikeInfo').textContent = 'Assumed bike: ' + data.ttt_bike;
+
+        const teams = data.teams;
+
+        // Segment time summary
+        updateSegmentTimes(teams, lo, hi);
 
         // Legend
         const legendEl = document.getElementById('teamLegend');
@@ -650,7 +668,7 @@
         if (speedChartInstance) speedChartInstance.destroy();
         const elevData = teams[0].distance_km
             .map((d, j) => ({ x: d, y: teams[0].elevation_m[j] }))
-            .filter(p => p.x >= lo && p.x <= hi && p.y != null);
+            .filter(p => p.y != null);
         const speedDatasets = [
             {
                 label: 'Elevation (m)',
@@ -669,8 +687,7 @@
             return {
                 label: t.label,
                 data: t.distance_km
-                    .map((d, j) => ({ x: d, y: t.lead_speed_kph[j] }))
-                    .filter(p => p.x >= lo && p.x <= hi),
+                    .map((d, j) => ({ x: d, y: t.lead_speed_kph[j] })),
                 borderColor: c.line,
                 backgroundColor: c.bg,
                 borderWidth: 1.5,
@@ -706,6 +723,8 @@
                 scales: {
                     x: {
                         type: 'linear',
+                        min: lo,
+                        max: hi,
                         title: { display: true, text: 'Distance (km)', color: '#aaa' },
                         ticks: { color: '#888' },
                         grid: { color: 'rgba(255,255,255,0.05)' },
@@ -745,8 +764,7 @@
             return {
                 label: t.label,
                 data: t.distance_km
-                    .map((d, j) => ({ x: d, y: t.avg_draft_efficiency[j] != null ? t.avg_draft_efficiency[j] * 100 : null }))
-                    .filter(p => p.x >= lo && p.x <= hi),
+                    .map((d, j) => ({ x: d, y: t.avg_draft_efficiency[j] != null ? t.avg_draft_efficiency[j] * 100 : null })),
                 borderColor: c.line,
                 backgroundColor: c.bg,
                 borderWidth: 1.5,
@@ -782,6 +800,8 @@
                 scales: {
                     x: {
                         type: 'linear',
+                        min: lo,
+                        max: hi,
                         title: { display: true, text: 'Distance (km)', color: '#aaa' },
                         ticks: { color: '#888' },
                         grid: { color: 'rgba(255,255,255,0.05)' },
@@ -933,15 +953,11 @@
         const lo = parseFloat(document.getElementById('distStart').value);
         const hi = parseFloat(document.getElementById('distEnd').value);
 
-        // Filter to distance range
-        const filtered = rd.distance_km.map((d, i) => ({
-            d, alt: rd.altitude_m[i], pow: rd.power_watts[i], draft: rd.draft_watts[i]
-        })).filter(p => p.d >= lo && p.d <= hi);
-
-        const dist = filtered.map(p => p.d);
-        const alt = filtered.map(p => p.alt);
-        const pow = filtered.map(p => p.pow);
-        const draft = filtered.map(p => p.draft);
+        // Use full data; x-axis min/max controls visible range
+        const dist = rd.distance_km;
+        const alt = rd.altitude_m;
+        const pow = rd.power_watts;
+        const draft = rd.draft_watts;
 
         const ctx = document.getElementById('riderChart').getContext('2d');
         riderChartInstance = new Chart(ctx, {
@@ -1005,6 +1021,8 @@
                 scales: {
                     x: {
                         type: 'linear',
+                        min: lo,
+                        max: hi,
                         title: { display: true, text: 'Distance (km)', color: '#aaa' },
                         ticks: { color: '#888' },
                         grid: { color: 'rgba(255,255,255,0.05)' },
