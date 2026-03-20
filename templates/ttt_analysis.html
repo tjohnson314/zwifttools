@@ -204,6 +204,12 @@
             align-items: center;
             gap: 6px;
             font-size: 0.9rem;
+            cursor: pointer;
+            user-select: none;
+            transition: opacity 0.15s;
+        }
+        .team-legend-item.hidden-team {
+            opacity: 0.3;
         }
         .team-swatch {
             width: 14px;
@@ -494,6 +500,31 @@
     let lastData = null;  // cached response for slider re-render
     let lastRiderData = null;  // cached rider drilldown data for slider re-render
 
+    // ---- Team visibility toggle ----
+    let hiddenTeams = new Set();  // team labels that are toggled off
+
+    function toggleTeam(label) {
+        if (hiddenTeams.has(label)) hiddenTeams.delete(label);
+        else hiddenTeams.add(label);
+        // Update legend styling
+        document.querySelectorAll('.team-legend-item').forEach(el => {
+            el.classList.toggle('hidden-team', hiddenTeams.has(el.dataset.team));
+        });
+        syncChartVisibility();
+        if (lastData) updateSegmentTimes(lastData.teams);
+    }
+
+    function syncChartVisibility() {
+        [speedChartInstance, powerChartInstance, draftChartInstance].forEach(chart => {
+            if (!chart) return;
+            chart.data.datasets.forEach(ds => {
+                if (ds.yAxisID === 'yAlt') return;  // elevation always visible
+                ds.hidden = hiddenTeams.has(ds.label);
+            });
+            chart.update('none');
+        });
+    }
+
     // ---- Segment points ----
     let segmentPoints = [];  // sorted array of distance (km) values
 
@@ -608,6 +639,7 @@
             clearStatus();
             lastData = data;
             segmentPoints = [];
+            hiddenTeams = new Set();
             currentSubgroupId = sgId;
             const url = new URL(window.location);
             url.searchParams.set('subgroup', sgId);
@@ -689,12 +721,12 @@
             return null;
         }
 
-        // Build ordered team info
+        // Build ordered team info (excluding hidden teams)
         const teamInfo = teams.map((t, i) => ({
             label: t.label,
             color: TEAM_COLORS[i % TEAM_COLORS.length].line,
             team: t,
-        }));
+        })).filter(ti => !hiddenTeams.has(ti.label));
 
         // Build segment boundaries
         const boundaries = [lo];
@@ -834,7 +866,9 @@
         legendEl.innerHTML = '';
         teams.forEach((t, i) => {
             const c = TEAM_COLORS[i % TEAM_COLORS.length];
-            legendEl.innerHTML += `<div class="team-legend-item">
+            const hidden = hiddenTeams.has(t.label) ? ' hidden-team' : '';
+            legendEl.innerHTML += `<div class="team-legend-item${hidden}" data-team="${t.label}" onclick="toggleTeam('${t.label.replace(/'/g, "\\'")}')"
+                title="Click to toggle visibility">
                 <div class="team-swatch" style="background:${c.line}"></div>
                 <span>${t.label} (${t.riders.length} riders)</span>
             </div>`;
