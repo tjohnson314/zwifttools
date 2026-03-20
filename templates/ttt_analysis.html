@@ -609,7 +609,23 @@
 
         // Speed chart
         if (speedChartInstance) speedChartInstance.destroy();
-        const speedDatasets = teams.map((t, i) => {
+        const elevData = teams[0].distance_km
+            .map((d, j) => ({ x: d, y: teams[0].elevation_m[j] }))
+            .filter(p => p.x >= lo && p.x <= hi && p.y != null);
+        const speedDatasets = [
+            {
+                label: 'Elevation (m)',
+                data: elevData,
+                borderColor: 'rgba(180,180,180,0.3)',
+                backgroundColor: 'rgba(180,180,180,0.08)',
+                borderWidth: 1,
+                pointRadius: 0,
+                tension: 0.3,
+                fill: true,
+                yAxisID: 'yAlt',
+                order: 10,
+            },
+            ...teams.map((t, i) => {
             const c = TEAM_COLORS[i % TEAM_COLORS.length];
             return {
                 label: t.label,
@@ -622,8 +638,10 @@
                 pointRadius: 0,
                 tension: 0.3,
                 spanGaps: true,
+                yAxisID: 'y',
             };
-        });
+        }),
+        ];
 
         const speedCtx = document.getElementById('speedChart').getContext('2d');
         speedChartInstance = new Chart(speedCtx, {
@@ -638,7 +656,11 @@
                     tooltip: {
                         callbacks: {
                             title: items => items.length ? `${items[0].parsed.x.toFixed(1)} km` : '',
-                            label: item => `${item.dataset.label}: ${item.parsed.y != null ? item.parsed.y.toFixed(1) + ' km/h' : 'N/A'}`,
+                            label: item => {
+                                const v = item.parsed.y;
+                                if (item.dataset.yAxisID === 'yAlt') return `${item.dataset.label}: ${v != null ? v.toFixed(0) + ' m' : 'N/A'}`;
+                                return `${item.dataset.label}: ${v != null ? v.toFixed(1) + ' km/h' : 'N/A'}`;
+                            },
                         }
                     }
                 },
@@ -653,6 +675,12 @@
                         title: { display: true, text: 'Lead Speed (km/h)', color: '#aaa' },
                         ticks: { color: '#888' },
                         grid: { color: 'rgba(255,255,255,0.05)' },
+                    },
+                    yAlt: {
+                        position: 'right',
+                        title: { display: true, text: 'Elevation (m)', color: '#aaa' },
+                        ticks: { color: '#666' },
+                        grid: { drawOnChartArea: false },
                     }
                 }
             }
@@ -660,7 +688,20 @@
 
         // Draft efficiency chart
         if (draftChartInstance) draftChartInstance.destroy();
-        const draftDatasets = teams.map((t, i) => {
+        const draftDatasets = [
+            {
+                label: 'Elevation (m)',
+                data: elevData,
+                borderColor: 'rgba(180,180,180,0.3)',
+                backgroundColor: 'rgba(180,180,180,0.08)',
+                borderWidth: 1,
+                pointRadius: 0,
+                tension: 0.3,
+                fill: true,
+                yAxisID: 'yAlt',
+                order: 10,
+            },
+            ...teams.map((t, i) => {
             const c = TEAM_COLORS[i % TEAM_COLORS.length];
             return {
                 label: t.label,
@@ -673,8 +714,10 @@
                 pointRadius: 0,
                 tension: 0.3,
                 spanGaps: true,
+                yAxisID: 'y',
             };
-        });
+        }),
+        ];
 
         const draftCtx = document.getElementById('draftChart').getContext('2d');
         draftChartInstance = new Chart(draftCtx, {
@@ -689,7 +732,11 @@
                     tooltip: {
                         callbacks: {
                             title: items => items.length ? `${items[0].parsed.x.toFixed(1)} km` : '',
-                            label: item => `${item.dataset.label}: ${item.parsed.y != null ? item.parsed.y.toFixed(1) + '%' : 'N/A'}`,
+                            label: item => {
+                                const v = item.parsed.y;
+                                if (item.dataset.yAxisID === 'yAlt') return `${item.dataset.label}: ${v != null ? v.toFixed(0) + ' m' : 'N/A'}`;
+                                return `${item.dataset.label}: ${v != null ? v.toFixed(1) + '%' : 'N/A'}`;
+                            },
                         }
                     }
                 },
@@ -704,6 +751,12 @@
                         title: { display: true, text: 'Draft Efficiency (%)', color: '#aaa' },
                         ticks: { color: '#888' },
                         grid: { color: 'rgba(255,255,255,0.05)' },
+                    },
+                    yAlt: {
+                        position: 'right',
+                        title: { display: true, text: 'Elevation (m)', color: '#aaa' },
+                        ticks: { color: '#666' },
+                        grid: { drawOnChartArea: false },
                     }
                 }
             }
