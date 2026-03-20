@@ -326,8 +326,12 @@
         }
         .seg-table th, .seg-table td {
             padding: 5px 10px;
-            text-align: center;
+            text-align: left;
             border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        .seg-table th:first-child, .seg-table td:first-child {
+            width: 110px;
+            white-space: nowrap;
         }
         .seg-table th { color: #aaa; font-weight: 500; font-size: 0.8rem; }
         .seg-table tr:last-child td { border-bottom: none; font-weight: 600; }
@@ -799,12 +803,13 @@
             let minTime = Infinity;
             teamInfo.forEach(ti => { if (seg.times[ti.label] != null && seg.times[ti.label] < minTime) minTime = seg.times[ti.label]; });
 
-            html += `<tr><td style="color:#aaa; text-align:left;">${seg.lo.toFixed(1)}&ndash;${seg.hi.toFixed(1)} km</td>`;
+            html += `<tr><td style="color:#aaa;">${seg.lo.toFixed(1)}&ndash;${seg.hi.toFixed(1)} km</td>`;
             teamInfo.forEach(ti => {
                 const t = seg.times[ti.label];
                 if (t == null) { html += `<td>—</td>`; return; }
                 const diff = t - minTime;
-                const diffStr = diff > 0.5 ? ` <span class="gap">+${fmtTime(diff)}</span>` : '';
+                const pct = minTime > 0 ? Math.round(diff / minTime * 100) : 0;
+                const diffStr = diff > 0.5 ? ` <span class="gap">+${fmtTime(diff)} (+${pct}%)</span>` : '';
                 html += `<td style="color:${ti.color}">${fmtTime(t)}${diffStr}</td>`;
             });
             // The X button removes the segment boundary at seg.hi (unless it's the overall end)
@@ -820,11 +825,12 @@
         // Total row
         let minTotal = Infinity;
         teamInfo.forEach(ti => { if (totals[ti.label] < minTotal) minTotal = totals[ti.label]; });
-        html += `<tr><td style="color:#ccc; text-align:left;">Total</td>`;
+        html += `<tr><td style="color:#ccc;">Total</td>`;
         teamInfo.forEach(ti => {
             const t = totals[ti.label];
             const diff = t - minTotal;
-            const diffStr = diff > 0.5 ? ` <span class="gap">+${fmtTime(diff)}</span>` : '';
+            const pct = minTotal > 0 ? Math.round(diff / minTotal * 100) : 0;
+            const diffStr = diff > 0.5 ? ` <span class="gap">+${fmtTime(diff)} (+${pct}%)</span>` : '';
             html += `<td style="color:${ti.color}">${fmtTime(t)}${diffStr}</td>`;
         });
         html += `<td></td></tr>`;
