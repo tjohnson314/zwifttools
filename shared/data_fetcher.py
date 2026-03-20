@@ -274,6 +274,12 @@ def get_race_entries(event_subgroup_id, headers, limit=50):
                 p['segment_distance_cm'] = segment_distance_cm
             if elapsed_ms:
                 p['elapsed_ms'] = elapsed_ms
+            end_date = activity_data_entry.get('endDate')
+            if end_date:
+                p['end_date'] = end_date
+            height_cm = profile_data.get('heightInCentimeters')
+            if height_cm:
+                p['height_cm'] = height_cm
             participants.append(p)
     
     return participants, None

@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TTT Analysis - Zwift Tools</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 30px;
+        }
+        .back-link {
+            color: #888;
+            text-decoration: none;
+            font-size: 0.9rem;
+            margin-bottom: 8px;
+            display: inline-block;
+        }
+        .back-link:hover { color: #f7931e; }
+        h1 {
+            font-size: 2rem;
+            background: linear-gradient(90deg, #ff6b35, #f7931e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle { color: #888; margin-top: 4px; }
+        .auth-section { display: flex; align-items: center; gap: 12px; padding-top: 20px; }
+        .auth-status { font-size: 0.9rem; color: #888; }
+        .auth-status.logged-in { color: #4caf50; }
+        .btn-auth {
+            padding: 8px 16px;
+            font-size: 0.9rem;
+            border-radius: 6px;
+            border: 2px solid #f7931e;
+            background: transparent;
+            color: #f7931e;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn-auth:hover { background: #f7931e; color: #1a1a2e; }
+
+        .input-section {
+            background: rgba(255,255,255,0.05);
+            border: 2px solid rgba(255,255,255,0.08);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        label { font-weight: 600; display: block; margin-bottom: 8px; }
+        input[type="text"] {
+            background: rgba(255,255,255,0.08);
+            border: 2px solid rgba(255,255,255,0.15);
+            border-radius: 8px;
+            color: #fff;
+            padding: 10px 14px;
+            font-size: 1rem;
+            width: 100%;
+            max-width: 600px;
+        }
+        input[type="text"]:focus { outline: none; border-color: #f7931e; }
+        .btn-primary {
+            padding: 10px 24px;
+            font-size: 1rem;
+            border-radius: 8px;
+            border: none;
+            background: linear-gradient(135deg, #ff6b35, #f7931e);
+            color: #fff;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+            margin-top: 12px;
+        }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(247,147,30,0.3); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+        .status-msg {
+            margin-top: 12px;
+            padding: 12px;
+            border-radius: 8px;
+            display: none;
+        }
+        .status-msg.info { display: block; background: rgba(33,150,243,0.15); color: #64b5f6; }
+        .status-msg.error { display: block; background: rgba(244,67,54,0.15); color: #ef9a9a; }
+        .status-msg.success { display: block; background: rgba(76,175,80,0.15); color: #81c784; }
+
+        .results { display: none; }
+        .event-title {
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        .bike-info { color: #888; font-size: 0.9rem; margin-bottom: 20px; }
+
+        .chart-container {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+        .chart-container h3 {
+            margin-bottom: 12px;
+            color: #f7931e;
+        }
+        .chart-wrapper {
+            position: relative;
+            height: 350px;
+        }
+
+        .team-roster {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 8px;
+            min-height: 36px;
+        }
+        .rider-tag {
+            background: rgba(255,255,255,0.08);
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            cursor: grab;
+            user-select: none;
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+        .rider-tag:active { cursor: grabbing; }
+        .rider-tag.dragging {
+            opacity: 0.4;
+            transform: scale(0.95);
+        }
+
+        .team-drop-zone {
+            border: 2px dashed transparent;
+            border-radius: 10px;
+            padding: 8px;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        .team-drop-zone.drag-over {
+            border-color: #f7931e;
+            background: rgba(247,147,30,0.06);
+        }
+
+        .unassigned-section {
+            background: rgba(255,255,255,0.03);
+            border: 2px dashed rgba(255,255,255,0.12);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 24px;
+        }
+        .unassigned-section h3 {
+            color: #ef9a9a;
+            margin-bottom: 12px;
+        }
+        .unassigned-section .team-roster {
+            min-height: 40px;
+        }
+        .unassigned-section.drag-over {
+            border-color: #ef9a9a;
+            background: rgba(239,154,154,0.06);
+        }
+
+        .drilldown-section {
+            margin-top: 32px;
+        }
+        .drilldown-section h2 {
+            font-size: 1.3rem;
+            color: #f7931e;
+            margin-bottom: 16px;
+        }
+        .rider-select {
+            background: rgba(255,255,255,0.08);
+            border: 2px solid rgba(255,255,255,0.15);
+            border-radius: 8px;
+            color: #fff;
+            padding: 10px 14px;
+            font-size: 1rem;
+            width: 100%;
+            max-width: 400px;
+            cursor: pointer;
+        }
+        .rider-select:focus { outline: none; border-color: #f7931e; }
+        .rider-select option { background: #1a1a2e; color: #e0e0e0; }
+
+        .team-colors {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        .team-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.9rem;
+        }
+        .team-swatch {
+            width: 14px;
+            height: 14px;
+            border-radius: 3px;
+        }
+        .dist-range-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .dist-range-header label {
+            font-weight: 600;
+            color: #f7931e;
+            font-size: 0.95rem;
+        }
+        .dist-range-values span {
+            color: #4fc3f7;
+            font-weight: 600;
+        }
+        .dual-range {
+            position: relative;
+            height: 36px;
+            margin: 0 8px;
+        }
+        .dual-range input[type="range"] {
+            position: absolute;
+            width: 100%;
+            top: 0;
+            height: 36px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: transparent;
+            pointer-events: none;
+            margin: 0;
+        }
+        .dual-range input[type="range"]::-webkit-slider-runnable-track {
+            height: 6px;
+            border-radius: 3px;
+            background: transparent;
+        }
+        .dual-range input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #f7931e;
+            border: 2px solid #fff;
+            cursor: pointer;
+            pointer-events: auto;
+            margin-top: -7px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            transition: transform 0.15s;
+        }
+        .dual-range input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.15);
+        }
+        .dual-range input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #f7931e;
+            border: 2px solid #fff;
+            cursor: pointer;
+            pointer-events: auto;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        .dual-range input[type="range"]::-moz-range-track {
+            height: 6px;
+            border-radius: 3px;
+            background: transparent;
+        }
+        .range-track {
+            position: absolute;
+            top: 15px;
+            left: 0;
+            right: 0;
+            height: 6px;
+            border-radius: 3px;
+            background: #333;
+        }
+        .range-track-fill {
+            position: absolute;
+            top: 15px;
+            height: 6px;
+            border-radius: 3px;
+            background: linear-gradient(90deg, #ff6b35, #f7931e);
+        }
+
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header-bar">
+            <div>
+                <a href="/" class="back-link">&larr; Back to Tools</a>
+                <h1><span style="-webkit-text-fill-color:initial">&#x1F3C1;</span> TTT Analysis</h1>
+                <p class="subtitle">Analyze Team Time Trial efficiency &mdash; draft savings, lead speed &amp; team cohesion</p>
+            </div>
+            <div class="auth-section">
+                <span id="authStatus" class="auth-status">Checking&hellip;</span>
+                <button id="authBtn" class="btn-auth" onclick="handleAuth()" style="display:none">Login with Zwift</button>
+            </div>
+        </div>
+
+        <div class="input-section">
+            <label for="subgroupId">Event Subgroup ID</label>
+            <input type="text" id="subgroupId" placeholder="7028414">
+            <div style="margin-top: 16px;">
+                <label for="teamTags">Team Tags <span style="color:#888; font-weight:normal;">(optional, comma-separated &mdash; e.g. V, RtB, SZ)</span></label>
+                <input type="text" id="teamTags" placeholder="Auto-detect from rider names">
+            </div>
+            <br>
+            <button class="btn-primary" id="fetchBtn" onclick="fetchTTT()">Analyze Race</button>
+            <div class="status-msg" id="statusMsg"></div>
+        </div>
+
+        <div class="results" id="results">
+            <div class="event-title" id="eventTitle"></div>
+            <div class="bike-info" id="bikeInfo"></div>
+
+            <div class="input-section" style="margin-bottom:20px;">
+                <div class="dist-range-header">
+                    <label>&#x1F4CF; Distance Range</label>
+                    <div class="dist-range-values">
+                        <span id="distStartLabel">0.0</span> &mdash; <span id="distEndLabel">0.0</span> km
+                    </div>
+                </div>
+                <div class="dual-range">
+                    <div class="range-track"></div>
+                    <div class="range-track-fill" id="distTrackFill"></div>
+                    <input type="range" id="distStart" min="0" max="100" value="0" step="0.1">
+                    <input type="range" id="distEnd" min="0" max="100" value="100" step="0.1">
+                </div>
+            </div>
+
+            <div class="team-colors" id="teamLegend"></div>
+
+            <div class="chart-container">
+                <h3>Lead Rider Speed</h3>
+                <div class="chart-wrapper">
+                    <canvas id="speedChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <h3>Average Draft Efficiency (connected riders only)</h3>
+                <div class="chart-wrapper">
+                    <canvas id="draftChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Individual Rider Drilldown -->
+            <div class="drilldown-section" id="drilldownSection" style="display:none">
+                <h2>Individual Rider Drilldown</h2>
+                <div class="input-section" style="margin-bottom:20px;">
+                    <label for="riderSelect">Select Rider</label>
+                    <select id="riderSelect" class="rider-select" onchange="onRiderSelect()">
+                        <option value="">— choose a rider —</option>
+                    </select>
+                </div>
+
+                <div class="chart-container" id="riderChartContainer" style="display:none">
+                    <h3 id="riderChartTitle">Rider</h3>
+                    <div class="chart-wrapper" style="height:400px;">
+                        <canvas id="riderChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Per-team rosters -->
+            <div id="teamRosters"></div>
+
+            <!-- Unassigned riders (drag back here to unassign) -->
+            <div class="unassigned-section" id="unassignedSection" style="display:none">
+                <h3>Unassigned Riders</h3>
+                <p style="color:#888; font-size:0.85rem; margin-bottom:10px;">
+                    Drag a rider to a team above to include them, or drag team riders here to remove them.
+                </p>
+                <div class="team-roster" id="unassignedRoster"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // ---- Auth ----
+    async function checkAuth() {
+        try {
+            const resp = await fetch('/auth/status');
+            const data = await resp.json();
+            const el = document.getElementById('authStatus');
+            const btn = document.getElementById('authBtn');
+            if (data.authenticated) {
+                el.textContent = `Logged in as ${data.name || 'Zwift User'}`;
+                el.className = 'auth-status logged-in';
+                btn.style.display = 'none';
+            } else {
+                el.textContent = 'Not logged in';
+                btn.style.display = 'inline-block';
+                btn.textContent = 'Login with Zwift';
+            }
+        } catch {
+            document.getElementById('authStatus').textContent = 'Auth check failed';
+        }
+    }
+    function handleAuth() { window.location.href = '/auth/login'; }
+    checkAuth();
+
+    // ---- Chart instances ----
+    let speedChartInstance = null;
+    let draftChartInstance = null;
+    let riderChartInstance = null;
+    let lastData = null;  // cached response for slider re-render
+    let lastRiderData = null;  // cached rider drilldown data for slider re-render
+
+    // ---- Drag-and-drop state ----
+    let currentAssignments = {};  // activity_id (string) -> team tag
+    let currentSubgroupId = null;
+    let allTeamTags = [];         // ordered tag list
+
+    const TEAM_COLORS = [
+        { line: '#f7931e', bg: 'rgba(247,147,30,0.15)' },
+        { line: '#4fc3f7', bg: 'rgba(79,195,247,0.15)' },
+        { line: '#81c784', bg: 'rgba(129,199,132,0.15)' },
+        { line: '#ce93d8', bg: 'rgba(206,147,216,0.15)' },
+        { line: '#ef9a9a', bg: 'rgba(239,154,154,0.15)' },
+        { line: '#fff176', bg: 'rgba(255,241,118,0.15)' },
+        { line: '#ffab91', bg: 'rgba(255,171,145,0.15)' },
+        { line: '#80deea', bg: 'rgba(128,222,234,0.15)' },
+    ];
+
+    function setStatus(msg, type) {
+        const el = document.getElementById('statusMsg');
+        el.textContent = msg;
+        el.className = 'status-msg ' + type;
+    }
+    function clearStatus() {
+        const el = document.getElementById('statusMsg');
+        el.className = 'status-msg';
+        el.textContent = '';
+    }
+
+    async function fetchTTT() {
+        const sgId = document.getElementById('subgroupId').value.trim();
+        if (!sgId) { setStatus('Please enter an event subgroup ID.', 'error'); return; }
+
+        const teamTags = document.getElementById('teamTags').value.trim();
+
+        const btn = document.getElementById('fetchBtn');
+        btn.disabled = true;
+        btn.textContent = 'Fetching & analyzing…';
+        setStatus('Fetching race data and computing draft estimates. This may take a minute…', 'info');
+
+        try {
+            const body = { subgroup_id: sgId };
+            if (teamTags) body.team_tags = teamTags;
+
+            const resp = await fetch('/api/ttt/fetch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const data = await resp.json();
+            if (data.error) {
+                setStatus(data.error, 'error');
+                return;
+            }
+            clearStatus();
+            lastData = data;
+            currentSubgroupId = sgId;
+            allTeamTags = data.team_tags || [];
+            // Build assignments map from team rosters
+            currentAssignments = {};
+            (data.teams || []).forEach(t => {
+                t.riders.forEach(r => {
+                    if (r.activity_id) currentAssignments[String(r.activity_id)] = t.label;
+                });
+            });
+            initSlider(data);
+            renderResults(data);
+        } catch (e) {
+            setStatus('Request failed: ' + e.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Analyze Race';
+        }
+    }
+
+    function initSlider(data) {
+        const maxDist = Math.max(...data.teams.map(t => Math.max(...t.distance_km)));
+        const raceDist = data.race_distance_km || maxDist;
+        const startEl = document.getElementById('distStart');
+        const endEl = document.getElementById('distEnd');
+        startEl.min = 0; startEl.max = maxDist.toFixed(1); startEl.step = 0.1; startEl.value = 0;
+        endEl.min = 0; endEl.max = maxDist.toFixed(1); endEl.step = 0.1; endEl.value = raceDist.toFixed(1);
+        startEl.oninput = onDistRange;
+        endEl.oninput = onDistRange;
+        updateDistLabels();
+    }
+
+    function updateDistLabels() {
+        const lo = parseFloat(document.getElementById('distStart').value);
+        const hi = parseFloat(document.getElementById('distEnd').value);
+        document.getElementById('distStartLabel').textContent = lo.toFixed(1);
+        document.getElementById('distEndLabel').textContent = hi.toFixed(1);
+        // Update track fill
+        const startEl = document.getElementById('distStart');
+        const max = parseFloat(startEl.max) || 1;
+        const loPct = (lo / max) * 100;
+        const hiPct = (hi / max) * 100;
+        const fill = document.getElementById('distTrackFill');
+        fill.style.left = loPct + '%';
+        fill.style.width = (hiPct - loPct) + '%';
+    }
+
+    function onDistRange() {
+        const startEl = document.getElementById('distStart');
+        const endEl = document.getElementById('distEnd');
+        let lo = parseFloat(startEl.value);
+        let hi = parseFloat(endEl.value);
+        // Prevent crossover
+        if (lo > hi) {
+            if (this === startEl) startEl.value = hi;
+            else endEl.value = lo;
+        }
+        updateDistLabels();
+        if (lastData) renderResults(lastData);
+        if (lastRiderData) renderRiderChart(lastRiderData);
+    }
+
+    function renderResults(data) {
+        const lo = parseFloat(document.getElementById('distStart').value);
+        const hi = parseFloat(document.getElementById('distEnd').value);
+        document.getElementById('results').style.display = 'block';
+        document.getElementById('eventTitle').textContent = data.event_name;
+        document.getElementById('bikeInfo').textContent = 'Assumed bike: ' + data.ttt_bike;
+
+        const teams = data.teams;
+
+        // Legend
+        const legendEl = document.getElementById('teamLegend');
+        legendEl.innerHTML = '';
+        teams.forEach((t, i) => {
+            const c = TEAM_COLORS[i % TEAM_COLORS.length];
+            legendEl.innerHTML += `<div class="team-legend-item">
+                <div class="team-swatch" style="background:${c.line}"></div>
+                <span>${t.label} (${t.riders.length} riders)</span>
+            </div>`;
+        });
+
+        // Rosters (with drag-and-drop)
+        const rostersEl = document.getElementById('teamRosters');
+        rostersEl.innerHTML = '';
+        teams.forEach((t, i) => {
+            const c = TEAM_COLORS[i % TEAM_COLORS.length];
+            const div = document.createElement('div');
+            div.className = 'chart-container team-drop-zone';
+            div.style.borderLeft = `3px solid ${c.line}`;
+            div.dataset.team = t.label;
+            div.innerHTML = `<h3 style="color:${c.line}">${t.label}</h3>
+                <div class="team-roster"></div>`;
+            const roster = div.querySelector('.team-roster');
+            t.riders.forEach(r => {
+                const tag = document.createElement('span');
+                tag.className = 'rider-tag';
+                tag.textContent = `${r.name} (${r.weight_kg.toFixed(0)}kg)`;
+                tag.draggable = true;
+                tag.dataset.activityId = r.activity_id;
+                tag.dataset.name = r.name;
+                tag.dataset.weight = r.weight_kg;
+                setupDrag(tag);
+                roster.appendChild(tag);
+            });
+            setupDropZone(div, t.label);
+            rostersEl.appendChild(div);
+        });
+
+        // Unassigned riders
+        const unassigned = data.unassigned || [];
+        const unSection = document.getElementById('unassignedSection');
+        const unRoster = document.getElementById('unassignedRoster');
+        unRoster.innerHTML = '';
+        if (unassigned.length > 0) {
+            unSection.style.display = 'block';
+            unassigned.forEach(r => {
+                const tag = document.createElement('span');
+                tag.className = 'rider-tag';
+                tag.textContent = `${r.name} (${r.weight_kg.toFixed(0)}kg)`;
+                tag.draggable = true;
+                tag.dataset.activityId = r.activity_id;
+                tag.dataset.name = r.name;
+                tag.dataset.weight = r.weight_kg;
+                setupDrag(tag);
+                unRoster.appendChild(tag);
+            });
+        } else {
+            unSection.style.display = 'none';
+        }
+        setupDropZone(unSection, null);  // null = unassign
+
+        // Speed chart
+        if (speedChartInstance) speedChartInstance.destroy();
+        const speedDatasets = teams.map((t, i) => {
+            const c = TEAM_COLORS[i % TEAM_COLORS.length];
+            return {
+                label: t.label,
+                data: t.distance_km
+                    .map((d, j) => ({ x: d, y: t.lead_speed_kph[j] }))
+                    .filter(p => p.x >= lo && p.x <= hi),
+                borderColor: c.line,
+                backgroundColor: c.bg,
+                borderWidth: 1.5,
+                pointRadius: 0,
+                tension: 0.3,
+                spanGaps: true,
+            };
+        });
+
+        const speedCtx = document.getElementById('speedChart').getContext('2d');
+        speedChartInstance = new Chart(speedCtx, {
+            type: 'line',
+            data: { datasets: speedDatasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: true, labels: { color: '#ccc' } },
+                    tooltip: {
+                        callbacks: {
+                            title: items => items.length ? `${items[0].parsed.x.toFixed(1)} km` : '',
+                            label: item => `${item.dataset.label}: ${item.parsed.y != null ? item.parsed.y.toFixed(1) + ' km/h' : 'N/A'}`,
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'linear',
+                        title: { display: true, text: 'Distance (km)', color: '#aaa' },
+                        ticks: { color: '#888' },
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                    },
+                    y: {
+                        title: { display: true, text: 'Lead Speed (km/h)', color: '#aaa' },
+                        ticks: { color: '#888' },
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                    }
+                }
+            }
+        });
+
+        // Draft efficiency chart
+        if (draftChartInstance) draftChartInstance.destroy();
+        const draftDatasets = teams.map((t, i) => {
+            const c = TEAM_COLORS[i % TEAM_COLORS.length];
+            return {
+                label: t.label,
+                data: t.distance_km
+                    .map((d, j) => ({ x: d, y: t.avg_draft_efficiency[j] != null ? t.avg_draft_efficiency[j] * 100 : null }))
+                    .filter(p => p.x >= lo && p.x <= hi),
+                borderColor: c.line,
+                backgroundColor: c.bg,
+                borderWidth: 1.5,
+                pointRadius: 0,
+                tension: 0.3,
+                spanGaps: true,
+            };
+        });
+
+        const draftCtx = document.getElementById('draftChart').getContext('2d');
+        draftChartInstance = new Chart(draftCtx, {
+            type: 'line',
+            data: { datasets: draftDatasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: true, labels: { color: '#ccc' } },
+                    tooltip: {
+                        callbacks: {
+                            title: items => items.length ? `${items[0].parsed.x.toFixed(1)} km` : '',
+                            label: item => `${item.dataset.label}: ${item.parsed.y != null ? item.parsed.y.toFixed(1) + '%' : 'N/A'}`,
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'linear',
+                        title: { display: true, text: 'Distance (km)', color: '#aaa' },
+                        ticks: { color: '#888' },
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                    },
+                    y: {
+                        title: { display: true, text: 'Draft Efficiency (%)', color: '#aaa' },
+                        ticks: { color: '#888' },
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                    }
+                }
+            }
+        });
+
+        // Populate rider drilldown dropdown
+        populateRiderDropdown(data);
+
+
+    }
+
+    // ---- Drag-and-drop ----
+    function setupDrag(el) {
+        el.addEventListener('dragstart', e => {
+            e.dataTransfer.setData('text/plain', el.dataset.activityId);
+            e.dataTransfer.effectAllowed = 'move';
+            el.classList.add('dragging');
+        });
+        el.addEventListener('dragend', () => el.classList.remove('dragging'));
+    }
+
+    function setupDropZone(zone, teamTag) {
+        if (zone._dropSetup) return;  // avoid duplicate listeners on persistent elements
+        zone._dropSetup = true;
+        zone.addEventListener('dragover', e => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            zone.classList.add('drag-over');
+        });
+        zone.addEventListener('dragleave', e => {
+            if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag-over');
+        });
+        zone.addEventListener('drop', e => {
+            e.preventDefault();
+            zone.classList.remove('drag-over');
+            const actId = e.dataTransfer.getData('text/plain');
+            if (!actId) return;
+            if (teamTag) {
+                currentAssignments[actId] = teamTag;
+            } else {
+                delete currentAssignments[actId];
+            }
+            doReassign();
+        });
+    }
+
+    async function doReassign() {
+        if (!currentSubgroupId) return;
+        setStatus('Updating team assignments…', 'info');
+        try {
+            const resp = await fetch('/api/ttt/reassign', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    subgroup_id: currentSubgroupId,
+                    assignments: currentAssignments,
+                }),
+            });
+            const data = await resp.json();
+            if (data.error) { setStatus(data.error, 'error'); return; }
+            clearStatus();
+            lastData = data;
+            allTeamTags = data.team_tags || allTeamTags;
+            // Rebuild assignments from fresh response
+            currentAssignments = {};
+            (data.teams || []).forEach(t => {
+                t.riders.forEach(r => {
+                    if (r.activity_id) currentAssignments[String(r.activity_id)] = t.label;
+                });
+            });
+            renderResults(data);
+        } catch (e) {
+            setStatus('Reassign failed: ' + e.message, 'error');
+        }
+    }
+
+    // ---- Individual rider drilldown ----
+    function populateRiderDropdown(data) {
+        const sel = document.getElementById('riderSelect');
+        sel.innerHTML = '<option value="">— choose a rider —</option>';
+        // Add all team riders grouped by team, then unassigned
+        (data.teams || []).forEach(t => {
+            const grp = document.createElement('optgroup');
+            grp.label = t.label;
+            t.riders.forEach(r => {
+                const opt = document.createElement('option');
+                opt.value = r.activity_id;
+                opt.textContent = `${r.name} (${r.weight_kg.toFixed(0)}kg)`;
+                grp.appendChild(opt);
+            });
+            sel.appendChild(grp);
+        });
+        if (data.unassigned && data.unassigned.length) {
+            const grp = document.createElement('optgroup');
+            grp.label = 'Unassigned';
+            data.unassigned.forEach(r => {
+                const opt = document.createElement('option');
+                opt.value = r.activity_id;
+                opt.textContent = `${r.name} (${r.weight_kg.toFixed(0)}kg)`;
+                grp.appendChild(opt);
+            });
+            sel.appendChild(grp);
+        }
+        document.getElementById('drilldownSection').style.display = 'block';
+    }
+
+    async function onRiderSelect() {
+        const actId = document.getElementById('riderSelect').value;
+        if (!actId) {
+            document.getElementById('riderChartContainer').style.display = 'none';
+            lastRiderData = null;
+            return;
+        }
+        try {
+            const resp = await fetch('/api/ttt/rider', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ subgroup_id: currentSubgroupId, activity_id: actId }),
+            });
+            const rd = await resp.json();
+            if (rd.error) { setStatus(rd.error, 'error'); return; }
+            lastRiderData = rd;
+            renderRiderChart(rd);
+        } catch (e) {
+            setStatus('Failed to load rider data: ' + e.message, 'error');
+        }
+    }
+
+    function renderRiderChart(rd) {
+        document.getElementById('riderChartContainer').style.display = 'block';
+        document.getElementById('riderChartTitle').textContent = `${rd.name} (${rd.weight_kg.toFixed(0)}kg)`;
+
+        if (riderChartInstance) riderChartInstance.destroy();
+
+        const lo = parseFloat(document.getElementById('distStart').value);
+        const hi = parseFloat(document.getElementById('distEnd').value);
+
+        // Filter to distance range
+        const filtered = rd.distance_km.map((d, i) => ({
+            d, alt: rd.altitude_m[i], pow: rd.power_watts[i], draft: rd.draft_watts[i]
+        })).filter(p => p.d >= lo && p.d <= hi);
+
+        const dist = filtered.map(p => p.d);
+        const alt = filtered.map(p => p.alt);
+        const pow = filtered.map(p => p.pow);
+        const draft = filtered.map(p => p.draft);
+
+        const ctx = document.getElementById('riderChart').getContext('2d');
+        riderChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                datasets: [
+                    {
+                        label: 'Elevation (m)',
+                        data: dist.map((d, i) => ({ x: d, y: alt[i] })),
+                        borderColor: 'rgba(180,180,180,0.3)',
+                        backgroundColor: 'rgba(180,180,180,0.08)',
+                        borderWidth: 1,
+                        pointRadius: 0,
+                        tension: 0.3,
+                        fill: true,
+                        yAxisID: 'yAlt',
+                        order: 3,
+                    },
+                    {
+                        label: 'Power (W)',
+                        data: dist.map((d, i) => ({ x: d, y: pow[i] })),
+                        borderColor: '#f7931e',
+                        backgroundColor: 'rgba(247,147,30,0.1)',
+                        borderWidth: 1.5,
+                        pointRadius: 0,
+                        tension: 0.3,
+                        yAxisID: 'y',
+                        order: 2,
+                    },
+                    {
+                        label: 'Draft Estimate (W)',
+                        data: dist.map((d, i) => ({ x: d, y: draft[i] })),
+                        borderColor: '#4fc3f7',
+                        backgroundColor: 'rgba(79,195,247,0.1)',
+                        borderWidth: 1.5,
+                        pointRadius: 0,
+                        tension: 0.3,
+                        yAxisID: 'y',
+                        order: 1,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: true, labels: { color: '#ccc' } },
+                    tooltip: {
+                        callbacks: {
+                            title: items => items.length ? `${items[0].parsed.x.toFixed(1)} km` : '',
+                            label: item => {
+                                const v = item.parsed.y;
+                                if (v == null) return `${item.dataset.label}: N/A`;
+                                if (item.dataset.yAxisID === 'yAlt') return `${item.dataset.label}: ${v.toFixed(0)} m`;
+                                return `${item.dataset.label}: ${v.toFixed(0)} W`;
+                            },
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'linear',
+                        title: { display: true, text: 'Distance (km)', color: '#aaa' },
+                        ticks: { color: '#888' },
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                    },
+                    y: {
+                        position: 'left',
+                        title: { display: true, text: 'Watts', color: '#aaa' },
+                        ticks: { color: '#888' },
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                    },
+                    yAlt: {
+                        position: 'right',
+                        title: { display: true, text: 'Elevation (m)', color: '#aaa' },
+                        ticks: { color: '#666' },
+                        grid: { drawOnChartArea: false },
+                    },
+                },
+            },
+        });
+    }
+
+
+    </script>
+</body>
+</html>

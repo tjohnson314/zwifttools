@@ -33,6 +33,7 @@ from shared.utils import calculate_normalized_power
 from shared.data_fetcher import (
     fetch_rider_telemetry, convert_telemetry_to_dataframe,
     fetch_race_from_activity, get_activity_details,
+    get_race_entries,
     _request_with_retry, BASE_URL
 )
 from shared.route_lookup import get_route_info
@@ -1680,6 +1681,522 @@ def api_race_streams(race_id):
     except Exception as e:
         logger.exception("Error fetching streams")
         return jsonify({'streams': [], 'error': str(e)})
+
+
+# ---------------------------------------------------------------------------
+# TTT Analysis
+# ---------------------------------------------------------------------------
+
+# TTT bike setup: Cadex Tri (F112) + DT Swiss ARC 1100 DICUT 85/Disc (W055), level 5
+TTT_FRAME_ID = 'F112'
+TTT_WHEEL_ID = 'W055'
+TTT_UPGRADE_LEVEL = 5
+
+_ttt_cache = {}  # subgroup_id -> processed rider data for reassignment
+
+
+@app.route('/ttt-analysis')
+def ttt_analysis():
+    """Team Time Trial analysis page."""
+    return render_template('ttt_analysis.html')
+
+
+@app.route('/api/ttt/fetch', methods=['POST'])
+def api_ttt_fetch():
+    """Fetch and analyze a TTT race.
+
+    Accepts JSON with ``subgroup_id`` (the event subgroup ID).
+
+    Steps:
+    1. Fetch race entries and telemetry for every rider.
+    2. Group riders into teams by race segment start time (>60 s gap).
+    3. Compute per-second draft estimates assuming Cadex Tri + ARC 85/Disc L5.
+    4. Build per-team time-series arrays for the chart (lead speed, avg draft
+       efficiency, max distance) — only including riders connected to the team
+       (within 10 s of the leader).
+
+    Returns JSON with ``teams`` list, each containing metadata and chart arrays.
+    """
+    headers = get_headers()
+    if not headers:
+        return jsonify({'error': 'Not authenticated. Please log in first.'}), 401
+
+    data = request.json or {}
+    raw_id = str(data.get('subgroup_id', '')).strip()
+    if not raw_id:
+        return jsonify({'error': 'subgroup_id is required'}), 400
+
+    try:
+        event_subgroup_id = int(raw_id)
+    except ValueError:
+        return jsonify({'error': 'subgroup_id must be a number'}), 400
+
+    # ---- Fetch event metadata via the first participant's activity ----
+    event_name = 'TTT Race'
+
+    # ---- Fetch race entries ----
+    participants, error = get_race_entries(event_subgroup_id, headers)
+    if error:
+        return jsonify({'error': error}), 502
+
+    # ---- Resolve event name from first participant's activity ----
+    first_act = None
+    if participants:
+        first_act, _ = get_activity_details(participants[0]['activity_id'], headers)
+        if first_act:
+            ei = first_act.get('eventInfo', {})
+            event_name = ei.get('name', event_name)
+            eid = ei.get('id')
+            if eid:
+                try:
+                    ev_resp = _request_with_retry('GET', f'{BASE_URL}/events/{eid}', headers=headers, timeout=15)
+                    if ev_resp.status_code == 200:
+                        ev = ev_resp.json()
+                        event_name = ev.get('name', event_name)
+                        for sg in ev.get('eventSubgroups', []):
+                            if sg.get('id') == event_subgroup_id:
+                                label = sg.get('subgroupLabel', '')
+                                if label:
+                                    event_name = f'{event_name} — {label}'
+                                break
+                except Exception:
+                    pass
+
+    # ---- Group riders into teams by name tags ----
+    import re
+    from collections import defaultdict
+
+    raw_tags = data.get('team_tags', '').strip()
+
+    def _extract_bracket_contents(name):
+        """Extract all content inside [...] or (...) in a rider name."""
+        return re.findall(r'[\[\(]([^)\]]+)[\]\)]', name)
+
+    def _rider_has_tag(name, tag):
+        """Check if tag appears as a word inside any bracketed section of name."""
+        for content in _extract_bracket_contents(name):
+            # Split on common separators (|, /, space) and strip each part
+            parts = [p.strip() for p in re.split(r'[|/]', content)]
+            if tag in parts:
+                return True
+        return False
+
+    if raw_tags:
+        # User provided explicit tags — use those
+        team_tags = [t.strip() for t in raw_tags.split(',') if t.strip()]
+    else:
+        # Auto-detect: collect every simple tag that appears on >= 2 riders
+        from collections import Counter
+        tag_counts = Counter()
+        for p in participants:
+            for content in _extract_bracket_contents(p['name']):
+                parts = [pt.strip() for pt in re.split(r'[|/]', content)]
+                for part in set(parts):
+                    if part:
+                        tag_counts[part] += 1
+        team_tags = [tag for tag, cnt in tag_counts.most_common() if cnt >= 2]
+
+    if not team_tags:
+        return jsonify({'error': 'Could not detect team tags. Please provide them manually (e.g. V, RtB, SZ).'}), 400
+
+    # Assign each rider to their team (first matching tag wins)
+    team_map = defaultdict(list)  # tag -> [participant, ...]
+    for p in participants:
+        for tag in team_tags:
+            if _rider_has_tag(p['name'], tag):
+                team_map[tag].append(p)
+                break  # assign to first matching team only
+
+    if not team_map:
+        return jsonify({'error': 'No riders matched any team tags.'}), 400
+
+    # ---- Fetch telemetry for ALL riders (concurrent) ----
+    # We fetch everyone so unassigned riders can be reassigned via
+    # drag-and-drop without re-fetching telemetry.
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    ttt_setup = get_bike_stats(TTT_FRAME_ID, TTT_WHEEL_ID, TTT_UPGRADE_LEVEL)
+    if not ttt_setup:
+        return jsonify({'error': 'Could not load TTT bike data'}), 500
+
+    def fetch_one(p):
+        act_id = p['activity_id']
+        telem_data, act_data, err = fetch_rider_telemetry(act_id, headers)
+        if err:
+            return {**p, 'telemetry': None, 'error': err}
+
+        df = convert_telemetry_to_dataframe(telem_data)
+
+        height_cm = p.get('height_cm')
+        if not height_cm and act_data and act_data.get('profile'):
+            height_cm = act_data['profile'].get('heightInCentimeters')
+
+        return {
+            **p,
+            'telemetry': df,
+            'height_cm': height_cm or 175,
+            'error': None,
+        }
+
+    rider_lookup = {}  # activity_id -> fetched rider data
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        futures = {pool.submit(fetch_one, p): p for p in participants}
+        for fut in as_completed(futures):
+            result = fut.result()
+            if result['telemetry'] is not None:
+                rider_lookup[result['activity_id']] = result
+
+    if not rider_lookup:
+        return jsonify({'error': 'No telemetry data could be fetched.'}), 502
+
+    # ---- 5. Compute draft estimate for ALL riders ----
+    from bike_comparison.physics import calculate_power_for_speed, DRIVETRAIN_LOSS, AIR_DENSITY
+
+    all_processed = {}  # activity_id -> processed rider dict
+    for act_id, r in rider_lookup.items():
+        df = r['telemetry']
+        if len(df) < 10:
+            continue
+
+        weight_kg = r.get('weight_kg', 75.0)
+        height_cm = r.get('height_cm', 175)
+        frontal_area = estimate_frontal_area(height_cm, weight_kg, 'drops')
+        cda = ttt_setup.cd * frontal_area
+
+        time_sec = df['time_sec'].values.astype(float)
+        speed_mps = (df['speed_kmh'].values / 3.6).astype(float)
+        distance_m = (df['distance_km'].values * 1000).astype(float)
+        altitude_m = df['altitude_m'].values.astype(float)
+        power = df['power_watts'].values.astype(float)
+
+        dist_diff = np.diff(distance_m, prepend=distance_m[0])
+        dist_diff[0] = dist_diff[1] if len(dist_diff) > 1 else 1
+        dist_diff = np.maximum(dist_diff, 0.1)
+        alt_diff = np.diff(altitude_m, prepend=altitude_m[0])
+        alt_diff[0] = 0
+
+        total_mass = weight_kg + ttt_setup.weight_kg
+
+        crr = 0.004
+        f_rolling = crr * total_mass * 9.8067
+        f_aero = 0.5 * AIR_DENSITY * cda * speed_mps ** 2
+        safe_speed = np.maximum(speed_mps, 0.5)
+        resistance_power_solo = (f_rolling + f_aero) * safe_speed / (1 - DRIVETRAIN_LOSS)
+
+        dt = np.diff(time_sec, prepend=time_sec[0])
+        dt[0] = dt[1] if len(dt) > 1 else 1
+        dt = np.maximum(dt, 0.01)
+        ke = 0.5 * total_mass * speed_mps ** 2
+        pe = total_mass * 9.8067 * altitude_m
+        total_energy = ke + pe
+        energy_change_rate = np.zeros_like(total_energy)
+        energy_change_rate[:-1] = np.diff(total_energy) / dt[1:]
+        if len(energy_change_rate) > 1:
+            energy_change_rate[-1] = energy_change_rate[-2]
+
+        draft_watts = resistance_power_solo - power + energy_change_rate / (1 - DRIVETRAIN_LOSS)
+        window = min(5, len(draft_watts))
+        if window > 1:
+            kernel = np.ones(window) / window
+            draft_watts = np.convolve(draft_watts, kernel, mode='same')
+
+        all_processed[act_id] = {
+            'name': r['name'],
+            'activity_id': act_id,
+            'weight_kg': weight_kg,
+            'time_sec': time_sec,
+            'speed_mps': speed_mps,
+            'distance_m': distance_m,
+            'altitude_m': altitude_m,
+            'power': power,
+            'draft_watts': draft_watts,
+        }
+
+    # ---- 6. Build team assignments and aggregate ----
+    team_assignments = {}  # activity_id -> tag
+    for tag, riders in team_map.items():
+        for p in riders:
+            if p['activity_id'] in all_processed:
+                team_assignments[p['activity_id']] = tag
+
+    team_results = _build_ttt_team_results(all_processed, team_assignments, team_tags)
+
+    assigned_ids = set(team_assignments.keys())
+    unassigned = [
+        {'name': rd['name'], 'activity_id': act_id, 'weight_kg': rd['weight_kg']}
+        for act_id, rd in all_processed.items()
+        if act_id not in assigned_ids
+    ]
+
+    race_distance_km = _get_race_distance_km(participants, team_results)
+
+    # Cache for reassignment (drag-and-drop)
+    _ttt_cache[event_subgroup_id] = {
+        'event_name': event_name,
+        'ttt_bike': str(ttt_setup),
+        'all_processed': all_processed,
+        'team_tags': team_tags,
+        'participants': participants,
+        'race_distance_km': race_distance_km,
+        'team_assignments': dict(team_assignments),
+    }
+
+    return jsonify({
+        'event_name': event_name,
+        'teams': team_results,
+        'ttt_bike': str(ttt_setup),
+        'race_distance_km': race_distance_km,
+        'unassigned': unassigned,
+        'team_tags': team_tags,
+    })
+
+
+def _build_ttt_team_results(all_processed, team_assignments, tag_order):
+    """Aggregate per-rider processed data into per-team chart arrays.
+
+    ``all_processed`` maps activity_id -> rider dict with numpy arrays.
+    ``team_assignments`` maps activity_id -> team tag string.
+    ``tag_order`` is the list of tags in display order.
+    """
+    # Group riders by tag
+    teams_by_tag = {}
+    for act_id, tag in team_assignments.items():
+        if act_id in all_processed:
+            teams_by_tag.setdefault(tag, []).append(all_processed[act_id])
+
+    team_results = []
+    for tag in tag_order:
+        rider_data = teams_by_tag.get(tag, [])
+        if not rider_data:
+            continue
+
+        max_dist = max(rd['distance_m'][-1] for rd in rider_data)
+        step = 50
+        dist_axis = np.arange(0, max_dist, step)
+
+        lead_speed = np.full(len(dist_axis), np.nan)
+        avg_draft_efficiency = np.full(len(dist_axis), np.nan)
+
+        for di, d in enumerate(dist_axis):
+            connected_draft = []
+            connected_power = []
+
+            rider_states = []
+            for rd in rider_data:
+                idx = np.searchsorted(rd['distance_m'], d)
+                if idx >= len(rd['distance_m']):
+                    idx = len(rd['distance_m']) - 1
+                if idx < 0:
+                    idx = 0
+
+                actual_dist = rd['distance_m'][idx]
+                if actual_dist < d - 500:
+                    continue
+
+                rider_states.append({
+                    'rd': rd,
+                    'idx': idx,
+                    'dist': actual_dist,
+                    'speed': rd['speed_mps'][idx],
+                    'time': rd['time_sec'][idx],
+                })
+
+            if not rider_states:
+                continue
+
+            rider_states.sort(key=lambda rs: rs['dist'], reverse=True)
+            lead = rider_states[0]
+            lead_speed[di] = lead['speed'] * 3.6
+
+            for rs in rider_states:
+                gap_dist = lead['dist'] - rs['dist']
+                if rs['speed'] > 0.5:
+                    gap_time = gap_dist / rs['speed']
+                else:
+                    gap_time = float('inf')
+
+                if gap_time <= 10:
+                    idx = rs['idx']
+                    rd = rs['rd']
+                    p = rd['power'][idx]
+                    dw = rd['draft_watts'][idx]
+                    if p > 10:
+                        connected_draft.append(dw)
+                        connected_power.append(p)
+
+            if connected_power:
+                total_draft = sum(connected_draft)
+                total_power = sum(connected_power)
+                if total_power > 0:
+                    avg_draft_efficiency[di] = total_draft / total_power
+
+        valid_speed = ~np.isnan(lead_speed)
+        valid_draft = ~np.isnan(avg_draft_efficiency)
+
+        if valid_speed.sum() > 10:
+            smooth_w = min(11, int(valid_speed.sum() / 5))
+            if smooth_w > 1 and smooth_w % 2 == 0:
+                smooth_w += 1
+            if smooth_w > 1:
+                ls = lead_speed.copy()
+                ls[~valid_speed] = 0
+                ls = uniform_filter1d(ls, smooth_w)
+                ls[~valid_speed] = np.nan
+                lead_speed = ls
+
+        if valid_draft.sum() > 10:
+            smooth_w = min(11, int(valid_draft.sum() / 5))
+            if smooth_w > 1 and smooth_w % 2 == 0:
+                smooth_w += 1
+            if smooth_w > 1:
+                de = avg_draft_efficiency.copy()
+                de[~valid_draft] = 0
+                de = uniform_filter1d(de, smooth_w)
+                de[~valid_draft] = np.nan
+                avg_draft_efficiency = de
+
+        team_results.append({
+            'label': tag,
+            'riders': [{'name': rd['name'], 'weight_kg': rd['weight_kg'], 'activity_id': rd['activity_id']} for rd in rider_data],
+            'distance_km': (dist_axis / 1000).tolist(),
+            'lead_speed_kph': [None if np.isnan(v) else round(v, 2) for v in lead_speed],
+            'avg_draft_efficiency': [None if np.isnan(v) else round(v, 4) for v in avg_draft_efficiency],
+        })
+
+    return team_results
+
+
+@app.route('/api/ttt/reassign', methods=['POST'])
+def api_ttt_reassign():
+    """Re-aggregate TTT team charts using updated rider-to-team assignments.
+
+    Uses cached processed data from the most recent fetch so no API calls
+    are needed.  Expects JSON: ``{subgroup_id, assignments: {activity_id: tag}}``.
+    """
+    data = request.json or {}
+    try:
+        subgroup_id = int(data.get('subgroup_id', 0))
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Invalid subgroup_id'}), 400
+
+    if subgroup_id not in _ttt_cache:
+        return jsonify({'error': 'No cached data. Fetch the race first.'}), 400
+
+    raw_assignments = data.get('assignments', {})
+    assignments = {str(k): v for k, v in raw_assignments.items()}
+
+    cached = _ttt_cache[subgroup_id]
+    all_processed = cached['all_processed']
+
+    # Preserve original tag order, then append any new tags
+    all_tags_in_use = list(dict.fromkeys(assignments.values()))
+    ordered_tags = [t for t in cached['team_tags'] if t in all_tags_in_use]
+    for t in all_tags_in_use:
+        if t not in ordered_tags:
+            ordered_tags.append(t)
+
+    team_results = _build_ttt_team_results(all_processed, assignments, ordered_tags)
+
+    assigned_ids = set(assignments.keys())
+    unassigned = [
+        {'name': rd['name'], 'activity_id': act_id, 'weight_kg': rd['weight_kg']}
+        for act_id, rd in all_processed.items()
+        if act_id not in assigned_ids
+    ]
+
+    # Update cache
+    cached['team_assignments'] = dict(assignments)
+    cached['team_tags'] = ordered_tags
+
+    return jsonify({
+        'event_name': cached['event_name'],
+        'teams': team_results,
+        'ttt_bike': cached['ttt_bike'],
+        'race_distance_km': cached.get('race_distance_km', 0),
+        'unassigned': unassigned,
+        'team_tags': ordered_tags,
+    })
+
+
+@app.route('/api/ttt/rider', methods=['POST'])
+def api_ttt_rider():
+    """Return individual rider data for the drilldown chart.
+
+    Expects JSON: ``{subgroup_id, activity_id}``.
+    Returns distance_km, altitude_m, power_watts, and draft_watts arrays
+    sampled every ~50 m for charting.
+    """
+    data = request.json or {}
+    try:
+        subgroup_id = int(data.get('subgroup_id', 0))
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Invalid subgroup_id'}), 400
+
+    if subgroup_id not in _ttt_cache:
+        return jsonify({'error': 'No cached data. Fetch the race first.'}), 400
+
+    act_id = str(data.get('activity_id', ''))
+    cached = _ttt_cache[subgroup_id]
+    rd = cached['all_processed'].get(act_id)
+    if not rd:
+        return jsonify({'error': 'Rider not found in cache'}), 404
+
+    # Downsample to ~50 m intervals for reasonable chart size
+    distance_m = rd['distance_m']
+    step = 50
+    dist_axis = np.arange(0, distance_m[-1], step)
+    indices = np.searchsorted(distance_m, dist_axis)
+    indices = np.clip(indices, 0, len(distance_m) - 1)
+
+    return jsonify({
+        'name': rd['name'],
+        'activity_id': act_id,
+        'weight_kg': rd['weight_kg'],
+        'distance_km': (dist_axis / 1000).tolist(),
+        'altitude_m': [round(float(rd['altitude_m'][i]), 1) for i in indices],
+        'power_watts': [round(float(rd['power'][i]), 0) for i in indices],
+        'draft_watts': [round(float(rd['draft_watts'][i]), 0) for i in indices],
+    })
+
+
+def _get_race_distance_km(participants, team_results):
+    """Determine the official race distance in km.
+
+    Uses ``segment_distance_cm`` from any participant if available,
+    otherwise falls back to the maximum charted distance across teams.
+    """
+    for p in participants:
+        sd = p.get('segment_distance_cm')
+        if sd:
+            return round(sd / 100_000, 2)
+    # Fallback: max distance in any team's chart data
+    max_d = 0
+    for t in team_results:
+        dists = t.get('distance_km', [])
+        if dists:
+            max_d = max(max_d, max(d for d in dists if d is not None))
+    return round(max_d, 2) if max_d else 0
+
+
+def _guess_team_name(names):
+    """Try to extract a common team tag from rider names.
+
+    Many Zwift teams put their tag in square brackets like ``[V]`` or ``(RtB)``.
+    Returns the most common tag found, or None.
+    """
+    import re
+    tags = []
+    for name in names:
+        # Match [TAG] or (TAG) patterns
+        m = re.findall(r'[\[\(]([A-Za-z0-9!@#$%^&*_+=|~]{1,15})[\]\)]', name)
+        tags.extend(m)
+    if not tags:
+        return None
+    from collections import Counter
+    most_common = Counter(tags).most_common(1)[0]
+    if most_common[1] >= 2:  # At least 2 riders with same tag
+        return most_common[0]
+    return None
 
 
 if __name__ == '__main__':
