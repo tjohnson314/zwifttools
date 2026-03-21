@@ -1761,10 +1761,13 @@ def api_ttt_fetch():
                                 if label:
                                     event_name = f'{event_name} — {label}'
                                 route_id = sg.get('routeId')
-                                sg_dist = sg.get('distanceInMeters')
                                 sg_laps = sg.get('laps') or 1
-                                if sg_dist:
-                                    event_distance_km = round(sg_dist * sg_laps / 1000, 2)
+                                # Use routes_cache to get timed distance (excluding lead-in)
+                                if route_id:
+                                    from shared.route_lookup import get_route_info as _get_ri
+                                    ri = _get_ri(route_id)
+                                    if ri and ri.get('distanceInMeters'):
+                                        event_distance_km = round(ri['distanceInMeters'] * sg_laps / 1000, 2)
                                 break
                 except Exception:
                     pass
