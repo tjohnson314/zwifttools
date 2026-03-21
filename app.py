@@ -1733,6 +1733,8 @@ def api_ttt_fetch():
 
     # ---- Fetch event metadata via the first participant's activity ----
     event_name = 'TTT Race'
+    route_id = None
+    event_distance_km = None
 
     # ---- Fetch race entries ----
     participants, error = get_race_entries(event_subgroup_id, headers)
@@ -1758,6 +1760,11 @@ def api_ttt_fetch():
                                 label = sg.get('subgroupLabel', '')
                                 if label:
                                     event_name = f'{event_name} — {label}'
+                                route_id = sg.get('routeId')
+                                sg_dist = sg.get('distanceInMeters')
+                                sg_laps = sg.get('laps') or 1
+                                if sg_dist:
+                                    event_distance_km = round(sg_dist * sg_laps / 1000, 2)
                                 break
                 except Exception:
                     pass
@@ -1928,7 +1935,7 @@ def api_ttt_fetch():
         if act_id not in assigned_ids
     ]
 
-    race_distance_km = _get_race_distance_km(participants, team_results)
+    race_distance_km = event_distance_km or _get_race_distance_km(participants, team_results)
 
     # Cache for reassignment (drag-and-drop)
     _ttt_cache[event_subgroup_id] = {
