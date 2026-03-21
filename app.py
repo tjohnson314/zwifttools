@@ -1917,16 +1917,23 @@ def api_ttt_fetch():
 
     # ---- 5b. Route-project riders for accurate lead detection ----
     route_data = None
+    _debug_route = {'route_id': route_id, 'route_name': None, 'route_slug': None, 'loaded': False, 'riders_projected': 0}
     if route_id:
         from shared.route_lookup import get_route_info as _get_ri
         ri = _get_ri(route_id)
         if ri:
+            _debug_route['route_name'] = ri['name']
             route_slug = ri['name'].lower().replace(' ', '-').replace("'", "")
+            _debug_route['route_slug'] = route_slug
             from race_replay.data_cleaner import load_route_data
             route_data = load_route_data(route_slug)
+            if route_data:
+                _debug_route['loaded'] = True
+                _debug_route['route_total_m'] = float(route_data.total_distance_m)
 
     if route_data:
         from scipy.interpolate import interp1d
+        from race_replay.data_cleaner import haversine
         lat_center = np.mean(route_data.latlng[:, 0])
         lng_scale = np.cos(np.radians(lat_center))
         K = min(8, len(route_data.distance))
@@ -1949,22 +1956,52 @@ def api_ttt_fetch():
             lngs = lng_interp(rd['time_sec'])
 
             # Project onto route using KD-tree
+            n = len(lats)
             scaled_pts = np.column_stack([lats, lngs * lng_scale])
             kd_dists, kd_indices = route_data.kdtree.query(scaled_pts, k=K)
 
-            # Use Zwift raw distance to disambiguate overlapping route sections
             raw_traveled = rd['distance_m'] - rd['distance_m'][0]
 
-            # Vectorized: pick the K-neighbor whose route distance best matches raw
+            # Detect lead-in: find where rider first gets within 50m of route
+            nn_indices = kd_indices[:, 0]
+            deviations = haversine(
+                lats, lngs,
+                route_data.latlng[nn_indices, 0], route_data.latlng[nn_indices, 1]
+            )
+            close_mask = deviations < 50
+            if not np.any(close_mask):
+                continue  # rider never gets near the route
+
+            leadin_end_idx = int(np.argmax(close_mask))
+            # Compute offset: route_distance - raw_traveled at first on-route points
+            sample_end = min(leadin_end_idx + 20, n)
+            sample_idx = np.arange(leadin_end_idx, sample_end)
+            sample_mask = close_mask[sample_idx]
+            if np.any(sample_mask):
+                good_samples = sample_idx[sample_mask]
+                offsets = route_data.distance[kd_indices[good_samples, 0]] - raw_traveled[good_samples]
+                initial_offset = float(np.median(offsets))
+            else:
+                initial_offset = 0.0
+
+            # Expected route distance = offset + raw_traveled
+            expected = initial_offset + raw_traveled
+
+            # Vectorized: pick K-neighbor whose route distance best matches expected
             candidate_dists = route_data.distance[kd_indices]  # shape (n, K)
-            errors = np.abs(candidate_dists - raw_traveled[:, np.newaxis])
+            errors = np.abs(candidate_dists - expected[:, np.newaxis])
             best_k = np.argmin(errors, axis=1)
-            route_dist = candidate_dists[np.arange(len(lats)), best_k]
+            route_dist = candidate_dists[np.arange(n), best_k]
+
+            # For lead-in points, use expected distance directly
+            if leadin_end_idx > 0:
+                route_dist[:leadin_end_idx] = expected[:leadin_end_idx]
 
             # Enforce monotonicity (route distance should only increase)
             route_dist = np.maximum.accumulate(route_dist)
 
             rd['route_distance_m'] = route_dist
+            _debug_route['riders_projected'] += 1
 
     # ---- 6. Build team assignments and aggregate ----
     team_assignments = {}  # activity_id -> tag
@@ -2002,6 +2039,7 @@ def api_ttt_fetch():
         'race_distance_km': race_distance_km,
         'unassigned': unassigned,
         'team_tags': team_tags,
+        '_debug_route': _debug_route,
     })
 
 
