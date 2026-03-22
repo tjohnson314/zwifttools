@@ -242,7 +242,8 @@ def project_to_route(route: RouteData, lat: float, lng: float) -> Tuple[float, f
 def align_riders_to_route(riders: List[Dict], route: RouteData, 
                           max_deviation_m: float = 50,
                           leadin_distance_m: Optional[float] = None,
-                          race_start_time: Optional[str] = None) -> tuple:
+                          race_start_time: Optional[str] = None,
+                          detect_late_joiners: bool = True) -> tuple:
     """
     Align all rider GPS coordinates to official route distances.
     Uses vectorized KD-tree queries for performance.
@@ -343,21 +344,30 @@ def align_riders_to_route(riders: List[Dict], route: RouteData,
         )
         rider_starts_on_route = np.median(quick_devs) < 50  # most of first 10 pts within 50m
         
-        # Determine the search range for finding where the rider joins the route
-        if rider_starts_on_route:
-            # Rider is already on the route from the start (late joiner or no lead-in)
-            search_start_idx = 0
-            search_end_idx = min(50, n_points)
-        elif leadin_distance_m is not None and leadin_distance_m > 50 and raw_traveled_m is not None:
-            # Known lead-in: skip ahead to where raw_traveled_m ≈ leadin_distance_m
-            # Search from 80% of lead-in to 150% (margin for GPS jitter / speed variation)
-            search_start_m = leadin_distance_m * 0.8
-            search_end_m = leadin_distance_m * 1.5
+        # Determine the search range for finding where the rider joins the route.
+        # Prioritize the known lead-in distance when available — it gives a
+        # reliable search window even when the start pen is geographically
+        # close to the route (e.g. TTT races where riders idle in the pen
+        # before their team is released).
+        if leadin_distance_m is not None and leadin_distance_m > 50 and raw_traveled_m is not None:
+            # Known lead-in: search PAST the lead-in so we only sample points
+            # that are on the actual route, not the lead-in.  Many routes have
+            # lead-ins that physically overlap the route (e.g. Sand And Sequoias
+            # where the lead-in traces the last ~2 km of the loop).  Sampling
+            # in the overlap gives a wrong offset because the KD-tree matches
+            # to the overlapping route section rather than the route start.
+            search_start_m = leadin_distance_m * 1.1
+            search_end_m = leadin_distance_m * 2.0
             search_start_idx = int(np.searchsorted(raw_traveled_m, search_start_m))
             search_end_idx = int(np.searchsorted(raw_traveled_m, search_end_m))
             # Clamp and ensure we check at least some points
             search_start_idx = max(0, min(search_start_idx, n_points - 1))
             search_end_idx = min(n_points, max(search_end_idx, search_start_idx + 50))
+        elif rider_starts_on_route:
+            # No known lead-in but rider is already near the route (late joiner
+            # or genuinely no lead-in).
+            search_start_idx = 0
+            search_end_idx = min(50, n_points)
         else:
             # No known lead-in or very short: search from the beginning
             # Use a generous range to handle up to ~12 km lead-ins (~1200 points)
@@ -373,22 +383,60 @@ def align_riders_to_route(riders: List[Dict], route: RouteData,
         )
         close_mask = geo_devs_search < 50  # within 50m of route
         leadin_end_idx = 0  # index where rider first reaches the route
+        _targeted_search_ok = False  # whether the targeted search found on-route pts
+
+        def _compute_offset(sample_indices):
+            """Compute initial_offset from sample indices, with loop bimodal fix."""
+            offs = route.distance[kd_indices[sample_indices, 0]] - raw_traveled_m[sample_indices]
+            if is_loop:
+                med = np.median(offs)
+                offs = offs.copy()
+                offs[offs > med + route_total * 0.5] -= route_total
+                offs[offs < med - route_total * 0.5] += route_total
+            return float(np.median(offs))
+
         if np.any(close_mask) and raw_traveled_m is not None:
             # Map back to absolute indices
             close_indices = np.where(close_mask)[0] + search_start_idx
             leadin_end_idx = close_indices[0]
             # Use several close points for robustness
             sample = close_indices[:min(20, len(close_indices))]
-            offsets = route.distance[kd_indices[sample, 0]] - raw_traveled_m[sample]
-            initial_offset = np.median(offsets)
+            initial_offset = _compute_offset(sample)
+            _targeted_search_ok = True
             leadin_est = -initial_offset if initial_offset < 0 else 0
             if leadin_est > 50:
                 logger.info("  Rider %s: detected ~%.0fm lead-in "
                       "(first on-route point at idx %d, "
                       "raw dist %.0fm)", rider['rank'], leadin_est, leadin_end_idx,
                       raw_traveled_m[leadin_end_idx])
+        elif raw_traveled_m is not None:
+            # Targeted search didn't find on-route points — rider likely has
+            # warmup data pushing the real lead-in beyond the search window.
+            # Scan all points, requiring both GPS proximity AND movement to
+            # exclude pen idle time (pen is often near the route).
+            all_nn = kd_indices[:, 0]
+            all_devs = haversine(
+                lats, lngs,
+                route.latlng[all_nn, 0], route.latlng[all_nn, 1]
+            )
+            moving = df['speed_kmh'].values > 10 if 'speed_kmh' in df.columns else np.ones(n_points, dtype=bool)
+            on_route_moving = (all_devs < 50) & moving
+            if np.any(on_route_moving):
+                oi = np.where(on_route_moving)[0]
+                leadin_end_idx = oi[0]
+                sample = oi[:min(20, len(oi))]
+                initial_offset = _compute_offset(sample)
+                logger.info("  Rider %s: fallback wider search found on-route "
+                      "point at idx %d (raw dist %.0fm, offset=%.0fm)",
+                      rider['rank'], leadin_end_idx,
+                      raw_traveled_m[leadin_end_idx], initial_offset)
+            else:
+                # Truly never on route — use first few points
+                n_start = min(10, n_points)
+                start_dists = route.distance[kd_indices[:n_start, 0]]
+                initial_offset = np.median(start_dists)
         else:
-            # Fallback: use first few points as before
+            # No raw distance data at all
             n_start = min(10, n_points)
             start_dists = route.distance[kd_indices[:n_start, 0]]
             initial_offset = np.median(start_dists)
@@ -523,8 +571,11 @@ def align_riders_to_route(riders: List[Dict], route: RouteData,
                 route_ll[nn_idx, 0], route_ll[nn_idx, 1]
             )
         
-        # Collect per-rider start offset for loop routes
-        if is_loop and raw_dist_km is not None:
+        # Collect per-rider start offset for loop routes.
+        # Only include offsets from the targeted search — riders with warmup
+        # data that needed the fallback wider search may have less reliable
+        # offsets and should not skew the global median.
+        if is_loop and raw_dist_km is not None and _targeted_search_ok:
             all_start_offsets.append(initial_offset)
         rider_projections.append((route_distances, deviations, raw_dist_km, initial_offset))
     
@@ -539,6 +590,9 @@ def align_riders_to_route(riders: List[Dict], route: RouteData,
     # from race_meta.json.  Riders who started their activity well after the
     # race began are late joiners — they ride a different lead-in path whose
     # altitude data does not match the elevation profile.
+    #
+    # In TTT races all teams start from the same pen at staggered times, so
+    # none of them are late joiners.  Callers pass detect_late_joiners=False.
     LATE_JOINER_THRESHOLD_SEC = 0  # any activity starting after race start = late joiner
     late_joiner_set = set()  # rider indices flagged as late joiners
     
@@ -605,9 +659,9 @@ def align_riders_to_route(riders: List[Dict], route: RouteData,
         #   1. Start time: rider started >2 min after median (works on all routes)
         #   2. Spatial offset: per-rider offset differs >10% of route_total from
         #      global offset (loop routes only)
-        is_late = rider_idx in late_joiner_set
+        is_late = rider_idx in late_joiner_set if detect_late_joiners else False
         
-        if not is_late and is_loop and loop_start_offset is not None:
+        if detect_late_joiners and not is_late and is_loop and loop_start_offset is not None:
             offset_diff = abs(rider_offset - loop_start_offset)
             if offset_diff > route_total * 0.1:
                 is_late = True

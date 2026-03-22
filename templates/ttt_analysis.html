@@ -1410,6 +1410,11 @@
             }));
         });
         powerChartInstance.options.scales.y.title.text = isWkg ? 'Lead Power (W/kg)' : 'Lead Power (W)';
+        powerChartInstance.options.plugins.tooltip.callbacks.label = item => {
+            const v = item.parsed.y;
+            if (item.dataset.yAxisID === 'yAlt') return `${item.dataset.label}: ${v != null ? v.toFixed(0) + ' m' : 'N/A'}`;
+            return `${item.dataset.label}: ${v != null ? (isWkg ? v.toFixed(1) + ' W/kg' : v.toFixed(0) + ' W') : 'N/A'}`;
+        };
         powerChartInstance.update('none');
     }
 

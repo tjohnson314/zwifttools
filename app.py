@@ -1834,7 +1834,7 @@ def api_ttt_fetch():
         act_id = p['activity_id']
         telem_data, act_data, err = fetch_rider_telemetry(act_id, headers)
         if err:
-            return {**p, 'telemetry': None, 'error': err}
+            return {**p, 'telemetry': None, 'telem_raw': None, 'error': err}
 
         df = convert_telemetry_to_dataframe(telem_data)
 
@@ -1845,6 +1845,7 @@ def api_ttt_fetch():
         return {
             **p,
             'telemetry': df,
+            'telem_raw': telem_data,
             'height_cm': height_cm or 175,
             'error': None,
         }
@@ -1923,6 +1924,65 @@ def api_ttt_fetch():
             'draft_watts': draft_watts,
         }
 
+    # ---- 5b. Route-project riders for accurate distance alignment ----
+    # Reuse the battle-tested align_riders_to_route() from race_replay
+    route_data = None
+    leadin_m = 0.0
+    if route_id:
+        from shared.route_lookup import get_route_info as _get_ri
+        ri = _get_ri(route_id)
+        if ri:
+            route_slug = ri['name'].lower().replace(' ', '-').replace("'", "")
+            leadin_m = ri.get('leadinDistanceInMeters', 0.0)
+            from race_replay.data_cleaner import load_route_data, align_riders_to_route
+            route_data = load_route_data(route_slug)
+
+    if route_data:
+        from scipy.interpolate import interp1d
+        import pandas as pd
+
+        # Build rider dicts in the format align_riders_to_route expects
+        alignment_riders = []
+        act_id_order = []  # track which act_id maps to which alignment rider
+
+        for act_id, rd in all_processed.items():
+            r = rider_lookup[act_id]
+            raw = r.get('telem_raw') or {}
+            latlng_raw = raw.get('latlng', [])
+            times_raw = raw.get('timeInSec', [])
+
+            if not latlng_raw or len(latlng_raw) != len(times_raw):
+                continue
+
+            # Interpolate latlng to the rider's sample times
+            lats_raw = np.array([ll[0] for ll in latlng_raw])
+            lngs_raw = np.array([ll[1] for ll in latlng_raw])
+            lat_interp = interp1d(times_raw, lats_raw, fill_value='extrapolate', bounds_error=False)
+            lng_interp = interp1d(times_raw, lngs_raw, fill_value='extrapolate', bounds_error=False)
+
+            adf = pd.DataFrame({
+                'lat': lat_interp(rd['time_sec']),
+                'lng': lng_interp(rd['time_sec']),
+                'distance_km': rd['distance_m'] / 1000.0,
+                'time_sec': rd['time_sec'],
+                'speed_kmh': rd['speed_mps'] * 3.6,
+            })
+            alignment_riders.append({'data': adf, 'rank': len(alignment_riders) + 1})
+            act_id_order.append(act_id)
+
+        if alignment_riders:
+            aligned, _ = align_riders_to_route(
+                alignment_riders, route_data,
+                leadin_distance_m=leadin_m,
+                detect_late_joiners=False,  # TTT: teams start at staggered times, not late joiners
+            )
+            # Copy projected distances back into all_processed
+            for i, act_id in enumerate(act_id_order):
+                adf = aligned[i]['data']
+                aligned_dist = adf['distance_km'].values * 1000.0
+                if len(aligned_dist) == len(all_processed[act_id]['distance_m']):
+                    all_processed[act_id]['route_distance_m'] = aligned_dist
+
     # ---- 6. Build team assignments and aggregate ----
     team_assignments = {}  # activity_id -> tag
     for tag, riders in team_map.items():
@@ -1981,7 +2041,11 @@ def _build_ttt_team_results(all_processed, team_assignments, tag_order):
         if not rider_data:
             continue
 
-        max_dist = max(rd['distance_m'][-1] for rd in rider_data)
+        # Use route-projected distance when available, fall back to raw
+        def _get_dist(rd):
+            return rd.get('route_distance_m', rd['distance_m'])
+
+        max_dist = max(_get_dist(rd)[-1] for rd in rider_data)
         step = 50
         dist_axis = np.arange(0, max_dist, step)
 
@@ -1997,13 +2061,14 @@ def _build_ttt_team_results(all_processed, team_assignments, tag_order):
 
             rider_states = []
             for rd in rider_data:
-                idx = np.searchsorted(rd['distance_m'], d)
-                if idx >= len(rd['distance_m']):
-                    idx = len(rd['distance_m']) - 1
+                dist_arr = _get_dist(rd)
+                idx = np.searchsorted(dist_arr, d)
+                if idx >= len(dist_arr):
+                    idx = len(dist_arr) - 1
                 if idx < 0:
                     idx = 0
 
-                actual_dist = rd['distance_m'][idx]
+                actual_dist = dist_arr[idx]
                 if actual_dist < d - 500:
                     continue
 
@@ -2018,7 +2083,8 @@ def _build_ttt_team_results(all_processed, team_assignments, tag_order):
             if not rider_states:
                 continue
 
-            rider_states.sort(key=lambda rs: rs['dist'], reverse=True)
+            # Lead rider = whoever reached this distance point first (lowest time)
+            rider_states.sort(key=lambda rs: rs['time'])
             lead = rider_states[0]
             lead_speed[di] = lead['speed'] * 3.6
             elevation[di] = lead['rd']['altitude_m'][lead['idx']]
@@ -2026,11 +2092,7 @@ def _build_ttt_team_results(all_processed, team_assignments, tag_order):
             lead_power[di] = lead['rd']['power'][lead['idx']]
 
             for rs in rider_states:
-                gap_dist = lead['dist'] - rs['dist']
-                if rs['speed'] > 0.5:
-                    gap_time = gap_dist / rs['speed']
-                else:
-                    gap_time = float('inf')
+                gap_time = rs['time'] - lead['time']
 
                 if gap_time <= 10:
                     idx = rs['idx']
@@ -2177,7 +2239,8 @@ def api_ttt_rider():
         return jsonify({'error': 'Rider not found in cache'}), 404
 
     # Downsample to ~50 m intervals for reasonable chart size
-    distance_m = rd['distance_m']
+    # Use route-projected distance when available
+    distance_m = rd.get('route_distance_m', rd['distance_m'])
     step = 50
     dist_axis = np.arange(0, distance_m[-1], step)
     indices = np.searchsorted(distance_m, dist_axis)
