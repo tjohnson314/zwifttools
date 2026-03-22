@@ -672,7 +672,6 @@
     function initSlider(data) {
         const maxDist = Math.max(...data.teams.map(t => Math.max(...t.distance_km)));
         const raceDist = data.race_distance_km || maxDist;
-        console.log('[TTT] race_distance_km from API:', data.race_distance_km, '| maxDist:', maxDist, '| using:', raceDist);
         const startEl = document.getElementById('distStart');
         const endEl = document.getElementById('distEnd');
         startEl.min = 0; startEl.max = maxDist.toFixed(1); startEl.step = 0.1; startEl.value = 0;
