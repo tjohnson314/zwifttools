@@ -1,0 +1,18 @@
+{
+    "manifest_version": 1,
+    "name": "Race Telemetry Recorder",
+    "description": "Records per-second telemetry for all nearby riders including draft, power, HR, speed, cadence, and location",
+    "version": "0.1.0",
+    "author": "zwifttools",
+    "windows": [{
+        "id": "telemetry-recorder",
+        "file": "telemetry.html",
+        "name": "Race Telemetry",
+        "description": "Records race telemetry data for all nearby riders",
+        "overlay": true,
+        "default_bounds": {
+            "width": 340,
+            "height": 260
+        }
+    }]
+}

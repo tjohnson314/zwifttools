@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html class="transparent-bg" tabindex="0">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';"/>
+    <title>Race Telemetry - Sauce for Zwift™</title>
+    <script src="/pages/src/preloads.js"></script>
+    <link id="favicon" rel="shortcut icon" href="/pages/images/favicon.png"/>
+    <link rel="stylesheet" href="/pages/css/common.css"/>
+    <link rel="stylesheet" href="telemetry.css"/>
+    <script type="module">
+        import {main} from './telemetry.mjs';
+        main();
+    </script>
+</head>
+<body>
+    <div id="titlebar" class="always-visible">
+        <header>
+            <div class="title">Race Telemetry</div>
+            <div class="filler"></div>
+            <div class="buttons">
+                <div title="Minimize" class="button minimize electron-only"><ms>minimize</ms></div>
+                <div title="Close" class="button close electron-only"><ms>close</ms></div>
+            </div>
+        </header>
+    </div>
+    <div class="container">
+        <div class="status">
+            <span class="indicator stopped"></span>
+            <span class="status-text">Stopped</span>
+        </div>
+        <div class="stats">
+            <div class="stat"><key>Riders</key><value class="rider-count">0</value></div>
+            <div class="stat"><key>Samples</key><value class="sample-count">0</value></div>
+            <div class="stat"><key>Duration</key><value class="duration">0:00</value></div>
+        </div>
+        <div class="controls">
+            <button class="btn-record">Start Recording</button>
+            <button class="btn-download" disabled>Download CSV</button>
+        </div>
+    </div>
+</body>
+</html>
