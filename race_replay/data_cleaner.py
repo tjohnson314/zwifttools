@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 # Bump this version when data cleaning logic changes in a way that invalidates
 # previously cached results.  The cache loader will discard stale caches.
-CLEANING_VERSION = 3
+CLEANING_VERSION = 12
 
 # Map of Strava segment IDs for each route (sourced from ZwiftMap / ZwiftInsider)
 # Loaded from route_strava_segments.json
@@ -51,6 +51,7 @@ class RiderData:
     weight_kg: float = 75.0  # Rider weight in kg
     player_id: Optional[int] = None  # Numeric Zwift profile ID
     activity_start_time: Optional[str] = None  # ISO 8601 UTC when activity started
+    ttt_time_offset: Optional[float] = None  # TTT per-rider time offset in seconds
 
 
 @dataclass
@@ -76,6 +77,107 @@ def haversine(lat1, lng1, lat2, lng2):
     dlambda = np.radians(lng2 - lng1)
     a = np.sin(dphi/2)**2 + np.cos(phi1)*np.cos(phi2)*np.sin(dlambda/2)**2
     return 2 * R * np.arcsin(np.sqrt(a))
+
+
+def compute_ttt_time_offset(
+    times: np.ndarray,
+    distances_m: np.ndarray,
+    lats: np.ndarray,
+    lngs: np.ndarray,
+    finish_lat: float,
+    finish_lng: float,
+    finish_distance_m: float,
+    official_time_sec: float,
+    search_radius_m: float = 500,
+    gps_sanity_m: float = 50,
+) -> Optional[float]:
+    """Compute TTT time offset via GPS proximity to the finish line.
+
+    Uses the GPS coordinates to find the exact moment the rider crosses
+    the finish, then returns ``telem_finish - official_time_sec``.
+    Subtract the returned offset from the rider's time array to align
+    all riders to the official race clock.
+
+    Returns ``None`` if the finish crossing cannot be determined.
+    """
+    search_mask = np.abs(distances_m - finish_distance_m) < search_radius_m
+    search_indices = np.where(search_mask)[0]
+    if len(search_indices) == 0:
+        return None
+
+    gps_dists = haversine(
+        lats[search_indices], lngs[search_indices],
+        finish_lat, finish_lng,
+    )
+    best_local = np.argmin(gps_dists)
+    best_idx = search_indices[best_local]
+    best_gps_dist = gps_dists[best_local]
+
+    if best_gps_dist >= gps_sanity_m:
+        return None
+
+    # Refine within a small window around the best index
+    window_start = max(search_indices[0], best_idx - 2)
+    window_end = min(search_indices[-1], best_idx + 2) + 1
+    win_indices = np.arange(window_start, window_end)
+    win_gps = haversine(
+        lats[win_indices], lngs[win_indices],
+        finish_lat, finish_lng,
+    )
+    bi = win_indices[np.argmin(win_gps)]
+
+    # Quadratic interpolation for sub-second precision.
+    # GPS distance forms a V-shape at the closest approach; fit a
+    # parabola through {bi-1, bi, bi+1} to find the minimum.
+    if bi > 0 and bi < len(times) - 1:
+        g_prev = haversine(lats[bi - 1], lngs[bi - 1], finish_lat, finish_lng)
+        g_curr = haversine(lats[bi], lngs[bi], finish_lat, finish_lng)
+        g_next = haversine(lats[bi + 1], lngs[bi + 1], finish_lat, finish_lng)
+        a_coef = (g_prev + g_next) / 2 - g_curr
+        b_coef = (g_next - g_prev) / 2
+        if a_coef > 0:
+            x_min = np.clip(-b_coef / (2 * a_coef), -1, 1)
+        else:
+            x_min = 0
+        if x_min >= 0:
+            telem_finish = times[bi] + x_min * (times[bi + 1] - times[bi])
+        else:
+            telem_finish = times[bi] + x_min * (times[bi] - times[bi - 1])
+    else:
+        telem_finish = times[bi]
+
+    return float(telem_finish - official_time_sec)
+
+
+def resample_to_integer_seconds(df: pd.DataFrame) -> pd.DataFrame:
+    """Resample a rider DataFrame to a clean 1-second grid.
+
+    After a TTT time-offset shift, timestamps are fractional.  This
+    interpolates all numeric columns onto integer-second timestamps so
+    riders are directly comparable.  Non-numeric columns use
+    nearest-preceding-sample lookup.
+
+    The DataFrame must have a ``time_sec`` column (not as the index).
+    Returns a new DataFrame; the original is not modified.
+    """
+    shifted_times = df['time_sec'].values
+    int_start = int(np.ceil(shifted_times[0]))
+    int_end = int(np.floor(shifted_times[-1]))
+    if int_end <= int_start:
+        return df
+
+    int_times = np.arange(int_start, int_end + 1, dtype=float)
+    resampled = {'time_sec': int_times}
+    for col in df.columns:
+        if col == 'time_sec':
+            continue
+        vals = df[col].values
+        if np.issubdtype(vals.dtype, np.floating) or np.issubdtype(vals.dtype, np.integer):
+            resampled[col] = np.interp(int_times, shifted_times, vals.astype(float))
+        else:
+            resampled[col] = vals[np.searchsorted(shifted_times, int_times, side='right') - 1]
+    return pd.DataFrame(resampled)
+
 
 
 @dataclass
@@ -461,32 +563,34 @@ def align_riders_to_route(riders: List[Dict], route: RouteData,
             # Route distances for each KNN candidate: (N_or, K)
             cand_dists = route.distance[or_indices]
             
+            # GPS distance to each KNN candidate (approximate meters).
+            # Strongly prefer the geographically closest route point so
+            # that riders at the same GPS location map to the same route
+            # distance regardless of per-rider odometer bias (e.g. from
+            # steering vs non-steering lines through corners).
+            DEG_TO_M = 111_320  # approximate degrees→meters at equator
+            gps_scores_m = or_kd_dists * DEG_TO_M
+
             if raw_traveled_m is not None:
                 # Expected distance for each on-route point: (N_or,)
                 expected_m = initial_offset + raw_traveled_m[on_route]
                 
                 if is_loop:
-                    # Wrap offsets for expected: shape (5,)
-                    wrap_k = np.arange(-2, 3, dtype=np.float64)
-                    # expected_candidates: (N_or, 5)
-                    expected_all = expected_m[:, None] + wrap_k[None, :] * route_total
-                    # candidate with wrap offsets: (N_or, K, 5)
-                    cand_all = cand_dists[:, :, None] + wrap_k[None, None, :] * route_total
-                    # Absolute differences: (N_or, K, 5, 5) — each cand+wrap vs each expected+wrap
-                    # But this is equivalent to: for each (cand+k1*T) vs each (exp+k2*T)
-                    # = |cand - exp + (k1-k2)*T|. Since k1,k2 ∈ {-2..2}, k1-k2 ∈ {-4..4}
-                    # Simplification: compute |cand - exp + m*T| for m in {-4..4}
                     wrap_m = np.arange(-4, 5, dtype=np.float64)
-                    # diff: (N_or, K, 9)
                     diff = cand_dists[:, :, None] - expected_m[:, None, None] + wrap_m[None, None, :] * route_total
-                    scores = np.min(np.abs(diff), axis=2)  # (N_or, K) — best wrap per candidate
+                    odo_scores = np.min(np.abs(diff), axis=2)  # (N_or, K)
                 else:
-                    # Non-loop: single expected, no wrapping
-                    # |cand_dist - expected_m| → (N_or, K)
-                    scores = np.abs(cand_dists - expected_m[:, None])
+                    odo_scores = np.abs(cand_dists - expected_m[:, None])
+
+                # Blend: GPS proximity (×10) dominates on straight
+                # sections where sequential route points are >10 m apart
+                # in GPS.  Odometer still disambiguates at intersections
+                # where multiple segments have similar GPS distances but
+                # very different route distances.
+                scores = gps_scores_m * 10 + odo_scores
             else:
-                # No raw distance: use KD-tree geometric distance as score
-                scores = or_kd_dists
+                # No raw distance: use GPS distance as score
+                scores = gps_scores_m
             
             # Pick the best candidate (lowest score) per point
             best_j = np.argmin(scores, axis=1)  # (N_or,)
@@ -1243,6 +1347,7 @@ def clean_race_data(
         weight_kg = 75.0
         player_id = None
         activity_start_time = None
+        elapsed_ms = None
         if summary is not None:
             match = summary[summary['rank'] == rank]
             if len(match) > 0:
@@ -1253,6 +1358,8 @@ def clean_race_data(
                     player_id = int(match['player_id'].values[0])
                 if 'activity_start_time' in match.columns and pd.notna(match['activity_start_time'].values[0]):
                     activity_start_time = str(match['activity_start_time'].values[0])
+                if 'elapsed_ms' in match.columns and pd.notna(match['elapsed_ms'].values[0]):
+                    elapsed_ms = float(match['elapsed_ms'].values[0])
         
         riders.append({
             'rank': rank,
@@ -1262,6 +1369,7 @@ def clean_race_data(
             'weight_kg': weight_kg,
             'player_id': player_id,
             'activity_start_time': activity_start_time,
+            'elapsed_ms': elapsed_ms,
             'data': rider_data['data'],
             'metadata': rider_data['metadata']
         })
@@ -1284,6 +1392,22 @@ def clean_race_data(
         world = detect_world_from_coords(sample_lat, sample_lng)
         if world:
             logger.info("Detected world: %s", world)
+    
+    # Detect TTT races from metadata BEFORE route alignment so we can
+    # disable late-joiner detection (all TTT teams start from the same pen
+    # at staggered times — they are not late joiners).
+    is_ttt = False
+    meta_path = data_path / 'race_meta.json'
+    if meta_path.exists():
+        try:
+            with open(meta_path) as f:
+                meta = json.load(f)
+            race_name_check = (meta.get('race_name') or '').lower()
+            if 'ttt' in race_name_check or 'team time trial' in race_name_check:
+                is_ttt = True
+                logger.info("Detected TTT race — will apply per-rider time offsets")
+        except Exception:
+            pass
     
     if progress_callback:
         progress_callback(len(csv_files) + 1, total_steps, "Aligning distances...")
@@ -1309,7 +1433,8 @@ def clean_race_data(
                     pass
             riders, loop_start_offset = align_riders_to_route(
                 riders, route_data, leadin_distance_m=leadin_distance_m,
-                race_start_time=race_start_time)
+                race_start_time=race_start_time,
+                detect_late_joiners=not is_ttt)
             # Use race metadata for finish line (more reliable than route total,
             # especially on loop routes where the segment includes lead-in)
             finish_line = determine_finish_line(riders, data_path)
@@ -1329,10 +1454,6 @@ def clean_race_data(
     if progress_callback:
         progress_callback(len(csv_files) + 2, total_steps, "Processing riders...")
     
-    # Find global time range
-    min_time = min(r['data']['time_sec'].min() for r in riders)
-    max_time = max(r['data']['time_sec'].max() for r in riders)
-    
     # Process each rider
     cleaned_riders = []
     finish_times = []
@@ -1349,7 +1470,49 @@ def clean_race_data(
                 finish_time = crossed['time_sec'].min()
                 # Keep data only up to finish + a small buffer
                 df = df[df['time_sec'] <= finish_time + 5].copy()
-                finish_times.append(finish_time)
+        
+        # --- Per-rider time + distance offset for TTT races ---
+        # In a TTT, telemetry recording starts when each rider crosses the
+        # start line, so each rider's time_sec=0 is a different real-world
+        # moment.  Both timestamps AND odometer distances have per-rider
+        # biases (timestamps are shifted; odometers differ by ~30-80m).
+        #
+        # Fix: use GPS coordinates to find the exact moment each rider
+        # passes the finish line.  GPS is absolute — it doesn't depend on
+        # either the timer or the odometer.  We find the closest GPS
+        # approach to the finish GPS within a distance window (to handle
+        # multi-lap races), interpolate the sub-second crossing time,
+        # compare to official result time (elapsed_ms) for the time offset,
+        # and compute the odometer bias for distance correction.
+        # Then resample all columns at integer seconds for clean plotting.
+        ttt_time_offset = None
+        if is_ttt and finish_line and route_data is not None:
+            elapsed_ms = rider.get('elapsed_ms')
+            if elapsed_ms is not None and 'lat' in df.columns and 'lng' in df.columns:
+                official_time_sec = elapsed_ms / 1000.0
+
+                ttt_time_offset = compute_ttt_time_offset(
+                    times=df['time_sec'].values,
+                    distances_m=df['distance_km'].values * 1000.0,
+                    lats=df['lat'].values,
+                    lngs=df['lng'].values,
+                    finish_lat=route_data.latlng[-1, 0],
+                    finish_lng=route_data.latlng[-1, 1],
+                    finish_distance_m=finish_line * 1000.0,
+                    official_time_sec=official_time_sec,
+                )
+
+                if ttt_time_offset is not None:
+                    logger.info("  Rider %s (%s): TTT offset=%.2fs",
+                                rider['rank'], rider['name'],
+                                ttt_time_offset)
+
+                    df['time_sec'] = df['time_sec'] - ttt_time_offset
+                    finish_time = official_time_sec
+                    df = resample_to_integer_seconds(df)
+        
+        if finish_time is not None:
+            finish_times.append(finish_time)
         
         # Compute per-point CRR from GPS surface polygons
         if world and 'lat' in df.columns and 'lng' in df.columns:
@@ -1379,7 +1542,12 @@ def clean_race_data(
             weight_kg=rider.get('weight_kg', 75.0),
             player_id=rider.get('player_id'),
             activity_start_time=rider.get('activity_start_time'),
+            ttt_time_offset=ttt_time_offset,
         ))
+    
+    # Find global time range
+    min_time = min(r.data.index.min() for r in cleaned_riders)
+    max_time = max(r.data.index.max() for r in cleaned_riders)
     
     # Cap max_time to the last finisher's time (+ buffer) so the timeline
     # doesn't extend into post-race cooldown data
@@ -1446,8 +1614,18 @@ def clean_race_data(
                             logger.info("  Lead-in elevation: %.2f km from rider telemetry "
                                   "(alt %.0f-%.0fm)", leadin_offset_km, leadin_alt.min(), leadin_alt.max())
             
-            # Offset loop elevation to start after the lead-in
-            elev_dist = elev_dist + leadin_offset_km
+            # The shifted/sorted route distances already align with rebased
+            # rider distances (both offset by loop_start_offset).  Do NOT add
+            # leadin_offset_km — that would double-count the offset and shift
+            # terrain features relative to the riders.  Instead, trim the route
+            # data where it overlaps with the lead-in telemetry so the concat
+            # produces monotonically increasing distances.
+            full_loop_dist = elev_dist.copy()
+            full_loop_alt = elev_alt.copy()
+            if leadin_elev is not None:
+                route_mask = elev_dist >= leadin_offset_km
+                elev_dist = elev_dist[route_mask]
+                elev_alt = elev_alt[route_mask]
             
             # Extend to cover full race distance (riders may go beyond one loop)
             max_rider_dist = max(r['data']['distance_km'].max() for r in riders if len(r['data']) > 0)
@@ -1456,8 +1634,8 @@ def clean_race_data(
                 all_dist = [elev_dist]
                 all_alt = [elev_alt]
                 for lap in range(1, n_extra_laps + 1):
-                    all_dist.append(elev_dist + lap * route_total_m / 1000.0)
-                    all_alt.append(elev_alt)
+                    all_dist.append(full_loop_dist + lap * route_total_m / 1000.0)
+                    all_alt.append(full_loop_alt)
                 elev_dist = np.concatenate(all_dist)
                 elev_alt = np.concatenate(all_alt)
             
@@ -1606,6 +1784,7 @@ def save_to_cache(data: CleanedRaceData, cache_path: Path):
             'player_id': int(rider.player_id) if rider.player_id else None,
             'activity_start_time': rider.activity_start_time,
             'finish_time_sec': to_python(rider.finish_time_sec) if rider.finish_time_sec is not None else None,
+            'ttt_time_offset': to_python(rider.ttt_time_offset) if rider.ttt_time_offset is not None else None,
             'data_file': rider_file.name
         })
     
@@ -1666,6 +1845,7 @@ def load_from_cache(cache_path: Path) -> Optional[CleanedRaceData]:
                 weight_kg=rider_info.get('weight_kg', 75.0),
                 player_id=rider_info.get('player_id'),
                 activity_start_time=rider_info.get('activity_start_time'),
+                ttt_time_offset=rider_info.get('ttt_time_offset'),
             ))
         
         # Load elevation

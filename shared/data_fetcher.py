@@ -500,7 +500,7 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
         
         np_value = calculate_normalized_power(df['power_watts']) if len(df) > 0 else None
         
-        return {
+        result = {
             'rank': p['rank'],
             'name': p['name'],
             'activity_id': act_id,
@@ -516,6 +516,9 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
             'avg_hr': round(df['hr_bpm'].mean(), 1) if len(df) > 0 else 0,
             'data_points': len(df)
         }
+        if p.get('elapsed_ms'):
+            result['elapsed_ms'] = p['elapsed_ms']
+        return result
     
     # Fetch all riders concurrently, preserving original order
     summary_data = []
