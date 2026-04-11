@@ -404,6 +404,14 @@
             </div>
 
             <div class="team-colors" id="teamLegend"></div>
+
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+                <label style="color:#aaa; font-size:0.85rem;">Focus Team:</label>
+                <select id="focusTeamSelect" onchange="onFocusTeamChange()" style="background:#1a2332; color:#ccc; border:1px solid #334; border-radius:4px; padding:4px 8px; font-size:0.85rem;">
+                    <option value="">All Teams</option>
+                </select>
+            </div>
+
             <div id="segmentTimes" style="margin-bottom:16px;"></div>
 
             <div class="chart-container">
@@ -424,6 +432,7 @@
                 <div class="chart-wrapper">
                     <canvas id="powerChart"></canvas>
                 </div>
+                <div id="pullStatsTable" style="display:none; margin-top:12px;"></div>
             </div>
 
             <div class="chart-container">
@@ -506,6 +515,19 @@
 
     // ---- Team visibility toggle ----
     let hiddenTeams = new Set();  // team labels that are toggled off
+    let focusTeam = '';  // empty = all teams, else a team label
+
+    // Distinct rider colors for focused-team per-rider breakdown
+    const RIDER_COLORS = [
+        '#f7931e', '#4fc3f7', '#81c784', '#ce93d8', '#ef9a9a',
+        '#fff176', '#ffab91', '#80deea', '#e6ee9c', '#f48fb1',
+        '#b39ddb', '#90caf9', '#a5d6a7', '#ffe082', '#bcaaa4',
+    ];
+
+    function onFocusTeamChange() {
+        focusTeam = document.getElementById('focusTeamSelect').value;
+        if (lastData) renderResults(lastData);
+    }
 
     function toggleTeam(label) {
         if (hiddenTeams.has(label)) hiddenTeams.delete(label);
@@ -880,13 +902,29 @@
             </div>`;
         });
 
-        // Rosters (with drag-and-drop)
+        // Populate focus-team dropdown (preserve current selection)
+        const focusSel = document.getElementById('focusTeamSelect');
+        const prevFocus = focusTeam;
+        focusSel.innerHTML = '<option value="">All Teams</option>';
+        teams.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t.label;
+            opt.textContent = t.label;
+            if (t.label === prevFocus) opt.selected = true;
+            focusSel.appendChild(opt);
+        });
+
+        // Determine which team is focused
+        const ft = focusTeam ? teams.find(t => t.label === focusTeam) : null;
+
+        // Rosters (with drag-and-drop) — hide other teams when focused
         const rostersEl = document.getElementById('teamRosters');
         rostersEl.innerHTML = '';
         teams.forEach((t, i) => {
             const c = TEAM_COLORS[i % TEAM_COLORS.length];
             const div = document.createElement('div');
             div.className = 'chart-container team-drop-zone';
+            if (ft && t.label !== focusTeam) div.style.display = 'none';
             div.style.borderLeft = `3px solid ${c.line}`;
             div.dataset.team = t.label;
             div.innerHTML = `<h3 style="color:${c.line}">${t.label}</h3>
@@ -932,9 +970,39 @@
 
         // Speed chart
         if (speedChartInstance) speedChartInstance.destroy();
-        const elevData = teams[0].distance_km
-            .map((d, j) => ({ x: d, y: teams[0].elevation_m[j] }))
+        const elevData = (ft || teams[0]).distance_km
+            .map((d, j) => ({ x: d, y: (ft || teams[0]).elevation_m[j] }))
             .filter(p => p.y != null);
+
+        // Helper: build per-rider lead datasets from a focused team
+        function buildPerRiderDatasets(team, valueKey, rawKey, scale) {
+            scale = scale || 1;
+            // Use raw (unsmoothed) array when available — smoothed values
+            // bleed power/speed across rider boundaries.
+            const src = rawKey && team[rawKey] ? team[rawKey] : team[valueKey];
+            const riderNames = [...new Set(team.lead_rider_name.filter(n => n))];
+            return riderNames.map((name, ri) => {
+                const c = RIDER_COLORS[ri % RIDER_COLORS.length];
+                // Short display name: take first name or everything before '(' / '['
+                const shortName = name.replace(/\s*[\(\[].*/, '').trim().split(/\s+/).slice(0, 2).join(' ');
+                return {
+                    label: shortName,
+                    data: team.distance_km.map((d, j) => ({
+                        x: d,
+                        y: team.lead_rider_name[j] === name && src[j] != null
+                            ? src[j] * scale : null,
+                    })),
+                    borderColor: c,
+                    backgroundColor: c + '26',  // hex + 15% alpha
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    tension: 0.3,
+                    spanGaps: false,
+                    yAxisID: 'y',
+                };
+            });
+        }
+
         const speedDatasets = [
             {
                 label: 'Elevation (m)',
@@ -948,21 +1016,24 @@
                 yAxisID: 'yAlt',
                 order: 10,
             },
-            ...teams.map((t, i) => {
-            const c = TEAM_COLORS[i % TEAM_COLORS.length];
-            return {
-                label: t.label,
-                data: t.distance_km
-                    .map((d, j) => ({ x: d, y: t.lead_speed_kph[j] })),
-                borderColor: c.line,
-                backgroundColor: c.bg,
-                borderWidth: 1.5,
-                pointRadius: 0,
-                tension: 0.3,
-                spanGaps: true,
-                yAxisID: 'y',
-            };
-        }),
+            ...(ft
+                ? buildPerRiderDatasets(ft, 'lead_speed_kph', 'lead_speed_kph_raw')
+                : teams.map((t, i) => {
+                    const c = TEAM_COLORS[i % TEAM_COLORS.length];
+                    return {
+                        label: t.label,
+                        data: t.distance_km
+                            .map((d, j) => ({ x: d, y: t.lead_speed_kph[j] })),
+                        borderColor: c.line,
+                        backgroundColor: c.bg,
+                        borderWidth: 1.5,
+                        pointRadius: 0,
+                        tension: 0.3,
+                        spanGaps: true,
+                        yAxisID: 'y',
+                    };
+                })
+            ),
         ];
 
         const speedCtx = document.getElementById('speedChart').getContext('2d');
@@ -1014,6 +1085,107 @@
         // Lead power chart
         if (powerChartInstance) powerChartInstance.destroy();
         const powerUnit = document.getElementById('powerToggleWkg').classList.contains('active') ? 'Wkg' : 'W';
+
+        function buildPerRiderPowerDatasets(team) {
+            const riderNames = [...new Set(team.lead_rider_name.filter(n => n))];
+            const isWkg = powerUnit === 'Wkg';
+            // Use raw (unsmoothed) power — smoothing bleeds across rider boundaries
+            const src = team.lead_power_watts_raw || team.lead_power_watts;
+            // Find per-rider weight from team.riders
+            const weightMap = {};
+            team.riders.forEach(r => { weightMap[r.name] = r.weight_kg || 75; });
+            return riderNames.map((name, ri) => {
+                const c = RIDER_COLORS[ri % RIDER_COLORS.length];
+                const wt = weightMap[name] || team.avg_weight_kg || 75;
+                const shortName = name.replace(/\s*[\(\[].*/, '').trim().split(/\s+/).slice(0, 2).join(' ');
+                return {
+                    label: shortName,
+                    data: team.distance_km.map((d, j) => ({
+                        x: d,
+                        y: team.lead_rider_name[j] === name && src[j] != null
+                            ? (isWkg ? src[j] / wt : src[j]) : null,
+                    })),
+                    borderColor: c,
+                    backgroundColor: c + '26',  // hex + 15% alpha
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    tension: 0.3,
+                    spanGaps: false,
+                    yAxisID: 'y',
+                };
+            });
+        }
+
+        function updatePullStatsTable(team, lo, hi) {
+            const el = document.getElementById('pullStatsTable');
+            if (!team) { el.style.display = 'none'; return; }
+            const dist = team.distance_km;
+            const names = team.lead_rider_name;
+            const power = team.lead_power_watts_raw || team.lead_power_watts;
+            const speeds = team.lead_speed_kph_raw || team.lead_speed_kph;
+
+            // Compute per-bin duration from speed: time = 0.05 km / speed_kph * 3600
+            const binDur = new Array(names.length).fill(0);
+            for (let j = 0; j < names.length; j++) {
+                if (speeds[j] != null && speeds[j] > 0) {
+                    binDur[j] = 180.0 / speeds[j];  // seconds to traverse 50m at this speed
+                }
+            }
+
+            // Aggregate per rider, filtered to [lo, hi] distance range
+            const riderOrder = [...new Set(names.filter((n, i) => n && dist[i] >= lo && dist[i] <= hi))];
+            const stats = {};
+            riderOrder.forEach(n => { stats[n] = {pullCount: 0, totalDuration: 0, powerSum: 0, powerCount: 0}; });
+            let prevName = null;
+            for (let i = 0; i < names.length; i++) {
+                if (dist[i] < lo || dist[i] > hi) { prevName = null; continue; }
+                const n = names[i];
+                if (!n || !stats[n]) { prevName = null; continue; }
+                if (n !== prevName) stats[n].pullCount++;
+                stats[n].totalDuration += binDur[i];
+                if (power[i] != null) { stats[n].powerSum += power[i]; stats[n].powerCount++; }
+                prevName = n;
+            }
+
+            const weightMap = {};
+            team.riders.forEach(r => { weightMap[r.name] = r.weight_kg || 75; });
+
+            let html = '<table style="width:100%; border-collapse:collapse; font-size:0.85rem;">' +
+                '<thead><tr style="border-bottom:1px solid #555; text-align:left;">' +
+                '<th style="padding:4px 8px; color:#ccc;">Rider</th>' +
+                '<th style="padding:4px 8px; color:#ccc;">Pulls</th>' +
+                '<th style="padding:4px 8px; color:#ccc;">Avg Pull Duration</th>' +
+                '<th style="padding:4px 8px; color:#ccc;">Total Time at Front</th>' +
+                '<th style="padding:4px 8px; color:#ccc;">Avg Power (W)</th>' +
+                '<th style="padding:4px 8px; color:#ccc;">Avg Power (W/kg)</th>' +
+                '</tr></thead><tbody>';
+            riderOrder.forEach((name, ri) => {
+                const s = stats[name];
+                if (!s || s.pullCount === 0) return;
+                const c = RIDER_COLORS[ri % RIDER_COLORS.length];
+                const avgDur = s.totalDuration / s.pullCount;
+                const avgPow = s.powerCount > 0 ? s.powerSum / s.powerCount : 0;
+                const wt = weightMap[name] || team.avg_weight_kg || 75;
+                const shortName = name.replace(/\s*[\(\[].*/, '').trim().split(/\s+/).slice(0, 2).join(' ');
+                const fmtTime = sec => {
+                    const m = Math.floor(sec / 60);
+                    const s = Math.round(sec % 60);
+                    return m > 0 ? `${m}m ${s}s` : `${s}s`;
+                };
+                html += `<tr style="border-bottom:1px solid #333;">` +
+                    `<td style="padding:4px 8px; color:${c}; font-weight:600;">${shortName}</td>` +
+                    `<td style="padding:4px 8px; color:#ddd;">${s.pullCount}</td>` +
+                    `<td style="padding:4px 8px; color:#ddd;">${fmtTime(avgDur)}</td>` +
+                    `<td style="padding:4px 8px; color:#ddd;">${fmtTime(s.totalDuration)}</td>` +
+                    `<td style="padding:4px 8px; color:#ddd;">${avgPow.toFixed(0)}</td>` +
+                    `<td style="padding:4px 8px; color:#ddd;">${(avgPow / wt).toFixed(1)}</td>` +
+                    `</tr>`;
+            });
+            html += '</tbody></table>';
+            el.innerHTML = html;
+            el.style.display = 'block';
+        }
+
         const powerDatasets = [
             {
                 label: 'Elevation (m)',
@@ -1027,23 +1199,26 @@
                 yAxisID: 'yAlt',
                 order: 10,
             },
-            ...teams.map((t, i) => {
-            const c = TEAM_COLORS[i % TEAM_COLORS.length];
-            const isWkg = powerUnit === 'Wkg';
-            const wt = t.avg_weight_kg || 75;
-            return {
-                label: t.label,
-                data: t.distance_km
-                    .map((d, j) => ({ x: d, y: t.lead_power_watts[j] != null ? (isWkg ? t.lead_power_watts[j] / wt : t.lead_power_watts[j]) : null })),
-                borderColor: c.line,
-                backgroundColor: c.bg,
-                borderWidth: 1.5,
-                pointRadius: 0,
-                tension: 0.3,
-                spanGaps: true,
-                yAxisID: 'y',
-            };
-        }),
+            ...(ft
+                ? buildPerRiderPowerDatasets(ft)
+                : teams.map((t, i) => {
+                    const c = TEAM_COLORS[i % TEAM_COLORS.length];
+                    const isWkg = powerUnit === 'Wkg';
+                    const wt = t.avg_weight_kg || 75;
+                    return {
+                        label: t.label,
+                        data: t.distance_km
+                            .map((d, j) => ({ x: d, y: t.lead_power_watts[j] != null ? (isWkg ? t.lead_power_watts[j] / wt : t.lead_power_watts[j]) : null })),
+                        borderColor: c.line,
+                        backgroundColor: c.bg,
+                        borderWidth: 1.5,
+                        pointRadius: 0,
+                        tension: 0.3,
+                        spanGaps: true,
+                        yAxisID: 'y',
+                    };
+                })
+            ),
         ];
 
         const powerCtx = document.getElementById('powerChart').getContext('2d');
@@ -1092,8 +1267,11 @@
             }
         });
 
+        updatePullStatsTable(ft, lo, hi);
+
         // Draft efficiency chart
         if (draftChartInstance) draftChartInstance.destroy();
+        const draftTeams = ft ? [ft] : teams;
         const draftDatasets = [
             {
                 label: 'Elevation (m)',
@@ -1107,8 +1285,8 @@
                 yAxisID: 'yAlt',
                 order: 10,
             },
-            ...teams.map((t, i) => {
-            const c = TEAM_COLORS[i % TEAM_COLORS.length];
+            ...draftTeams.map((t, i) => {
+            const c = ft ? TEAM_COLORS[teams.indexOf(t) % TEAM_COLORS.length] : TEAM_COLORS[i % TEAM_COLORS.length];
             return {
                 label: t.label,
                 data: t.distance_km
@@ -1397,25 +1575,9 @@
     function togglePowerUnit(unit) {
         document.getElementById('powerToggleW').classList.toggle('active', unit === 'W');
         document.getElementById('powerToggleWkg').classList.toggle('active', unit === 'Wkg');
-        if (!lastData || !powerChartInstance) return;
-        const teams = lastData.teams;
-        const isWkg = unit === 'Wkg';
-        // Update data in place (skip index 0 = elevation)
-        teams.forEach((t, i) => {
-            const ds = powerChartInstance.data.datasets[i + 1];
-            const wt = t.avg_weight_kg || 75;
-            ds.data = t.distance_km.map((d, j) => ({
-                x: d,
-                y: t.lead_power_watts[j] != null ? (isWkg ? t.lead_power_watts[j] / wt : t.lead_power_watts[j]) : null,
-            }));
-        });
-        powerChartInstance.options.scales.y.title.text = isWkg ? 'Lead Power (W/kg)' : 'Lead Power (W)';
-        powerChartInstance.options.plugins.tooltip.callbacks.label = item => {
-            const v = item.parsed.y;
-            if (item.dataset.yAxisID === 'yAlt') return `${item.dataset.label}: ${v != null ? v.toFixed(0) + ' m' : 'N/A'}`;
-            return `${item.dataset.label}: ${v != null ? (isWkg ? v.toFixed(1) + ' W/kg' : v.toFixed(0) + ' W') : 'N/A'}`;
-        };
-        powerChartInstance.update('none');
+        if (!lastData) return;
+        // Re-render to rebuild power datasets with correct unit
+        renderResults(lastData);
     }
 
 

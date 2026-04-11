@@ -33,7 +33,7 @@ from shared.utils import calculate_normalized_power
 from shared.data_fetcher import (
     fetch_rider_telemetry, convert_telemetry_to_dataframe,
     fetch_race_from_activity, get_activity_details,
-    get_race_entries,
+    get_race_entries, save_rider_data, extract_activity_id,
     _request_with_retry, BASE_URL
 )
 from shared.route_lookup import get_route_info
@@ -1258,6 +1258,236 @@ def find_best_bikes():
 
 
 # ---------------------------------------------------------------------------
+# Ride Compare — compare arbitrary activities on the same route
+# ---------------------------------------------------------------------------
+
+@app.route('/ride-compare')
+def ride_compare():
+    """Ride compare tool — compare multiple rides on the same route."""
+    return render_template('ride_compare.html')
+
+
+@app.route('/api/ride_compare/fetch_stream')
+def api_ride_compare_fetch_stream():
+    """SSE endpoint — fetches telemetry for a list of activity IDs."""
+    headers = get_headers()
+    if not headers:
+        def err_gen():
+            yield f"data: {json.dumps({'error': 'Not authenticated. Please log in first.'})}\n\n"
+        return Response(err_gen(), mimetype='text/event-stream')
+
+    activity_ids_raw = request.args.get('activity_ids', '').strip()
+    if not activity_ids_raw:
+        def err_gen():
+            yield f"data: {json.dumps({'error': 'activity_ids required (comma-separated)'})}\n\n"
+        return Response(err_gen(), mimetype='text/event-stream')
+
+    # Parse comma/space/newline separated activity IDs or URLs
+    import re as _re
+    raw_parts = _re.split(r'[,\s]+', activity_ids_raw)
+    activity_ids = []
+    for part in raw_parts:
+        part = part.strip()
+        if not part:
+            continue
+        aid = extract_activity_id(part)
+        if aid:
+            activity_ids.append(aid)
+
+    if len(activity_ids) < 2:
+        def err_gen():
+            yield f"data: {json.dumps({'error': 'At least 2 activity IDs are required.'})}\n\n"
+        return Response(err_gen(), mimetype='text/event-stream')
+
+    # Build a stable compare_id from sorted activity IDs
+    import hashlib
+    sorted_ids = sorted(set(activity_ids))
+    compare_id = 'ride_compare_' + hashlib.sha256(','.join(sorted_ids).encode()).hexdigest()[:16]
+
+    q = queue.Queue()
+
+    def run_fetch():
+        try:
+            race_data_dir = Path('race_data')
+            race_data_dir.mkdir(exist_ok=True)
+            output_dir = race_data_dir / compare_id
+
+            # Check for existing data
+            summary_path = output_dir / 'complete_race_summary.csv'
+            if summary_path.exists():
+                try:
+                    summary_df = pd.read_csv(summary_path)
+                    success_count = int((summary_df['status'] == 'SUCCESS').sum())
+                    q.put({'success': True, 'race_id': compare_id,
+                           'message': f'Cached: {success_count} rides loaded'})
+                    return
+                except Exception:
+                    pass
+
+            output_dir.mkdir(exist_ok=True)
+
+            # Delete any stale cleaned cache
+            import shutil
+            cleaned_cache_json = output_dir / 'cleaned_cache.json'
+            cleaned_data_dir = output_dir / 'cleaned_data'
+            if cleaned_cache_json.exists():
+                cleaned_cache_json.unlink()
+            if cleaned_data_dir.exists():
+                shutil.rmtree(cleaned_data_dir)
+
+            total = len(activity_ids)
+            summary_data = []
+            route_id = None
+            first_start_time = None
+
+            for idx, act_id in enumerate(activity_ids):
+                rank = idx + 1
+                q.put({'progress': True, 'current': rank, 'total': total,
+                       'name': f'Activity {act_id}'})
+
+                telem_data, act_data, error = fetch_rider_telemetry(act_id, headers)
+
+                if error:
+                    summary_data.append({
+                        'rank': rank,
+                        'name': f'Activity {act_id}',
+                        'activity_id': act_id,
+                        'weight_kg': 75.0,
+                        'player_id': None,
+                        'status': error,
+                    })
+                    continue
+
+                df = convert_telemetry_to_dataframe(telem_data)
+                rider_route_id = act_data.get('routeId') if act_data else None
+                save_rider_data(str(output_dir), rank, act_id, df, telem_data, rider_route_id)
+
+                # Use first rider's route for the comparison
+                if route_id is None and rider_route_id:
+                    route_id = rider_route_id
+
+                # Get rider name from profile (embedded or top-level)
+                profile = act_data.get('profile', {}) if act_data else {}
+                first_name = profile.get('firstName', '')
+                last_name = profile.get('lastName', '')
+                name = f"{first_name} {last_name}".strip()
+                if not name and act_data:
+                    # Fallback: try top-level playerName or name field
+                    name = act_data.get('playerName', '') or act_data.get('name', '')
+                name = name or f'Rider {rank}'
+                weight_grams = profile.get('weightInGrams', 0) or profile.get('weight', 0) or 0
+                weight_kg = round(weight_grams / 1000, 1) if weight_grams else 75.0
+                player_id = profile.get('id') or (act_data.get('profileId') or act_data.get('playerId') if act_data else None)
+
+                start_date = act_data.get('startDate') if act_data else None
+                if first_start_time is None and start_date:
+                    first_start_time = start_date
+
+                file_url = act_data.get('fitnessData', {}).get('fullDataUrl', '') or act_data.get('fitnessData', {}).get('smallDataUrl', '') if act_data else ''
+                file_id = file_url.split('/file/')[-1] if file_url else None
+
+                np_value = calculate_normalized_power(df['power_watts']) if len(df) > 0 else None
+
+                summary_data.append({
+                    'rank': rank,
+                    'name': name,
+                    'activity_id': act_id,
+                    'weight_kg': weight_kg,
+                    'player_id': int(player_id) if player_id else None,
+                    'file_id': file_id,
+                    'activity_start_time': start_date,
+                    'status': 'SUCCESS',
+                    'duration_sec': df['time_sec'].max() if len(df) > 0 else 0,
+                    'avg_power': round(df['power_watts'].mean(), 1) if len(df) > 0 else 0,
+                    'normalized_power': np_value,
+                    'max_power': df['power_watts'].max() if len(df) > 0 else 0,
+                    'avg_hr': round(df['hr_bpm'].mean(), 1) if len(df) > 0 else 0,
+                    'data_points': len(df),
+                })
+
+            # Save summary CSV
+            summary_df = pd.DataFrame(summary_data)
+            summary_df.to_csv(str(summary_path), index=False)
+
+            # Save metadata — use first start time and detected route
+            meta = {
+                'race_name': 'Ride Comparison',
+                'event_id': None,
+                'event_subgroup_id': None,
+                'source_activity_id': activity_ids[0],
+                'race_start_time': first_start_time,
+                'activity_start_time': first_start_time,
+                'route_id': route_id,
+                'is_ride_compare': True,
+            }
+            with open(str(output_dir / 'race_meta.json'), 'w') as f:
+                json.dump(meta, f)
+
+            # Disambiguate names: if the same name appears multiple times,
+            # append the activity date or a counter
+            name_counts = {}
+            for s in summary_data:
+                n = s['name']
+                name_counts[n] = name_counts.get(n, 0) + 1
+
+            dup_counters = {}
+            used_suffixes = {}  # name -> set of suffixes already used
+            for s in summary_data:
+                n = s['name']
+                if name_counts[n] > 1:
+                    if n not in used_suffixes:
+                        used_suffixes[n] = set()
+                    # Prefer using activity date for disambiguation
+                    suffix = None
+                    start = s.get('activity_start_time')
+                    if start:
+                        try:
+                            dt = datetime.fromisoformat(start.replace('Z', '+00:00').replace('+0000', '+00:00'))
+                            date_suffix = dt.strftime('%Y-%m-%d')
+                            if date_suffix not in used_suffixes[n]:
+                                suffix = date_suffix
+                            else:
+                                # Same date: add time
+                                suffix = dt.strftime('%Y-%m-%d %H:%M')
+                        except Exception:
+                            pass
+                    if suffix is None or suffix in used_suffixes[n]:
+                        dup_counters[n] = dup_counters.get(n, 0) + 1
+                        suffix = f'#{dup_counters[n]}'
+                    used_suffixes[n].add(suffix)
+                    s['name'] = f"{n} ({suffix})"
+
+            # Re-save summary with disambiguated names
+            summary_df = pd.DataFrame(summary_data)
+            summary_df.to_csv(str(summary_path), index=False)
+
+            # Clear cleaned cache so it picks up disambiguated names
+            _race_data_cache.pop(compare_id, None)
+
+            success_count = len([s for s in summary_data if s.get('status') == 'SUCCESS'])
+            q.put({'success': True, 'race_id': compare_id,
+                   'message': f'Loaded: {success_count} rides for comparison'})
+        except Exception as e:
+            logger.exception("Error in ride_compare fetch")
+            q.put({'error': str(e)})
+        finally:
+            q.put(None)
+
+    thread = threading.Thread(target=run_fetch, daemon=True)
+    thread.start()
+
+    def event_stream():
+        while True:
+            msg = q.get()
+            if msg is None:
+                break
+            yield f"data: {json.dumps(msg)}\n\n"
+
+    return Response(event_stream(), mimetype='text/event-stream',
+                    headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
+
+
+# ---------------------------------------------------------------------------
 # Race Replay API Routes
 # ---------------------------------------------------------------------------
 
@@ -1538,6 +1768,7 @@ def api_race_data(race_id):
             'weight_kg': float(r.weight_kg),
             'is_late_joiner': is_late_joiner,
             'finish_time_sec': float(r.finish_time_sec) if r.finish_time_sec is not None else None,
+            'ttt_time_offset': round(float(r.ttt_time_offset), 1) if r.ttt_time_offset is not None else None,
             'time_sec': df['time_sec'].tolist(),
             'distance_km': safe_list(df['distance_km']),
             'altitude_m': safe_list(df['altitude_m']) if 'altitude_m' in df.columns else [],
@@ -1976,12 +2207,117 @@ def api_ttt_fetch():
                 leadin_distance_m=leadin_m,
                 detect_late_joiners=False,  # TTT: teams start at staggered times, not late joiners
             )
-            # Copy projected distances back into all_processed
+            # Copy projected distances back into all_processed.
+            # On loop courses, route alignment breaks down after the
+            # finish line (the route segment is only 1 lap, so post-
+            # finish GPS can't be matched and distance drifts backwards).
+            # Fix: at the finish line, compute the offset between aligned
+            # and raw Zwift odometer distance, then use raw + offset for
+            # everything past the finish.  The raw odometer is always
+            # monotonically increasing.
+            race_finish_m = event_distance_km * 1000 if event_distance_km else None
             for i, act_id in enumerate(act_id_order):
                 adf = aligned[i]['data']
                 aligned_dist = adf['distance_km'].values * 1000.0
-                if len(aligned_dist) == len(all_processed[act_id]['distance_m']):
-                    all_processed[act_id]['route_distance_m'] = aligned_dist
+                raw_dist = all_processed[act_id]['distance_m']
+                if len(aligned_dist) != len(raw_dist):
+                    logger.warning("TTT: rider %s alignment length mismatch (%d vs %d), using raw distance",
+                                   all_processed[act_id]['name'], len(aligned_dist), len(raw_dist))
+                    continue
+
+                # Fix post-finish distances using raw odometer + offset
+                if race_finish_m is not None:
+                    # Find where the rider first reaches the finish distance
+                    past_finish = np.where(aligned_dist >= race_finish_m)[0]
+                    if len(past_finish) > 0:
+                        finish_idx = past_finish[0]
+                        offset = aligned_dist[finish_idx] - raw_dist[finish_idx]
+                        # Replace everything after the finish with raw + offset
+                        aligned_dist[finish_idx + 1:] = raw_dist[finish_idx + 1:] + offset
+
+                all_processed[act_id]['route_distance_m'] = aligned_dist
+
+    # ---- 5c. Per-rider time offset + resample to integer seconds ----
+    # Use the shared compute_ttt_time_offset() + resample logic from the
+    # data cleaner — same algorithm the race replay page uses.
+    finish_line_m = None
+    if event_distance_km:
+        finish_line_m = event_distance_km * 1000
+    else:
+        for p in participants:
+            sd = p.get('segment_distance_cm')
+            if sd:
+                finish_line_m = sd / 100.0  # cm -> m
+                break
+
+    if finish_line_m and route_data is not None:
+        from race_replay.data_cleaner import compute_ttt_time_offset
+        finish_lat = route_data.latlng[-1, 0]
+        finish_lng = route_data.latlng[-1, 1]
+
+        elapsed_lookup = {}
+        for p in participants:
+            ems = p.get('elapsed_ms')
+            if ems:
+                elapsed_lookup[str(p['activity_id'])] = ems
+
+        offsets_applied = 0
+        for act_id, rd in all_processed.items():
+            ems = elapsed_lookup.get(act_id)
+            if ems is None:
+                continue
+
+            # Get raw latlng for this rider
+            r = rider_lookup[act_id]
+            raw = r.get('telem_raw') or {}
+            latlng_raw = raw.get('latlng', [])
+            times_raw = raw.get('timeInSec', [])
+            if not latlng_raw or len(latlng_raw) != len(times_raw):
+                continue
+
+            lats_raw = np.array([ll[0] for ll in latlng_raw])
+            lngs_raw = np.array([ll[1] for ll in latlng_raw])
+            times_raw_arr = np.array(times_raw, dtype=float)
+            dists_raw = np.array(raw.get('distanceInCm', []), dtype=float) / 100.0
+
+            if len(dists_raw) != len(times_raw_arr):
+                continue
+
+            offset = compute_ttt_time_offset(
+                times=times_raw_arr,
+                distances_m=dists_raw,
+                lats=lats_raw,
+                lngs=lngs_raw,
+                finish_lat=finish_lat,
+                finish_lng=finish_lng,
+                finish_distance_m=finish_line_m,
+                official_time_sec=ems / 1000.0,
+            )
+            if offset is not None:
+                rd['time_sec'] = rd['time_sec'] - offset
+                offsets_applied += 1
+                logger.info("TTT offset for %s: %.2fs", rd['name'], offset)
+
+        if offsets_applied:
+            logger.info("TTT: applied time offsets to %d / %d riders",
+                        offsets_applied, len(all_processed))
+
+    # Resample all riders to integer-second grid (same as data_cleaner).
+    # After TTT offset, timestamps are fractional; this makes all riders
+    # directly comparable at the same integer seconds.
+    for act_id, rd in all_processed.items():
+        t = rd['time_sec']
+        int_start = int(np.ceil(t[0]))
+        int_end = int(np.floor(t[-1]))
+        if int_end <= int_start:
+            continue
+        int_times = np.arange(int_start, int_end + 1, dtype=float)
+        for key in ('speed_mps', 'distance_m', 'altitude_m', 'power', 'draft_watts'):
+            if key in rd:
+                rd[key] = np.interp(int_times, t, rd[key])
+        if 'route_distance_m' in rd:
+            rd['route_distance_m'] = np.interp(int_times, t, rd['route_distance_m'])
+        rd['time_sec'] = int_times
 
     # ---- 6. Build team assignments and aggregate ----
     team_assignments = {}  # activity_id -> tag
@@ -2054,64 +2390,118 @@ def _build_ttt_team_results(all_processed, team_assignments, tag_order):
         elevation = np.full(len(dist_axis), np.nan)
         lead_time = np.full(len(dist_axis), np.nan)
         lead_power = np.full(len(dist_axis), np.nan)
+        lead_rider_name = [None] * len(dist_axis)
 
-        for di, d in enumerate(dist_axis):
-            connected_draft = []
-            connected_power = []
+        # ---- Leader detection ----
+        # All riders are already resampled to integer-second grids (step
+        # 5d), using the same GPS-projected route_distance_m as the race
+        # replay page.  Concatenate, group by second, leader = max
+        # distance, then bin into 50 m distance buckets and average.
 
-            rider_states = []
-            for rd in rider_data:
-                dist_arr = _get_dist(rd)
-                idx = np.searchsorted(dist_arr, d)
-                if idx >= len(dist_arr):
-                    idx = len(dist_arr) - 1
-                if idx < 0:
-                    idx = 0
+        all_times = []
+        all_dists = []
+        all_powers = []
+        all_speeds = []
+        all_alts = []
+        all_drafts = []
+        all_names = []
 
-                actual_dist = dist_arr[idx]
-                if actual_dist < d - 500:
-                    continue
+        for rd in rider_data:
+            dist_arr = _get_dist(rd)
+            t = rd['time_sec']
+            n = min(len(t), len(dist_arr))
+            all_times.append(t[:n])
+            all_dists.append(dist_arr[:n])
+            all_powers.append(rd['power'][:n])
+            all_speeds.append(rd['speed_mps'][:n])
+            all_alts.append(rd['altitude_m'][:n])
+            all_drafts.append(rd['draft_watts'][:n])
+            all_names.extend([rd['name']] * n)
 
-                rider_states.append({
-                    'rd': rd,
-                    'idx': idx,
-                    'dist': actual_dist,
-                    'speed': rd['speed_mps'][idx],
-                    'time': rd['time_sec'][idx],
-                })
+        cat_times = np.concatenate(all_times).astype(int)
+        cat_dists = np.concatenate(all_dists)
+        cat_powers = np.concatenate(all_powers)
+        cat_speeds = np.concatenate(all_speeds)
+        cat_alts = np.concatenate(all_alts)
+        cat_drafts = np.concatenate(all_drafts)
+        cat_names = np.array(all_names, dtype=object)
 
-            if not rider_states:
+        unique_secs = np.unique(cat_times)
+
+        leader_dist_list = []
+        leader_power_list = []
+        leader_speed_list = []
+        leader_alt_list = []
+        leader_name_list = []
+        leader_time_list = []
+        draft_by_bin = {}
+
+        for sec in unique_secs:
+            mask = cat_times == sec
+            sec_dists = cat_dists[mask]
+            sec_powers = cat_powers[mask]
+            sec_speeds = cat_speeds[mask]
+            sec_alts = cat_alts[mask]
+            sec_names = cat_names[mask]
+            sec_drafts = cat_drafts[mask]
+
+            lead_idx = np.argmax(sec_dists)
+            ld = sec_dists[lead_idx]
+            leader_dist_list.append(ld)
+            leader_power_list.append(sec_powers[lead_idx])
+            leader_speed_list.append(sec_speeds[lead_idx])
+            leader_alt_list.append(sec_alts[lead_idx])
+            leader_name_list.append(sec_names[lead_idx])
+            leader_time_list.append(float(sec))
+
+            bi = int(ld / step)
+            if 0 <= bi < len(dist_axis):
+                for si in range(len(sec_dists)):
+                    p = sec_powers[si]
+                    dw = sec_drafts[si]
+                    if p > 10:
+                        draft_by_bin.setdefault(bi, []).append((dw, p))
+
+        leader_dist_arr = np.array(leader_dist_list)
+        leader_power_arr = np.array(leader_power_list)
+        leader_speed_arr = np.array(leader_speed_list)
+        leader_alt_arr = np.array(leader_alt_list)
+        leader_time_arr = np.array(leader_time_list)
+        leader_name_arr = np.array(leader_name_list, dtype=object)
+
+        from collections import Counter
+        leader_bins = (leader_dist_arr / step).astype(int)
+
+        for di in range(len(dist_axis)):
+            in_bin = leader_bins == di
+            if not np.any(in_bin):
                 continue
 
-            # Lead rider = whoever reached this distance point first (lowest time)
-            rider_states.sort(key=lambda rs: rs['time'])
-            lead = rider_states[0]
-            lead_speed[di] = lead['speed'] * 3.6
-            elevation[di] = lead['rd']['altitude_m'][lead['idx']]
-            lead_time[di] = lead['time']
-            lead_power[di] = lead['rd']['power'][lead['idx']]
+            lead_power[di] = float(np.mean(leader_power_arr[in_bin]))
+            lead_speed[di] = float(np.mean(leader_speed_arr[in_bin])) * 3.6
+            elevation[di] = float(np.median(leader_alt_arr[in_bin]))
+            lead_time[di] = float(np.mean(leader_time_arr[in_bin]))
 
-            for rs in rider_states:
-                gap_time = rs['time'] - lead['time']
+            name_counts = Counter(leader_name_arr[in_bin])
+            lead_rider_name[di] = name_counts.most_common(1)[0][0]
 
-                if gap_time <= 10:
-                    idx = rs['idx']
-                    rd = rs['rd']
-                    p = rd['power'][idx]
-                    dw = rd['draft_watts'][idx]
-                    if p > 10:
-                        connected_draft.append(dw)
-                        connected_power.append(p)
-
-            if connected_power:
-                total_draft = sum(connected_draft)
-                total_power = sum(connected_power)
+            if di in draft_by_bin:
+                pairs = draft_by_bin[di]
+                total_draft = sum(dw for dw, p in pairs)
+                total_power = sum(p for dw, p in pairs)
                 if total_power > 0:
                     avg_draft_efficiency[di] = total_draft / total_power
 
         valid_speed = ~np.isnan(lead_speed)
         valid_draft = ~np.isnan(avg_draft_efficiency)
         valid_power = ~np.isnan(lead_power)
+
+        # Save raw (unsmoothed) values for per-rider breakdown.
+        # Smoothing blends power/speed across rider boundaries, which is
+        # fine for team-vs-team comparison but wrong for showing individual
+        # rider pulls (e.g. a 340 W pull gets diluted to 260 W).
+        lead_speed_raw = lead_speed.copy()
+        lead_power_raw = lead_power.copy()
 
         if valid_speed.sum() > 10:
             smooth_w = min(11, int(valid_speed.sum() / 5))
@@ -2148,6 +2538,47 @@ def _build_ttt_team_results(all_processed, team_assignments, tag_order):
 
         avg_weight_kg = round(float(np.mean([rd['weight_kg'] for rd in rider_data])), 1)
 
+        # ---- Per-rider pull statistics (from per-second leader data) ----
+        # Computed before binning so durations are exact (1 s resolution).
+        weight_map = {rd['name']: rd['weight_kg'] for rd in rider_data}
+        rider_names_ordered = list(dict.fromkeys(
+            n for n in leader_name_list if n))
+        pull_stats = {}
+        for n in rider_names_ordered:
+            pull_stats[n] = {'pulls': 0, 'total_sec': 0,
+                             'power_sum': 0.0, 'power_count': 0}
+
+        prev_leader = None
+        for i, name in enumerate(leader_name_list):
+            if not name or name not in pull_stats:
+                prev_leader = None
+                continue
+            if name != prev_leader:
+                pull_stats[name]['pulls'] += 1
+            pull_stats[name]['total_sec'] += 1  # 1-second grid
+            pw = leader_power_list[i]
+            if pw is not None and not np.isnan(pw):
+                pull_stats[name]['power_sum'] += float(pw)
+                pull_stats[name]['power_count'] += 1
+            prev_leader = name
+
+        pull_stats_list = []
+        for name in rider_names_ordered:
+            s = pull_stats[name]
+            if s['pulls'] == 0:
+                continue
+            avg_dur = s['total_sec'] / s['pulls']
+            avg_pow = s['power_sum'] / s['power_count'] if s['power_count'] else 0
+            wt = weight_map.get(name, avg_weight_kg)
+            pull_stats_list.append({
+                'name': name,
+                'pulls': s['pulls'],
+                'avg_pull_duration_sec': round(avg_dur, 1),
+                'total_time_at_front_sec': s['total_sec'],
+                'avg_power_w': round(avg_pow, 0),
+                'avg_power_wkg': round(avg_pow / wt, 1) if wt else 0,
+            })
+
         team_results.append({
             'label': tag,
             'riders': [{'name': rd['name'], 'weight_kg': rd['weight_kg'], 'activity_id': rd['activity_id']} for rd in rider_data],
@@ -2157,7 +2588,11 @@ def _build_ttt_team_results(all_processed, team_assignments, tag_order):
             'elevation_m': [None if np.isnan(v) else round(v, 1) for v in elevation],
             'lead_time_sec': [None if np.isnan(v) else round(v, 1) for v in lead_time],
             'lead_power_watts': [None if np.isnan(v) else round(v, 0) for v in lead_power],
+            'lead_speed_kph_raw': [None if np.isnan(v) else round(v, 2) for v in lead_speed_raw],
+            'lead_power_watts_raw': [None if np.isnan(v) else round(v, 0) for v in lead_power_raw],
+            'lead_rider_name': lead_rider_name,
             'avg_weight_kg': avg_weight_kg,
+            'pull_stats': pull_stats_list,
         })
 
     return team_results
@@ -2254,6 +2689,144 @@ def api_ttt_rider():
         'altitude_m': [round(float(rd['altitude_m'][i]), 1) for i in indices],
         'power_watts': [round(float(rd['power'][i]), 0) for i in indices],
         'draft_watts': [round(float(rd['draft_watts'][i]), 0) for i in indices],
+    })
+
+
+@app.route('/api/ttt/debug_bins', methods=['POST'])
+def api_ttt_debug_bins():
+    """DEBUG: Show per-second leader data for a distance range.
+
+    Expects JSON: ``{subgroup_id, team_tag, dist_start_km, dist_end_km}``.
+    """
+    data = request.json or {}
+    try:
+        subgroup_id = int(data.get('subgroup_id', 0))
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Invalid subgroup_id'}), 400
+    if subgroup_id not in _ttt_cache:
+        return jsonify({'error': 'No cached data'}), 400
+
+    cached = _ttt_cache[subgroup_id]
+    all_processed = cached['all_processed']
+    assignments = cached['team_assignments']
+    tag = data.get('team_tag', '')
+    dist_start_m = float(data.get('dist_start_km', 22.0)) * 1000
+    dist_end_m = float(data.get('dist_end_km', 23.0)) * 1000
+
+    # Gather rider data for this team
+    rider_data = [all_processed[aid] for aid, t in assignments.items()
+                  if t == tag and aid in all_processed]
+    if not rider_data:
+        return jsonify({'error': f'No riders for tag {tag}'}), 404
+
+    def _get_dist(rd):
+        return rd.get('route_distance_m', rd['distance_m'])
+
+    # Concatenate and find leaders per second (same as _build_ttt_team_results)
+    all_times, all_dists, all_speeds, all_powers, all_names = [], [], [], [], []
+    for rd in rider_data:
+        dist_arr = _get_dist(rd)
+        t = rd['time_sec']
+        n = min(len(t), len(dist_arr))
+        all_times.append(t[:n])
+        all_dists.append(dist_arr[:n])
+        all_speeds.append(rd['speed_mps'][:n])
+        all_powers.append(rd['power'][:n])
+        all_names.extend([rd['name']] * n)
+
+    cat_times = np.concatenate(all_times).astype(int)
+    cat_dists = np.concatenate(all_dists)
+    cat_speeds = np.concatenate(all_speeds)
+    cat_powers = np.concatenate(all_powers)
+    cat_names = np.array(all_names, dtype=object)
+
+    unique_secs = np.unique(cat_times)
+    step = 50
+
+    # Build per-second leader records, filtered to distance range
+    records = []
+    for sec in unique_secs:
+        mask = cat_times == sec
+        sec_dists = cat_dists[mask]
+        lead_idx = np.argmax(sec_dists)
+        ld = sec_dists[lead_idx]
+        if ld < dist_start_m or ld > dist_end_m:
+            continue
+        records.append({
+            'time_sec': int(sec),
+            'leader_dist_m': round(float(ld), 1),
+            'bin': int(ld / step),
+            'leader_name': str(cat_names[mask][lead_idx]),
+            'leader_speed_kph': round(float(cat_speeds[mask][lead_idx]) * 3.6, 2),
+            'leader_power_w': round(float(cat_powers[mask][lead_idx]), 0),
+            'num_riders_at_sec': int(mask.sum()),
+        })
+
+    # Also show the binned result
+    bins = {}
+    for r in records:
+        bi = r['bin']
+        bins.setdefault(bi, []).append(r)
+
+    bin_summary = []
+    for bi in sorted(bins.keys()):
+        pts = bins[bi]
+        speeds = [p['leader_speed_kph'] for p in pts]
+        powers = [p['leader_power_w'] for p in pts]
+        names = [p['leader_name'] for p in pts]
+        bin_summary.append({
+            'bin': bi,
+            'dist_km': round(bi * step / 1000, 3),
+            'num_points': len(pts),
+            'avg_speed_kph': round(sum(speeds) / len(speeds), 2),
+            'min_speed_kph': round(min(speeds), 2),
+            'max_speed_kph': round(max(speeds), 2),
+            'avg_power_w': round(sum(powers) / len(powers), 0),
+            'leaders': list(set(names)),
+            'points': pts,
+        })
+
+    # Also dump each rider's raw per-second data in the range
+    rider_raw = {}
+    rider_dist_source = {}
+    for rd in rider_data:
+        dist_arr = _get_dist(rd)
+        has_route = 'route_distance_m' in rd
+        rider_dist_source[rd['name']] = 'route_distance_m' if has_route else 'distance_m'
+
+        # Check monotonicity of full distance array
+        diffs = np.diff(dist_arr)
+        n_decreasing = int(np.sum(diffs < -10))  # > 10m decrease
+        max_decrease = float(np.min(diffs)) if len(diffs) > 0 else 0
+        total_pts = len(dist_arr)
+        max_dist = float(dist_arr.max()) if len(dist_arr) > 0 else 0
+
+        t = rd['time_sec']
+        spd = rd['speed_mps']
+        n = min(len(t), len(dist_arr), len(spd))
+        raw_pts = []
+        for j in range(n):
+            if dist_arr[j] >= dist_start_m and dist_arr[j] <= dist_end_m:
+                raw_pts.append({
+                    'time_sec': int(t[j]),
+                    'dist_m': round(float(dist_arr[j]), 1),
+                    'speed_kph': round(float(spd[j]) * 3.6, 2),
+                    'bin': int(dist_arr[j] / step),
+                })
+        rider_raw[rd['name']] = {
+            'dist_source': 'route_distance_m' if has_route else 'distance_m',
+            'total_samples': total_pts,
+            'max_dist_m': round(max_dist, 1),
+            'n_decreasing': n_decreasing,
+            'max_decrease_m': round(max_decrease, 1),
+            'points_in_range': raw_pts,
+        }
+
+    return jsonify({
+        'dist_range_m': [dist_start_m, dist_end_m],
+        'total_seconds': len(records),
+        'bins': bin_summary,
+        'rider_raw': rider_raw,
     })
 
 
