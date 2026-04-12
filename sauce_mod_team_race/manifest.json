@@ -1,0 +1,18 @@
+{
+    "manifest_version": 1,
+    "name": "Team Race Score",
+    "description": "Live scoreboard for RtB vs Fellowship team races with category and bonus point tracking",
+    "version": "0.1.0",
+    "author": "zwifttools",
+    "windows": [{
+        "id": "team-race-score",
+        "file": "team-race.html",
+        "name": "Team Race Score",
+        "description": "Live team race scoreboard with category results and bonus points",
+        "overlay": true,
+        "default_bounds": {
+            "width": 380,
+            "height": 660
+        }
+    }]
+}

@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <title>Team Race Score — Preview</title>
+    <link rel="stylesheet" href="team-race.css"/>
+    <style>
+        /* Simulate Sauce dark overlay background */
+        html, body { background: #1a1a1e; }
+        body { max-width: 380px; margin: 20px auto; border: 1px solid #333; border-radius: 8px; overflow: hidden; }
+        /* Fake titlebar */
+        #titlebar { background: rgba(255,255,255,0.06); padding: 4px 10px; }
+        #titlebar header { display: flex; align-items: center; }
+        #titlebar .title { font-size: 12px; color: #aaa; font-weight: 600; }
+        #titlebar .filler { flex: 1; }
+        /* Simulate Material Symbols font for icons */
+        ms { font-family: 'Material Symbols Outlined', 'Segoe UI Symbol', sans-serif; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div id="titlebar">
+        <header>
+            <div class="title">Team Race Score</div>
+            <div class="filler"></div>
+        </header>
+    </div>
+    <div id="content">
+        <div class="scoreboard">
+            <!-- Total scores -->
+            <div class="total-scores">
+                <div class="team team-rtb">
+                    <span class="team-name">RtB</span>
+                    <span class="team-score">14</span>
+                </div>
+                <div class="score-divider">
+                    <span class="score-of">/&thinsp;35</span>
+                </div>
+                <div class="team team-fellowship">
+                    <span class="team-score">16</span>
+                    <span class="team-name">Fellowship</span>
+                </div>
+            </div>
+
+            <!-- Score bar -->
+            <div class="score-bar">
+                <div class="score-bar-rtb" style="width: 40%;"></div>
+                <div class="score-bar-fellowship" style="width: 45.7%;"></div>
+            </div>
+
+            <!-- Categories -->
+            <div class="categories">
+                <!-- Cat A -->
+                <div class="category">
+                    <div class="cat-header">
+                        <span class="cat-badge" style="--hue: 0deg;">A</span>
+                        <span class="cat-count">18 riders</span>
+                    </div>
+                    <div class="cat-rider">
+                        <span class="rider-pos">1.</span>
+                        <span class="rider-name team-fellowship">[Fellowship] M. Jensen</span>
+                        <span class="rider-gap">+12.3s</span>
+                        <span class="rider-team-tag team-fellowship">Fell</span>
+                        <span class="rider-points">+3</span>
+                    </div>
+                    <div class="cat-rider">
+                        <span class="rider-pos">2.</span>
+                        <span class="rider-name team-rtb">[TFC|RtB] P. Müller</span>
+                        <span class="rider-gap">+4.1s</span>
+                        <span class="rider-team-tag team-rtb">RtB</span>
+                        <span class="rider-points">+2</span>
+                    </div>
+                    <div class="cat-rider">
+                        <span class="rider-pos">3.</span>
+                        <span class="rider-name team-fellowship">[Fell] K. Andersen</span>
+                        <span class="rider-team-tag team-fellowship">Fell</span>
+                        <span class="rider-points">+1</span>
+                    </div>
+                </div>
+
+                <!-- Cat B -->
+                <div class="category">
+                    <div class="cat-header">
+                        <span class="cat-badge" style="--hue: 90deg;">B</span>
+                        <span class="cat-count">24 riders</span>
+                    </div>
+                    <div class="cat-rider">
+                        <span class="rider-pos">1.</span>
+                        <span class="rider-name team-rtb">[RtB] S. Williams</span>
+                        <span class="rider-gap">+8.7s</span>
+                        <span class="rider-team-tag team-rtb">RtB</span>
+                        <span class="rider-points">+3</span>
+                    </div>
+                    <div class="cat-rider">
+                        <span class="rider-pos">2.</span>
+                        <span class="rider-name team-rtb">[RTB] J. Thompson</span>
+                        <span class="rider-gap">+2.9s</span>
+                        <span class="rider-team-tag team-rtb">RtB</span>
+                        <span class="rider-points">+2</span>
+                    </div>
+                    <div class="cat-rider">
+                        <span class="rider-pos">3.</span>
+                        <span class="rider-name team-fellowship">[Fellowship] A. Dubois</span>
+                        <span class="rider-team-tag team-fellowship">Fell</span>
+                        <span class="rider-points">+1</span>
+                    </div>
+                </div>
+
+                <!-- Cat C -->
+                <div class="category">
+                    <div class="cat-header">
+                        <span class="cat-badge" style="--hue: 180deg;">C</span>
+                        <span class="cat-count">32 riders</span>
+                    </div>
+                    <div class="cat-rider">
+                        <span class="rider-pos">1.</span>
+                        <span class="rider-name team-fellowship">[Fellowship] R. O'Brien</span>
+                        <span class="rider-gap">+3.4s</span>
+                        <span class="rider-team-tag team-fellowship">Fell</span>
+                        <span class="rider-points">+3</span>
+                    </div>
+                    <div class="cat-rider">
+                        <span class="rider-pos">2.</span>
+                        <span class="rider-name team-rtb">[RtB] L. Fernandez</span>
+                        <span class="rider-gap">+1.2s</span>
+                        <span class="rider-team-tag team-rtb">RtB</span>
+                        <span class="rider-points">+2</span>
+                    </div>
+                    <div class="cat-rider">
+                        <span class="rider-pos">3.</span>
+                        <span class="rider-name team-fellowship">[Fell] D. van der Berg</span>
+                        <span class="rider-team-tag team-fellowship">Fell</span>
+                        <span class="rider-points">+1</span>
+                    </div>
+                </div>
+
+                <!-- Cat D -->
+                <div class="category">
+                    <div class="cat-header">
+                        <span class="cat-badge" style="--hue: 60deg;">D</span>
+                        <span class="cat-count">28 riders</span>
+                    </div>
+                    <div class="cat-rider">
+                        <span class="rider-pos">1.</span>
+                        <span class="rider-name team-rtb">[RtB] T. Johansson</span>
+                        <span class="rider-gap">+21.5s</span>
+                        <span class="rider-team-tag team-rtb">RtB</span>
+                        <span class="rider-points">+3</span>
+                    </div>
+                    <div class="cat-rider">
+                        <span class="rider-pos">2.</span>
+                        <span class="rider-name team-fellowship">[Fellowship] C. Moreau</span>
+                        <span class="rider-gap">+6.0s</span>
+                        <span class="rider-team-tag team-fellowship">Fell</span>
+                        <span class="rider-points">+2</span>
+                    </div>
+                    <div class="cat-rider">
+                        <span class="rider-pos">3.</span>
+                        <span class="rider-name team-rtb">[RtB] M. Kowalski</span>
+                        <span class="rider-team-tag team-rtb">RtB</span>
+                        <span class="rider-points">+1</span>
+                    </div>
+                </div>
+
+                <!-- Cat E -->
+                <div class="category">
+                    <div class="cat-header">
+                        <span class="cat-badge" style="--hue: 260deg;">E</span>
+                        <span class="cat-count">22 riders</span>
+                    </div>
+                    <div class="cat-rider">
+                        <span class="rider-pos">1.</span>
+                        <span class="rider-name team-fellowship">[Fellowship] E. Nakamura</span>
+                        <span class="rider-gap">+1:15</span>
+                        <span class="rider-team-tag team-fellowship">Fell</span>
+                        <span class="rider-points">+3</span>
+                    </div>
+                    <div class="cat-rider">
+                        <span class="rider-pos">2.</span>
+                        <span class="rider-name team-rtb">[RtB] H. Schmidt</span>
+                        <span class="rider-gap">+32.1s</span>
+                        <span class="rider-team-tag team-rtb">RtB</span>
+                        <span class="rider-points">+2</span>
+                    </div>
+                    <div class="cat-rider">
+                        <span class="rider-pos">3.</span>
+                        <span class="rider-name team-fellowship">[Fell] B. Rossi</span>
+                        <span class="rider-team-tag team-fellowship">Fell</span>
+                        <span class="rider-points">+1</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bonus points -->
+            <div class="bonuses">
+                <div class="section-title">Bonus Points</div>
+                <div class="bonus-list">
+                    <div class="bonus-row">
+                        <span class="bonus-icon">🏆</span>
+                        <span class="bonus-label">Overall Winner</span>
+                        <span class="bonus-rider team-rtb">[RtB] S. Williams</span>
+                        <span class="bonus-value">+4.8s</span>
+                        <span class="bonus-points">+2</span>
+                    </div>
+                    <div class="bonus-row">
+                        <span class="bonus-icon">❤️</span>
+                        <span class="bonus-label">Highest Avg HR</span>
+                        <span class="bonus-rider team-fellowship">[Fell] K. Andersen</span>
+                        <span class="bonus-value">178 bpm</span>
+                        <span class="bonus-points">+1</span>
+                    </div>
+                    <div class="bonus-row">
+                        <span class="bonus-icon">⚡</span>
+                        <span class="bonus-label">Best 20min W/kg</span>
+                        <span class="bonus-rider team-rtb">[RtB] P. Müller</span>
+                        <span class="bonus-value">3.82 avg*</span>
+                        <span class="bonus-points dimmed">+1</span>
+                    </div>
+                    <div class="bonus-note">* avg power — race &lt; 20 min</div>
+                    <div class="bonus-row">
+                        <span class="bonus-icon">⚡</span>
+                        <span class="bonus-label">Best 15s W/kg</span>
+                        <span class="bonus-rider team-fellowship">[Fellowship] M. Jensen</span>
+                        <span class="bonus-value">8.41 W/kg</span>
+                        <span class="bonus-points">+1</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rider count -->
+            <div class="rider-count">
+                124 tagged riders found
+            </div>
+        </div>
+    </div>
+</body>
+</html>
