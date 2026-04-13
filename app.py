@@ -1773,6 +1773,17 @@ def _load_multi_subgroup_race(race_id):
     if not all_riders:
         return jsonify({'error': 'No rider data found across subgroups'}), 404
 
+    # Resolve source_activity_id from subgroup metadata
+    merged_source_activity_id = None
+    for sg_info in manifest['subgroups']:
+        sg_meta_path = Path('race_data') / sg_info['race_id'] / 'race_meta.json'
+        if sg_meta_path.exists():
+            with open(sg_meta_path) as mf:
+                sg_meta = json.load(mf)
+            if sg_meta.get('source_activity_id'):
+                merged_source_activity_id = str(sg_meta['source_activity_id'])
+                break
+
     # Build a merged CleanedRaceData and cache it
     merged_riders = []
     for r, label, new_rank in all_riders:
@@ -1797,7 +1808,7 @@ def _load_multi_subgroup_race(race_id):
         elevation_profile=merged_elevation,
         min_time=merged_min_time,
         max_time=merged_max_time,
-        source_activity_id=None,
+        source_activity_id=merged_source_activity_id,
         route_slug=merged_route_slug,
         world=merged_world,
     )
