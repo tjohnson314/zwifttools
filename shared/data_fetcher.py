@@ -397,7 +397,7 @@ def fetch_all_subgroups_from_activity(activity_url_or_id, headers, output_base_d
         return None, None, None, error
 
     if progress_callback:
-        progress_callback(0, 0, f"Found {len(subgroups)} categories: {', '.join(s['label'] for s in subgroups)}")
+        progress_callback(0, 0, f"Found {len(subgroups)} categories: {', '.join(s['label'] for s in subgroups)}", type="status")
 
     # Step 5: Fetch each subgroup's race data
     results = []
@@ -407,7 +407,7 @@ def fetch_all_subgroups_from_activity(activity_url_or_id, headers, output_base_d
         label = sg['label']
 
         if progress_callback:
-            progress_callback(0, 0, f"--- Category {label} ---")
+            progress_callback(0, 0, label, type="category")
 
         # Wrap the progress callback to prefix with category label
         def sg_progress(current, total, name, _label=label):
@@ -427,7 +427,7 @@ def fetch_all_subgroups_from_activity(activity_url_or_id, headers, output_base_d
                 results.append((output_dir, label, sg_id))
                 cumulative_fetched += success_count
                 if progress_callback:
-                    progress_callback(cumulative_fetched, 0, f"[Cat {label}] Cached ({success_count} riders)")
+                    progress_callback(cumulative_fetched, 0, f"[Cat {label}] Cached ({success_count} riders)", type="status")
                 continue
             except Exception:
                 pass

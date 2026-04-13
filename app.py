@@ -1522,9 +1522,9 @@ def api_race_fetch_stream():
             race_data_dir = Path('race_data')
             race_data_dir.mkdir(exist_ok=True)
 
-            def on_progress(current, total, name):
+            def on_progress(current, total, name, type="rider"):
                 logger.info("  [%d/%d] Fetching %s...", current, total, name)
-                q.put({'progress': True, 'current': current, 'total': total, 'name': name})
+                q.put({'progress': True, 'current': current, 'total': total, 'name': name, 'type': type})
 
             if all_subgroups:
                 from shared.data_fetcher import fetch_all_subgroups_from_activity

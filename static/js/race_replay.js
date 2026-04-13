@@ -265,8 +265,14 @@ async function fetchRace(forceRefresh = false) {
                     try {
                         const data = JSON.parse(line.slice(6));
                         if (data.progress) {
-                            const countText = data.total > 0 ? `${data.current}/${data.total}` : `${data.current}`;
-                            showLoading(`Fetching rider ${countText}: ${data.name}`);
+                            if (data.type === 'category') {
+                                showLoading(`Fetching Category ${data.name}`);
+                            } else if (data.type === 'status') {
+                                showLoading(data.name);
+                            } else {
+                                const countText = data.total > 0 ? `${data.current}/${data.total}` : `${data.current}`;
+                                showLoading(`Fetching rider ${countText}: ${data.name}`);
+                            }
                             showProgress(data.current, data.total, data.name);
                         } else {
                             finalData = data;
