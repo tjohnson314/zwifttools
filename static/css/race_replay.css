@@ -125,6 +125,22 @@ h1 .header-icon {
     color: #ffcc80;
 }
 
+/* Unauthenticated notice */
+.unauth-banner {
+    background: rgba(100, 181, 246, 0.12);
+    border: 1px solid rgba(100, 181, 246, 0.35);
+    border-radius: 8px;
+    padding: 10px 16px;
+    margin-bottom: 16px;
+    font-size: 0.85rem;
+    color: #90caf9;
+}
+.unauth-banner a {
+    color: #64b5f6;
+    font-weight: 600;
+    text-decoration: underline;
+}
+
 .dev-warnings .dev-warnings-title {
     font-weight: 700;
     color: #ffa726;

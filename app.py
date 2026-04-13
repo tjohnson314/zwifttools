@@ -1495,6 +1495,79 @@ def api_ride_compare_fetch_stream():
 _race_data_cache = {}
 
 
+@app.route('/api/race/resolve')
+def api_race_resolve():
+    """Resolve a Zwift activity ID to a cached race_id without authentication.
+
+    Scans local race_data directories (and event manifests) for a matching
+    activity ID so that cached races can be loaded without Zwift API access.
+    """
+    from shared.data_fetcher import extract_activity_id
+    raw = request.args.get('activity_id', '').strip()
+    if not raw:
+        return jsonify({'error': 'activity_id required'}), 400
+    activity_id = extract_activity_id(raw)
+    all_subgroups = request.args.get('all_subgroups', '').lower() in ('1', 'true')
+
+    race_data_dir = Path('race_data')
+    if not race_data_dir.exists():
+        return jsonify({'found': False})
+
+    # Scan subgroup directories for a matching activity ID
+    matched_subgroup = None
+    for d in race_data_dir.iterdir():
+        if not d.is_dir() or not d.name.startswith('race_data_'):
+            continue
+        # Check race_meta.json source_activity_id
+        meta_file = d / 'race_meta.json'
+        if meta_file.exists():
+            try:
+                with open(meta_file) as f:
+                    meta = json.load(f)
+                if str(meta.get('source_activity_id')) == activity_id:
+                    matched_subgroup = d.name
+                    break
+            except Exception:
+                pass
+        # Check summary CSV for rider activity IDs
+        summary_file = d / 'complete_race_summary.csv'
+        if summary_file.exists():
+            try:
+                with open(summary_file) as f:
+                    header = f.readline()
+                    if 'activity_id' in header:
+                        for line in f:
+                            if activity_id in line:
+                                matched_subgroup = d.name
+                                break
+                if matched_subgroup:
+                    break
+            except Exception:
+                pass
+
+    if not matched_subgroup:
+        return jsonify({'found': False})
+
+    # If all_subgroups requested, find the parent event manifest
+    if all_subgroups:
+        for d in race_data_dir.iterdir():
+            if not d.is_dir() or not d.name.startswith('race_event_'):
+                continue
+            manifest_file = d / 'event_manifest.json'
+            if manifest_file.exists():
+                try:
+                    with open(manifest_file) as f:
+                        manifest = json.load(f)
+                    sg_ids = [sg['race_id'] for sg in manifest.get('subgroups', [])]
+                    if matched_subgroup in sg_ids:
+                        return jsonify({'found': True, 'race_id': d.name})
+                except Exception:
+                    pass
+
+    # Return the single subgroup race_id
+    return jsonify({'found': True, 'race_id': matched_subgroup})
+
+
 @app.route('/api/race/fetch_stream')
 def api_race_fetch_stream():
     """SSE endpoint — streams progress while fetching race data."""

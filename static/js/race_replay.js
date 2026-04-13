@@ -86,7 +86,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (urlActivityId) {
         document.getElementById('activity-input').value = urlActivityId;
-        fetchRace(false);
+        // If it looks like a cached race ID, load directly without hitting
+        // the fetch_stream endpoint (which requires authentication).
+        if (urlActivityId.startsWith('race_data_') || urlActivityId.startsWith('race_event_')) {
+            loadRaceById(urlActivityId);
+        } else {
+            // Try resolving to a cached race first (no auth needed)
+            tryLoadCachedOrFetch(urlActivityId, urlAllSubgroups === '1');
+        }
     }
 });
 
@@ -192,6 +199,9 @@ async function checkAuth() {
             btn.className = 'btn-auth';
         }
         btn.style.display = 'inline-block';
+        // Show/hide unauthenticated banner
+        const banner = document.getElementById('unauth-banner');
+        if (banner) banner.style.display = isAuthenticated ? 'none' : 'block';
     } catch (e) { /* ignore */ }
 }
 
@@ -201,6 +211,27 @@ function handleAuth() {
     } else {
         window.location.href = '/auth/login?next=/race-replay';
     }
+}
+
+// ---------------------------------------------------------------------------
+// Try cached race lookup, fall back to fetch from Zwift API
+// ---------------------------------------------------------------------------
+async function tryLoadCachedOrFetch(activityId, allSubgroups) {
+    try {
+        let url = `/api/race/resolve?activity_id=${encodeURIComponent(activityId)}`;
+        if (allSubgroups) url += '&all_subgroups=1';
+        const resp = await fetch(url);
+        if (resp.ok) {
+            const data = await resp.json();
+            if (data.found && data.race_id) {
+                await loadRaceById(data.race_id);
+                return;
+            }
+        }
+    } catch (e) {
+        // Resolve failed — fall through to normal fetch
+    }
+    fetchRace(false);
 }
 
 // ---------------------------------------------------------------------------
