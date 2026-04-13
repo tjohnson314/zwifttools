@@ -1767,7 +1767,8 @@ def _load_multi_subgroup_race(race_id):
         # Re-number ranks globally so they don't collide across categories
         for r in sg_data.riders:
             all_riders.append((r, label, base_rank + r.rank))
-        base_rank += len(sg_data.riders)
+        if sg_data.riders:
+            base_rank += max(r.rank for r in sg_data.riders)
 
     if not all_riders:
         return jsonify({'error': 'No rider data found across subgroups'}), 404
