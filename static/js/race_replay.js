@@ -75,7 +75,6 @@ const CATEGORY_COLORS = {
 // ---------------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', () => {
     checkAuth();
-    loadRaceList();
     bindEvents();
 
     // Auto-load race from URL parameters (e.g. ?activity_id=12345&all_subgroups=1)
@@ -94,7 +93,6 @@ document.addEventListener('DOMContentLoaded', () => {
 function bindEvents() {
     document.getElementById('fetch-btn').addEventListener('click', () => fetchRace(false));
     document.getElementById('refetch-btn').addEventListener('click', () => fetchRace(true));
-    document.getElementById('load-btn').addEventListener('click', loadSelectedRace);
     document.getElementById('play-btn').addEventListener('click', togglePlay);
     document.getElementById('time-slider').addEventListener('input', onSliderInput);
 
@@ -208,23 +206,6 @@ function handleAuth() {
 // ---------------------------------------------------------------------------
 // Race list
 // ---------------------------------------------------------------------------
-async function loadRaceList() {
-    try {
-        const resp = await fetch('/api/race/list');
-        const data = await resp.json();
-        const select = document.getElementById('race-select');
-        select.innerHTML = '<option value="">-- Select a race --</option>';
-        (data.races || []).forEach(race => {
-            const opt = document.createElement('option');
-            opt.value = race.race_id;
-            const label = race.race_name || race.race_id.replace('race_data_', '');
-            const riders = race.rider_count ? ` (${race.rider_count} riders)` : '';
-            opt.textContent = label + riders;
-            select.appendChild(opt);
-        });
-    } catch (e) { /* ignore */ }
-}
-
 // ---------------------------------------------------------------------------
 // Fetch race from Zwift API (with SSE progress streaming)
 // ---------------------------------------------------------------------------
@@ -310,8 +291,6 @@ async function fetchRace(forceRefresh = false) {
 
         if (finalData.success) {
             showStatus(finalData.message, 'success');
-            await loadRaceList();
-            document.getElementById('race-select').value = finalData.race_id;
             await loadRaceById(finalData.race_id);
         }
     } catch (e) {
@@ -325,12 +304,6 @@ async function fetchRace(forceRefresh = false) {
 // ---------------------------------------------------------------------------
 // Load race data
 // ---------------------------------------------------------------------------
-async function loadSelectedRace() {
-    const raceId = document.getElementById('race-select').value;
-    if (!raceId) return;
-    await loadRaceById(raceId);
-}
-
 async function loadRaceById(raceId) {
     showLoading('Loading and cleaning race data...');
     try {

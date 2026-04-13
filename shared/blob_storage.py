@@ -79,8 +79,17 @@ def upload_race_dir(race_id: str, local_dir: str | Path) -> bool:
             if not file_path.is_file():
                 continue
             blob_name = f"{race_id}/{file_path.relative_to(local_dir).as_posix()}"
+            metadata = None
+            if file_path.name == 'race_meta.json':
+                try:
+                    meta = json.loads(file_path.read_text())
+                    race_name = meta.get('race_name')
+                    if race_name:
+                        metadata = {'race_name': race_name}
+                except Exception:
+                    pass
             with open(file_path, 'rb') as f:
-                container.upload_blob(blob_name, f, overwrite=True)
+                container.upload_blob(blob_name, f, overwrite=True, metadata=metadata)
         return True
     except Exception as e:
         logger.error("Blob upload failed for %s: %s", race_id, e)
@@ -137,43 +146,31 @@ def list_races() -> List[dict]:
     """List all race IDs stored in blob storage.
 
     Returns a list of dicts with at least ``race_id`` and optionally
-    ``race_name`` (read from ``race_meta.json``).
+    ``race_name`` (read from blob metadata attached during upload).
 
-    Optimised to only list ``race_meta.json`` blobs so that each race
-    requires exactly one list entry (no extra download per race).
+    Uses a single ``list_blobs`` call with ``include=['metadata']`` so
+    no per-race downloads are needed.
     """
     container = _get_container()
     if container is None:
         return []
 
     try:
-        races = []
-        # Download meta blobs in bulk — much faster than one download per race
-        meta_blobs = [
-            blob for blob in container.list_blobs(name_starts_with="race_data_")
-            if blob.name.endswith('/race_meta.json')
-        ]
-        for blob in meta_blobs:
+        seen = set()
+        meta_names = {}
+        # Single pass: collect all race IDs and race names from metadata
+        for blob in container.list_blobs(name_starts_with="race_data_", include=['metadata']):
             race_id = blob.name.split('/')[0]
-            info: dict = {'race_id': race_id, 'race_name': None}
-            try:
-                data = container.download_blob(blob.name).readall()
-                meta = json.loads(data)
-                info['race_name'] = meta.get('race_name')
-            except Exception:
-                pass
-            races.append(info)
+            seen.add(race_id)
+            if blob.name.endswith('/race_meta.json') and blob.metadata:
+                name = blob.metadata.get('race_name')
+                if name:
+                    meta_names[race_id] = name
 
-        # Also pick up race dirs that have no race_meta.json
-        seen = {r['race_id'] for r in races}
-        for blob in container.list_blobs(name_starts_with="race_data_"):
-            parts = blob.name.split('/')
-            if len(parts) >= 2:
-                race_id = parts[0]
-                if race_id not in seen:
-                    seen.add(race_id)
-                    races.append({'race_id': race_id, 'race_name': None})
-
+        races = [
+            {'race_id': rid, 'race_name': meta_names.get(rid)}
+            for rid in seen
+        ]
         return races
     except Exception as e:
         logger.error("Blob list_races failed: %s", e)

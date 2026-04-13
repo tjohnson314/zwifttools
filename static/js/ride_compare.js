@@ -3,13 +3,8 @@
  * comparing arbitrary activities on the same route.
  *
  * Loaded after race_replay.js; replaces DOMContentLoaded init,
- * fetchRace, loadRaceList, and handleAuth to adapt the UI.
+ * fetchRace, and handleAuth to adapt the UI.
  */
-
-// Override loadRaceList BEFORE DOMContentLoaded fires (both scripts load
-// synchronously before the event) so race_replay.js's listener calls our no-op.
-const _origLoadRaceList = typeof loadRaceList === 'function' ? loadRaceList : null;
-loadRaceList = function () { /* no-op for ride compare */ };
 
 // Override handleAuth to redirect back to ride-compare
 const _origHandleAuth = typeof handleAuth === 'function' ? handleAuth : null;
