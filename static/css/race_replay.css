@@ -482,6 +482,8 @@ h1 .header-icon {
 
 .col-pos { width: 45px; text-align: center; }
 .col-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zwift-activity-icon { width: 14px; height: 14px; vertical-align: middle; margin-right: 2px; opacity: 0.8; }
+.zwift-activity-icon:hover { opacity: 1; }
 .col-gap { width: 70px; font-family: monospace; }
 .col-power { width: 80px; font-family: monospace; }
 .col-hr { width: 50px; font-family: monospace; }

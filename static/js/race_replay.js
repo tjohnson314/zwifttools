@@ -441,6 +441,7 @@ function initRaceData(data) {
             name: r.name,
             team: r.team,
             category: r.category || null,
+            activity_id: r.activity_id || null,
             weight_kg: r.weight_kg || 75.0,
             is_late_joiner: r.is_late_joiner || false,
             finish_time_sec: r.finish_time_sec,
@@ -676,6 +677,7 @@ function getRiderPositions(t) {
             name: r.name,
             team: r.team,
             category: rl.category,
+            activity_id: rl.activity_id,
             weight_kg: rl.weight_kg,
             finish_time_sec: r.finish_time_sec,
             no_data: noData,
@@ -971,7 +973,7 @@ function updateRiderTable(positions) {
         html += `<tr class="${classes.join(' ')}${nd ? ' no-data' : ''}" data-rank="${p.rank}">
             <td class="col-check"><input type="checkbox" ${isChecked ? 'checked' : ''} data-rank="${p.rank}"></td>
             <td class="col-pos">${p.position}</td>
-            <td class="col-name">${p.category ? `<span class="cat-badge" style="background:${CATEGORY_COLORS[p.category] || '#666'}">${p.category}</span> ` : ''}${p.name}${p.finished ? ' 🏁' : ''}${nd ? ' <span class="no-data-badge">No data</span>' : ''}</td>
+            <td class="col-name">${p.activity_id ? `<a href="https://www.zwift.com/activity/${p.activity_id}" target="_blank" rel="noopener" title="View on Zwift" onclick="event.stopPropagation()"><img src="/static/img/zwift.ico" alt="Zwift" class="zwift-activity-icon"></a> ` : ''}${p.category ? `<span class="cat-badge" style="background:${CATEGORY_COLORS[p.category] || '#666'}">${p.category}</span> ` : ''}${p.name}${p.finished ? ' 🏁' : ''}${nd ? ' <span class="no-data-badge">No data</span>' : ''}</td>
             <td class="col-gap">${gapStr}</td>
             <td class="col-power">${pwrStr}</td>
             <td class="col-power1m">${pwr1mStr}</td>
