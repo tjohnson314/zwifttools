@@ -461,6 +461,20 @@ h1 .header-icon {
     font-style: italic;
 }
 
+.cat-badge {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    line-height: 16px;
+    text-align: center;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #fff;
+    vertical-align: middle;
+    margin-right: 2px;
+}
+
 .col-check {
     width: 30px;
     text-align: center;

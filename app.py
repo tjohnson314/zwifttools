@@ -1512,6 +1512,7 @@ def api_race_fetch_stream():
         return Response(err_gen(), mimetype='text/event-stream')
 
     force_refresh = request.args.get('force_refresh', '').lower() in ('1', 'true')
+    all_subgroups = request.args.get('all_subgroups', '').lower() in ('1', 'true')
 
     # Use a queue to bridge the progress_callback (in a thread) to the SSE generator
     q = queue.Queue()
@@ -1525,23 +1526,57 @@ def api_race_fetch_stream():
                 logger.info("  [%d/%d] Fetching %s...", current, total, name)
                 q.put({'progress': True, 'current': current, 'total': total, 'name': name})
 
-            output_dir, message = fetch_race_from_activity(
-                activity_url_or_id, headers,
-                output_base_dir=str(race_data_dir),
-                progress_callback=on_progress,
-                force_refresh=force_refresh
-            )
+            if all_subgroups:
+                from shared.data_fetcher import fetch_all_subgroups_from_activity
+                results, event_id, race_name, error = fetch_all_subgroups_from_activity(
+                    activity_url_or_id, headers,
+                    output_base_dir=str(race_data_dir),
+                    progress_callback=on_progress,
+                    force_refresh=force_refresh
+                )
+                if error:
+                    q.put({'error': error})
+                else:
+                    race_id = f"race_event_{event_id}"
+                    # Save a manifest that lists all subgroup dirs + labels
+                    manifest = {
+                        'event_id': event_id,
+                        'race_name': race_name,
+                        'subgroups': [
+                            {'race_id': Path(d).name, 'label': label, 'subgroup_id': sg_id}
+                            for d, label, sg_id in results
+                        ],
+                    }
+                    manifest_dir = race_data_dir / race_id
+                    manifest_dir.mkdir(exist_ok=True)
+                    with open(manifest_dir / 'event_manifest.json', 'w') as f:
+                        json.dump(manifest, f)
 
-            if not output_dir:
-                q.put({'error': message})
+                    total_riders = sum(1 for d, _, _ in results if (Path(d) / 'complete_race_summary.csv').exists())
+                    _race_data_cache.pop(race_id, None)
+                    _race_list_cache = None
+                    q.put({
+                        'success': True,
+                        'race_id': race_id,
+                        'message': f"Loaded: {race_name} — {len(results)} categories",
+                    })
             else:
-                race_id = Path(output_dir).name
-                # Clear in-memory cleaned data cache so it gets regenerated
-                _race_data_cache.pop(race_id, None)
-                # Invalidate race list cache so the new race appears immediately
-                global _race_list_cache
-                _race_list_cache = None
-                q.put({'success': True, 'race_id': race_id, 'message': message})
+                output_dir, message = fetch_race_from_activity(
+                    activity_url_or_id, headers,
+                    output_base_dir=str(race_data_dir),
+                    progress_callback=on_progress,
+                    force_refresh=force_refresh
+                )
+
+                if not output_dir:
+                    q.put({'error': message})
+                else:
+                    race_id = Path(output_dir).name
+                    # Clear in-memory cleaned data cache so it gets regenerated
+                    _race_data_cache.pop(race_id, None)
+                    # Invalidate race list cache so the new race appears immediately
+                    _race_list_cache = None
+                    q.put({'success': True, 'race_id': race_id, 'message': message})
         except Exception as e:
             logger.exception("Error in fetch_stream background thread")
             q.put({'error': str(e)})
@@ -1632,6 +1667,10 @@ def api_race_load():
     if not race_id:
         return jsonify({'error': 'race_id required'}), 400
 
+    # Multi-subgroup event (race_event_XXXX) — load each subgroup and merge
+    if race_id.startswith('race_event_'):
+        return _load_multi_subgroup_race(race_id)
+
     data_path = Path('race_data') / race_id
     if not data_path.exists():
         # Try downloading from blob storage
@@ -1672,6 +1711,122 @@ def api_race_load():
     except Exception as e:
         logger.exception("Error loading race")
         return jsonify({'error': str(e)}), 500
+
+
+def _load_multi_subgroup_race(race_id):
+    """Load and merge multiple subgroups for a combined event view."""
+    manifest_path = Path('race_data') / race_id / 'event_manifest.json'
+    if not manifest_path.exists():
+        return jsonify({'error': f'Event manifest not found: {race_id}'}), 404
+
+    with open(manifest_path) as f:
+        manifest = json.load(f)
+
+    from race_replay.data_cleaner import clean_race_data, CleanedRaceData, RiderData
+
+    # Clean each subgroup and collect riders with category labels
+    all_riders = []
+    merged_route_name = None
+    merged_route_slug = None
+    merged_finish = 0
+    merged_min_time = float('inf')
+    merged_max_time = float('-inf')
+    merged_elevation = None
+    merged_world = None
+    base_rank = 0
+
+    for sg_info in manifest['subgroups']:
+        sg_race_id = sg_info['race_id']
+        label = sg_info['label']
+        sg_path = Path('race_data') / sg_race_id
+
+        if not sg_path.exists():
+            if blob_storage.race_exists_in_blob(sg_race_id):
+                sg_path.mkdir(parents=True, exist_ok=True)
+                blob_storage.download_race_dir(sg_race_id, sg_path)
+        if not sg_path.exists():
+            logger.warning("Subgroup data not found: %s", sg_race_id)
+            continue
+
+        try:
+            sg_data = clean_race_data(sg_path, cache=True)
+        except Exception as e:
+            logger.warning("Could not clean subgroup %s: %s", sg_race_id, e)
+            continue
+
+        # Use the first subgroup's route as the reference
+        if merged_route_name is None:
+            merged_route_name = sg_data.route_name
+            merged_route_slug = sg_data.route_slug
+            merged_elevation = sg_data.elevation_profile
+            merged_world = sg_data.world
+        merged_finish = max(merged_finish, sg_data.finish_line_km)
+        merged_min_time = min(merged_min_time, sg_data.min_time)
+        merged_max_time = max(merged_max_time, sg_data.max_time)
+
+        # Re-number ranks globally so they don't collide across categories
+        for r in sg_data.riders:
+            all_riders.append((r, label, base_rank + r.rank))
+        base_rank += len(sg_data.riders)
+
+    if not all_riders:
+        return jsonify({'error': 'No rider data found across subgroups'}), 404
+
+    # Build a merged CleanedRaceData and cache it
+    merged_riders = []
+    for r, label, new_rank in all_riders:
+        merged_riders.append(RiderData(
+            rank=new_rank,
+            activity_id=r.activity_id,
+            name=r.name,
+            team=r.team,
+            data=r.data,
+            finish_time_sec=r.finish_time_sec,
+            weight_kg=r.weight_kg,
+            player_id=r.player_id,
+            activity_start_time=r.activity_start_time,
+            ttt_time_offset=r.ttt_time_offset,
+        ))
+
+    merged = CleanedRaceData(
+        race_id=race_id,
+        route_name=merged_route_name,
+        finish_line_km=merged_finish,
+        riders=merged_riders,
+        elevation_profile=merged_elevation,
+        min_time=merged_min_time,
+        max_time=merged_max_time,
+        source_activity_id=None,
+        route_slug=merged_route_slug,
+        world=merged_world,
+    )
+    _race_data_cache[race_id] = merged
+
+    # Also store the category mapping for use in api_race_data
+    _race_data_cache[race_id + '_categories'] = {
+        new_rank: label for _, label, new_rank in all_riders
+    }
+
+    return jsonify({
+        'success': True,
+        'race_id': race_id,
+        'route_name': merged.route_name or 'Unknown',
+        'route_slug': merged.route_slug,
+        'finish_line_km': round(float(merged.finish_line_km), 3),
+        'rider_count': len(merged.riders),
+        'min_time': int(merged.min_time),
+        'max_time': int(merged.max_time),
+        'riders': [
+            {
+                'rank': int(r.rank),
+                'name': r.name,
+                'team': r.team,
+                'finish_time_sec': float(r.finish_time_sec) if r.finish_time_sec is not None else None,
+                'category': _race_data_cache[race_id + '_categories'].get(int(r.rank)),
+            }
+            for r in merged.riders
+        ],
+    })
 
 
 @app.route('/api/race/data/<race_id>')
@@ -1747,6 +1902,9 @@ def api_race_data(race_id):
         except Exception:
             pass
 
+    # Category mapping (populated by multi-subgroup load)
+    cat_map = _race_data_cache.get(race_id + '_categories', {})
+
     for i, r in enumerate(race_data.riders):
         df = r.data.reset_index()  # time_sec is the index
 
@@ -1763,6 +1921,7 @@ def api_race_data(race_id):
             'rank': int(r.rank),
             'name': r.name,
             'team': r.team,
+            'category': cat_map.get(int(r.rank)),
             'activity_id': str(r.activity_id),
             'player_id': int(r.player_id) if r.player_id else None,
             'weight_kg': float(r.weight_kg),

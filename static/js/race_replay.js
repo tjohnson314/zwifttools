@@ -61,6 +61,15 @@ const PELOTON_COLORS = [
     '#26c6da', '#9ccc65', '#ffca28', '#ec407a', '#7e57c2',
 ];
 
+// Category colors (A–E) — matching Zwift's official category colors
+const CATEGORY_COLORS = {
+    A: '#c62828',   // red
+    B: '#2e7d32',   // green
+    C: '#1565c0',   // blue
+    D: '#f9a825',   // yellow
+    E: '#6a1b9a',   // purple
+};
+
 // ---------------------------------------------------------------------------
 // Initialization
 // ---------------------------------------------------------------------------
@@ -225,6 +234,7 @@ async function fetchRace(forceRefresh = false) {
 
     let url = `/api/race/fetch_stream?activity_id=${encodeURIComponent(input)}`;
     if (forceRefresh) url += '&force_refresh=1';
+    if (document.getElementById('all-subgroups-check').checked) url += '&all_subgroups=1';
 
     try {
         const response = await fetch(url);
@@ -255,7 +265,8 @@ async function fetchRace(forceRefresh = false) {
                     try {
                         const data = JSON.parse(line.slice(6));
                         if (data.progress) {
-                            showLoading(`Fetching rider ${data.current}/${data.total}: ${data.name}`);
+                            const countText = data.total > 0 ? `${data.current}/${data.total}` : `${data.current}`;
+                            showLoading(`Fetching rider ${countText}: ${data.name}`);
                             showProgress(data.current, data.total, data.name);
                         } else {
                             finalData = data;
@@ -423,6 +434,7 @@ function initRaceData(data) {
             rank: r.rank,
             name: r.name,
             team: r.team,
+            category: r.category || null,
             weight_kg: r.weight_kg || 75.0,
             is_late_joiner: r.is_late_joiner || false,
             finish_time_sec: r.finish_time_sec,
@@ -657,6 +669,7 @@ function getRiderPositions(t) {
             rank: r.rank,
             name: r.name,
             team: r.team,
+            category: rl.category,
             weight_kg: rl.weight_kg,
             finish_time_sec: r.finish_time_sec,
             no_data: noData,
@@ -952,7 +965,7 @@ function updateRiderTable(positions) {
         html += `<tr class="${classes.join(' ')}${nd ? ' no-data' : ''}" data-rank="${p.rank}">
             <td class="col-check"><input type="checkbox" ${isChecked ? 'checked' : ''} data-rank="${p.rank}"></td>
             <td class="col-pos">${p.position}</td>
-            <td class="col-name">${p.name}${p.finished ? ' 🏁' : ''}${nd ? ' <span class="no-data-badge">No data</span>' : ''}</td>
+            <td class="col-name">${p.category ? `<span class="cat-badge" style="background:${CATEGORY_COLORS[p.category] || '#666'}">${p.category}</span> ` : ''}${p.name}${p.finished ? ' 🏁' : ''}${nd ? ' <span class="no-data-badge">No data</span>' : ''}</td>
             <td class="col-gap">${gapStr}</td>
             <td class="col-power">${pwrStr}</td>
             <td class="col-power1m">${pwr1mStr}</td>
@@ -1030,6 +1043,7 @@ function updateElevationChart(positions) {
 
         const isSelected = p.rank === selectedRank;
         const color = isSelected ? '#ff6b35' :
+            (p.category && CATEGORY_COLORS[p.category]) ? CATEGORY_COLORS[p.category] :
             (checkedRanks.has(p.rank) ? '#66bb6a' : '#29b6f6');
         const size = isSelected ? 12 : 8;
 
@@ -1591,13 +1605,13 @@ function drawMap(positions) {
         ctx.beginPath();
         ctx.arc(x, y, r, 0, Math.PI * 2);
         if (isSelected) {
-            ctx.fillStyle = '#f7931e';
+            ctx.fillStyle = (p.category && CATEGORY_COLORS[p.category]) ? CATEGORY_COLORS[p.category] : '#f7931e';
             ctx.fill();
             ctx.strokeStyle = '#fff';
             ctx.lineWidth = 2 * dpr;
             ctx.stroke();
         } else {
-            ctx.fillStyle = p.finished ? '#81c784' : '#29b6f6';
+            ctx.fillStyle = (p.category && CATEGORY_COLORS[p.category]) ? CATEGORY_COLORS[p.category] : (p.finished ? '#81c784' : '#29b6f6');
             ctx.fill();
         }
     }

@@ -322,6 +322,220 @@ def save_rider_data(output_dir, rank, activity_id, df, telem_data, route_id=None
         json.dump(telem_data, f)
 
 
+def get_event_subgroups(event_id, headers):
+    """
+    Fetch all subgroups for a Zwift event.
+
+    Args:
+        event_id: The parent event ID
+        headers: Authorization headers
+
+    Returns:
+        tuple: (list of subgroup dicts with 'id' and 'label', error_message)
+    """
+    url = f"{BASE_URL}/events/{event_id}"
+    response = _request_with_retry('GET', url, headers=headers, timeout=15)
+    if response.status_code != 200:
+        return None, f"Error fetching event {event_id}: {response.status_code}"
+    try:
+        event_data = response.json()
+    except Exception as e:
+        return None, f"Failed to parse event JSON: {e}"
+
+    subgroups = []
+    # Map Zwift subgroupLabel integers to letters
+    LABEL_MAP = {1: 'A', 2: 'B', 3: 'C', 4: 'D', 5: 'E'}
+    for sg in event_data.get('eventSubgroups', []):
+        sg_id = sg.get('id')
+        if sg_id:
+            label_raw = sg.get('subgroupLabel') or sg.get('label')
+            if isinstance(label_raw, int):
+                label = LABEL_MAP.get(label_raw, chr(64 + label_raw))
+            elif isinstance(label_raw, str) and len(label_raw) == 1:
+                label = label_raw.upper()
+            else:
+                label = str(label_raw) if label_raw else '?'
+            subgroups.append({
+                'id': sg_id,
+                'label': label,
+                'route_id': sg.get('routeId'),
+                'event_subgroup_start': sg.get('eventSubgroupStart'),
+            })
+    if not subgroups:
+        return None, f"No subgroups found for event {event_id}"
+    # Sort A, B, C, D, E
+    subgroups.sort(key=lambda s: s['label'])
+    return subgroups, None
+
+
+def fetch_all_subgroups_from_activity(activity_url_or_id, headers, output_base_dir=".",
+                                       progress_callback=None, force_refresh=False):
+    """
+    Fetch race data for ALL subgroups (categories) in the same event.
+
+    Uses one activity to find the parent event, retrieves all subgroups,
+    then fetches each subgroup's race data sequentially.
+
+    Returns:
+        tuple: (list of (output_dir, subgroup_label) tuples, event_id, race_name, error_message)
+    """
+    # Step 1-3: Extract activity ID and event info
+    activity_id = extract_activity_id(activity_url_or_id)
+    activity_data, error = get_activity_details(activity_id, headers)
+    if error:
+        return None, None, None, error
+
+    event_info = activity_data.get('eventInfo', {})
+    race_name = event_info.get('name', 'Unknown Race')
+    event_id = event_info.get('id')
+    if not event_id:
+        return None, None, None, "No event ID found. Is this a race activity?"
+
+    # Step 4: Get all subgroups for this event
+    subgroups, error = get_event_subgroups(event_id, headers)
+    if error:
+        return None, None, None, error
+
+    if progress_callback:
+        progress_callback(0, 0, f"Found {len(subgroups)} categories: {', '.join(s['label'] for s in subgroups)}")
+
+    # Step 5: Fetch each subgroup's race data
+    results = []
+    cumulative_fetched = 0
+    for sg in subgroups:
+        sg_id = sg['id']
+        label = sg['label']
+
+        if progress_callback:
+            progress_callback(0, 0, f"--- Category {label} ---")
+
+        # Wrap the progress callback to prefix with category label
+        def sg_progress(current, total, name, _label=label):
+            nonlocal cumulative_fetched
+            if progress_callback:
+                progress_callback(cumulative_fetched + current, 0, f"[Cat {_label}] {name}")
+
+        output_dir = os.path.join(output_base_dir, f"race_data_{sg_id}")
+        summary_path = os.path.join(output_dir, "complete_race_summary.csv")
+        meta_path = os.path.join(output_dir, "race_meta.json")
+
+        # Check cache first
+        if not force_refresh and os.path.exists(summary_path):
+            try:
+                summary_df = pd.read_csv(summary_path)
+                success_count = int((summary_df['status'] == 'SUCCESS').sum())
+                results.append((output_dir, label, sg_id))
+                cumulative_fetched += success_count
+                if progress_callback:
+                    progress_callback(cumulative_fetched, 0, f"[Cat {label}] Cached ({success_count} riders)")
+                continue
+            except Exception:
+                pass
+
+        # Fetch participants for this subgroup
+        participants, error = get_race_entries(sg_id, headers)
+        if error:
+            logger.warning("Could not fetch Cat %s (subgroup %s): %s", label, sg_id, error)
+            continue
+
+        participants = deduplicate_ranks(participants)
+        total_riders = len(participants)
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Save metadata
+        meta = {
+            'race_name': race_name,
+            'event_id': event_id,
+            'event_subgroup_id': sg_id,
+            'source_activity_id': activity_id,
+            'race_start_time': sg.get('event_subgroup_start') or activity_data.get('startDate'),
+            'activity_start_time': activity_data.get('startDate'),
+            'world_id': activity_data.get('worldId'),
+            'route_id': sg.get('route_id'),
+            'subgroup_label': label,
+        }
+        with open(meta_path, 'w') as f:
+            json.dump(meta, f)
+
+        # Clean cached cleaned data
+        import shutil
+        cleaned_cache_json = os.path.join(output_dir, "cleaned_cache.json")
+        cleaned_data_dir = os.path.join(output_dir, "cleaned_data")
+        if os.path.exists(cleaned_cache_json):
+            os.remove(cleaned_cache_json)
+        if os.path.exists(cleaned_data_dir):
+            shutil.rmtree(cleaned_data_dir)
+
+        # Fetch telemetry concurrently
+        _CONCURRENT_WORKERS = 5
+        _progress_lock = threading.Lock()
+        _progress_count = [0]
+
+        def fetch_one(p, _output_dir=output_dir):
+            act_id = p['activity_id']
+            telem_data, act_data, err = fetch_rider_telemetry(act_id, headers)
+            with _progress_lock:
+                _progress_count[0] += 1
+                current = _progress_count[0]
+            sg_progress(current, total_riders, p['name'])
+            if err:
+                return {'rank': p['rank'], 'name': p['name'], 'activity_id': act_id,
+                        'weight_kg': p.get('weight_kg', 75.0), 'player_id': p.get('player_id'), 'status': err}
+            df = convert_telemetry_to_dataframe(telem_data)
+            rider_route_id = act_data.get('routeId') if act_data else None
+            save_rider_data(_output_dir, p['rank'], act_id, df, telem_data, rider_route_id)
+            np_value = calculate_normalized_power(df['power_watts']) if len(df) > 0 else None
+            result = {
+                'rank': p['rank'], 'name': p['name'], 'activity_id': act_id,
+                'weight_kg': p.get('weight_kg', 75.0), 'player_id': p.get('player_id'),
+                'activity_start_time': act_data.get('startDate') if act_data else None,
+                'status': 'SUCCESS',
+                'duration_sec': df['time_sec'].max() if len(df) > 0 else 0,
+                'avg_power': round(df['power_watts'].mean(), 1) if len(df) > 0 else 0,
+                'normalized_power': np_value,
+                'max_power': df['power_watts'].max() if len(df) > 0 else 0,
+                'avg_hr': round(df['hr_bpm'].mean(), 1) if len(df) > 0 else 0,
+                'data_points': len(df),
+            }
+            if p.get('elapsed_ms'):
+                result['elapsed_ms'] = p['elapsed_ms']
+            return result
+
+        summary_data = []
+        _progress_count[0] = 0
+        with ThreadPoolExecutor(max_workers=_CONCURRENT_WORKERS) as executor:
+            future_to_idx = {executor.submit(fetch_one, p): idx for idx, p in enumerate(participants)}
+            results_by_idx = {}
+            for future in as_completed(future_to_idx):
+                idx = future_to_idx[future]
+                try:
+                    results_by_idx[idx] = future.result()
+                except Exception as e:
+                    p = participants[idx]
+                    results_by_idx[idx] = {
+                        'rank': p['rank'], 'name': p['name'], 'activity_id': p['activity_id'],
+                        'weight_kg': p.get('weight_kg', 75.0), 'player_id': p.get('player_id'),
+                        'status': f'Exception: {e}',
+                    }
+            for idx in range(len(participants)):
+                summary_data.append(results_by_idx[idx])
+
+        summary_df = pd.DataFrame(summary_data)
+        summary_df.to_csv(os.path.join(output_dir, "complete_race_summary.csv"), index=False)
+        success_count = len([s for s in summary_data if s.get('status') == 'SUCCESS'])
+        cumulative_fetched += success_count
+
+        from shared import blob_storage
+        blob_storage.upload_race_dir(f"race_data_{sg_id}", output_dir)
+
+        results.append((output_dir, label, sg_id))
+
+    if not results:
+        return None, None, None, "No subgroup data could be fetched"
+
+    return results, event_id, race_name, None
+
+
 def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", progress_callback=None, force_refresh=False):
     """
     Fetch race data from a Zwift activity URL or ID.
