@@ -387,6 +387,7 @@
 
         <div class="results" id="results">
             <div class="event-title" id="eventTitle"></div>
+            <div id="alignmentWarnings" style="display:none; margin:8px 0; padding:8px 12px; background:#553300; border:1px solid #885500; border-radius:4px; color:#ffcc66; font-size:0.85rem;"></div>
 
             <div class="input-section" style="margin-bottom:20px;">
                 <div class="dist-range-header">
@@ -883,6 +884,18 @@
         document.getElementById('results').style.display = 'block';
         document.getElementById('eventTitle').textContent = data.event_name;
         document.getElementById('bikeInfo').textContent = 'Assumed bike: ' + data.ttt_bike;
+
+        // Show alignment warnings if any
+        const warnEl = document.getElementById('alignmentWarnings');
+        if (data.warnings && data.warnings.length > 0) {
+            warnEl.innerHTML = '⚠️ ' + data.warnings.join('<br>⚠️ ');
+            warnEl.style.display = 'block';
+        } else {
+            warnEl.style.display = 'none';
+        }
+        if (data.alignment_info) {
+            console.log('Alignment info:', data.alignment_info);
+        }
 
         const teams = data.teams;
 

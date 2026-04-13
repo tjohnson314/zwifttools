@@ -144,6 +144,15 @@
     crr_value: real
 )
 
+// -- Surface polygons (polygon coordinates per named surface zone) --
+.create-merge table SurfacePolygons (
+    world: string,
+    name: string,
+    surface_type: string,
+    polygon: dynamic,
+    geojson_polygon: dynamic
+)
+
 // -- Route-to-Strava segment mapping --
 .create-merge table RouteStravaSegments (
     route_slug: string,

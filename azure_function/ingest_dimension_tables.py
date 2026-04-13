@@ -15,10 +15,10 @@ Requires env vars (or local.settings.json values):
 import json
 import logging
 import os
+import subprocess
 import sys
 import glob
 import pandas as pd
-from azure.identity import AzureCliCredential
 from azure.kusto.data import KustoClient, KustoConnectionStringBuilder
 from azure.kusto.ingest import QueuedIngestClient, IngestionProperties
 
@@ -49,19 +49,41 @@ def _db() -> str:
     return os.environ.get("KUSTO_DATABASE", "ZwiftGames")
 
 
-def _get_credential():
-    return AzureCliCredential()
+def _get_token(resource: str) -> str:
+    """Get an AAD token for the given resource.
+    
+    Uses CLUSTER_TOKEN / INGEST_TOKEN env vars if set (pre-acquired),
+    otherwise falls back to az CLI subprocess.
+    """
+    # Check for pre-acquired token env vars
+    if "ingest" in resource.lower():
+        token = os.environ.get("INGEST_TOKEN")
+    else:
+        token = os.environ.get("CLUSTER_TOKEN")
+    if token:
+        return token
+
+    output = subprocess.check_output(
+        f"az account get-access-token --resource {resource} -o json",
+        shell=True,
+        timeout=30,
+    )
+    return json.loads(output)["accessToken"]
 
 
 def get_query_client() -> KustoClient:
     cluster_uri = os.environ["KUSTO_CLUSTER_URI"]
-    kcsb = KustoConnectionStringBuilder.with_azure_token_credential(cluster_uri, _get_credential())
+    kcsb = KustoConnectionStringBuilder.with_aad_user_token_authentication(
+        cluster_uri, _get_token(cluster_uri)
+    )
     return KustoClient(kcsb)
 
 
 def get_ingest_client() -> QueuedIngestClient:
     ingest_uri = os.environ["KUSTO_INGEST_URI"]
-    kcsb = KustoConnectionStringBuilder.with_azure_token_credential(ingest_uri, _get_credential())
+    kcsb = KustoConnectionStringBuilder.with_aad_user_token_authentication(
+        ingest_uri, _get_token(ingest_uri)
+    )
     return QueuedIngestClient(kcsb)
 
 
@@ -252,6 +274,32 @@ def load_surface_crr() -> pd.DataFrame:
     return df
 
 
+def load_surface_polygons() -> pd.DataFrame:
+    """Load SurfacePolygons from zwiftmap_surfaces/surface_data.json."""
+    path = os.path.join(WORKSPACE, "zwiftmap_surfaces", "surface_data.json")
+    with open(path) as f:
+        data = json.load(f)
+
+    rows = []
+    for world, world_data in data["worlds"].items():
+        for surface in world_data["surfaces"]:
+            coords = surface["polygon"]
+            # Build GeoJSON Polygon: swap [lat, lng] -> [lng, lat]
+            ring = [[pt[1], pt[0]] for pt in coords]
+            geojson = json.dumps({"type": "Polygon", "coordinates": [ring]})
+            rows.append({
+                "world": world,
+                "name": surface["name"],
+                "surface_type": surface["type"],
+                "polygon": coords,
+                "geojson_polygon": geojson,
+            })
+
+    df = pd.DataFrame(rows)
+    logger.info(f"SurfacePolygons: {len(df)} rows")
+    return df
+
+
 def load_route_strava_segments() -> pd.DataFrame:
     """Load RouteStravaSegments from route_strava_segments.json."""
     path = os.path.join(WORKSPACE, "route_strava_segments.json")
@@ -282,6 +330,7 @@ DIMENSION_TABLES = {
     "RoutePoints": load_route_points,
     "Worlds": load_worlds,
     "SurfaceCrr": load_surface_crr,
+    "SurfacePolygons": load_surface_polygons,
     "RouteStravaSegments": load_route_strava_segments,
 }
 
@@ -313,6 +362,7 @@ DIMENSION_COLUMN_ORDER = {
         "lng_min", "lng_max", "bg_color",
     ],
     "SurfaceCrr": ["bike_type", "surface_type", "crr_value"],
+    "SurfacePolygons": ["world", "name", "surface_type", "polygon", "geojson_polygon"],
     "RouteStravaSegments": ["route_slug", "strava_segment_id"],
 }
 
@@ -332,11 +382,54 @@ def ingest_dimension_table(table_name, df, ingest_client):
     logger.info(f"Queued {len(df)} rows for ingestion into {table_name}")
 
 
+def _csv_escape(val) -> str:
+    """Escape a value for .ingest inline CSV format."""
+    if val is None:
+        return ""
+    if isinstance(val, (dict, list)):
+        s = json.dumps(val)
+    else:
+        s = str(val)
+    # If contains comma, newline, or double-quote, wrap in quotes and double any quotes
+    if '"' in s or ',' in s or '\n' in s:
+        return '"' + s.replace('"', '""') + '"'
+    return s
+
+
+def ingest_inline(table_name, df, query_client):
+    """Ingest a DataFrame using .ingest inline via the query client."""
+    if df.empty:
+        logger.warning(f"Skipping empty DataFrame for {table_name}")
+        return
+
+    col_order = DIMENSION_COLUMN_ORDER[table_name]
+    df = df[col_order]
+
+    batch_size = 10
+    total = len(df)
+    for i in range(0, total, batch_size):
+        batch = df.iloc[i:i + batch_size]
+        lines = []
+        for _, row in batch.iterrows():
+            line = ",".join(_csv_escape(v) for v in row)
+            lines.append(line)
+        inline_data = "\n".join(lines)
+        cmd = f".ingest inline into table {table_name} <| {inline_data}"
+        query_client.execute_mgmt(_db(), cmd)
+        logger.info(f"  Ingested rows {i + 1}-{min(i + batch_size, total)}")
+
+    logger.info(f"Inline-ingested {total} rows into {table_name}")
+
+
 def main():
     _load_local_settings()
 
+    use_inline = "--inline" in sys.argv
+
     query_client = get_query_client()
-    ingest_client = get_ingest_client()
+    ingest_client = None
+    if not use_inline:
+        ingest_client = get_ingest_client()
 
     for table_name, loader in DIMENSION_TABLES.items():
         logger.info(f"\n{'='*60}")
@@ -355,12 +448,14 @@ def main():
             logger.warning(f"Could not clear {table_name} (may be empty): {e}")
 
         # Ingest new data
-        ingest_dimension_table(table_name, df, ingest_client)
+        if use_inline:
+            ingest_inline(table_name, df, query_client)
+        else:
+            ingest_dimension_table(table_name, df, ingest_client)
         logger.info(f"Done: {table_name}")
 
     logger.info(f"\n{'='*60}")
-    logger.info("All dimension tables queued for ingestion.")
-    logger.info("Note: Queued ingestion may take a few minutes to complete.")
+    logger.info("All dimension tables ingested.")
 
 
 if __name__ == "__main__":

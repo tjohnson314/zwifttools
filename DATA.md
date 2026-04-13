@@ -12,6 +12,8 @@ This document describes the complete data pipeline for every page and API endpoi
 - [My Activities](#my-activities)
 - [Bike Comparison](#bike-comparison)
 - [Race Replay](#race-replay)
+- [Ride Compare](#ride-compare)
+- [TTT Analysis](#ttt-analysis)
 - [Shared Infrastructure](#shared-infrastructure)
 
 ---
@@ -519,6 +521,96 @@ Clamp `max_time` to last finisher's time + 10 seconds to exclude cooldown/post-r
 
 ---
 
+## Ride Compare
+
+### Page: `GET /ride-compare`
+
+Renders `ride_compare.html`. Uses the same playback engine as Race Replay (elevation chart, map, rider table).
+
+### `GET /api/ride_compare/fetch_stream`
+
+**Purpose:** Fetch telemetry for 2+ activities and prepare them for side-by-side comparison. Streams progress via **SSE**.
+
+**Params:** `activity_ids` (required, comma-separated activity IDs or URLs)
+
+**Pipeline:**
+
+1. **Parse input** — accepts comma, space, or newline-delimited IDs; extracts numeric ID from URLs via `extract_activity_id()`; requires minimum 2 activities
+2. **Generate stable compare ID** — sort unique activity IDs → SHA-256 hash → `ride_compare_<first 16 chars>`
+3. **Check cache** — if `complete_race_summary.csv` exists in `race_data/<compare_id>/`, return cached result
+4. **Fetch each activity** (sequential, with SSE progress messages):
+   - `fetch_rider_telemetry(activity_id, headers)` → raw telemetry + activity metadata
+   - `convert_telemetry_to_dataframe()` → DataFrame
+   - `save_rider_data()` → writes CSV + raw JSON per rider
+   - Extract rider name, weight, player ID, route ID from profile/activity data
+   - Compute NP, avg power, max power, avg HR, duration
+5. **Name disambiguation** — if multiple riders share the same name, appends activity date (`YYYY-MM-DD`) or datetime (`YYYY-MM-DD HH:MM`) to distinguish them
+6. **Save metadata:**
+   - `complete_race_summary.csv` — rank, name, activity_id, weight, stats
+   - `race_meta.json` — `is_ride_compare: true`, route_id, start times, source_activity_id
+7. **Return** `{ success: true, race_id }` (final SSE message)
+
+After fetching, the client calls `loadRaceById(race_id)` which hits the standard `/api/race/load` → `/api/race/data/<race_id>` pipeline to clean and render the comparison.
+
+---
+
+## TTT Analysis
+
+### Page: `GET /ttt-analysis`
+
+Renders `ttt_analysis.html`.
+
+### `POST /api/ttt/fetch`
+
+**Purpose:** Fetch and analyze a team time trial race. The main heavy-lifting endpoint.
+
+**Params (JSON body):** `subgroup_id` (required), `team_tags` (optional, comma-separated)
+
+**Pipeline:**
+
+1. **Fetch race entries** — `get_race_entries(subgroup_id, headers)` via Zwift API
+2. **Detect teams** — if `team_tags` not provided, auto-extracts tags from rider names (content inside `[...]` or `(...)`), keeps tags appearing on ≥2 riders
+3. **Fetch all rider telemetry** — concurrent with 5 workers, each producing: time_sec, speed_kmh, distance_km, altitude_m, power_watts, lat/lng
+4. **Compute draft estimates** per rider:
+   - Uses a fixed reference bike (Cadex Tri frame + DT Swiss ARC 1100 DICUT 85 wheels, upgrade level 5)
+   - `estimate_frontal_area(height_cm, weight_kg)` → CDA
+   - Solo power = `(F_rolling + F_aero) × v / (1 - drivetrain_loss)`
+   - Draft watts = solo power − actual power, smoothed over 5-point window
+5. **Route alignment** (if route data available) — projects all riders onto shared route via `align_riders_to_route()`, corrects post-finish drift using raw Zwift odometer
+6. **TTT time offset correction** — `compute_ttt_time_offset()` aligns staggered start times using finish line reference coordinates
+7. **Resample** all riders to integer-second time grid
+8. **Team aggregation** — groups riders by team tag, bins into 50 m distance intervals:
+   - Lead speed (leader at each distance)
+   - Lead power (leader at each distance, raw + smoothed)
+   - Avg draft efficiency (mean draft_watts / total_power)
+   - Lead rider name, elevation, lead time
+   - **Pull statistics** per rider: pull count, avg duration, total front time, avg power (W and W/kg)
+9. **Return** `{ event_name, ttt_bike, race_distance_km, teams: [...], unassigned: [...], team_tags, warnings }`
+
+### `POST /api/ttt/reassign`
+
+**Purpose:** Re-aggregate team charts after drag-and-drop rider reassignments, without re-fetching telemetry.
+
+**Params (JSON body):** `subgroup_id`, `assignments` (dict of `activity_id → team_tag`, empty string = unassign)
+
+Uses cached `all_processed` data from the original fetch. Calls `_build_ttt_team_results()` with new assignments and returns the same output structure as `/api/ttt/fetch`.
+
+### `POST /api/ttt/rider`
+
+**Purpose:** Load a single rider's telemetry for the drilldown chart.
+
+**Params (JSON body):** `subgroup_id`, `activity_id`
+
+Returns the rider's data downsampled to 50 m intervals: `{ name, activity_id, weight_kg, distance_km, altitude_m, power_watts, draft_watts }`.
+
+### `POST /api/ttt/debug_bins`
+
+**Purpose:** Debug endpoint — shows per-second leader data in a distance range for diagnostics.
+
+**Params (JSON body):** `subgroup_id`, `team_tag`, `dist_start_km`, `dist_end_km`
+
+---
+
 ## Shared Infrastructure
 
 ### Zwift API (`shared/data_fetcher.py`)
@@ -600,3 +692,19 @@ Window adapts to actual sample rate when `time_sec` is provided.
 ### Timestamp Correction (`race_replay/data_cleaner.py`)
 
 - `fix_timestamp_offsets()` — detects Zwift server clock jumps where telemetry data was actually continuous (checks distance & speed continuity across the jump). Subtracts excess time to produce monotonic timestamps.
+
+### Zwift Auth (`shared/zwift_auth.py`)
+
+- Zwift OAuth 2.0 Authorization Code Flow
+- `get_token_with_password()` — email + password → access/refresh token pair (used by Azure Function for headless auth)
+- `exchange_code_for_tokens()` — OAuth callback code exchange (used by web app)
+- `refresh_access_token()` — automatic token refresh on expiry
+- Token storage via Flask session (`ZwiftTokens` dict: access_token, refresh_token, expires_at)
+
+### YouTube Streams (`shared/youtube_streams.py`)
+
+- `find_matching_streams()` — cross-references race participants with known streamers from `streamers.json`
+- `resolve_channel_id(handle)` — YouTube API channel lookup by handle
+- `_find_stream_for_race()` — fast path: scan uploads playlist for VODs overlapping race time (±48h)
+- `_find_stream_for_race_search()` — slow fallback: YouTube search API with `eventType=completed`
+- `_detect_trim_offset()` — computes front-trim offset by comparing broadcast vs. current video duration
