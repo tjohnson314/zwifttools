@@ -78,9 +78,13 @@ document.addEventListener('DOMContentLoaded', () => {
     loadRaceList();
     bindEvents();
 
-    // Auto-load race from URL parameter (e.g. ?activity_id=12345)
+    // Auto-load race from URL parameters (e.g. ?activity_id=12345&all_subgroups=1)
     const params = new URLSearchParams(window.location.search);
     const urlActivityId = params.get('activity_id');
+    const urlAllSubgroups = params.get('all_subgroups');
+    if (urlAllSubgroups === '1') {
+        document.getElementById('all-subgroups-check').checked = true;
+    }
     if (urlActivityId) {
         document.getElementById('activity-input').value = urlActivityId;
         fetchRace(false);
@@ -232,9 +236,17 @@ async function fetchRace(forceRefresh = false) {
     showLoading('Connecting to Zwift API...');
     showProgress(0, 0, '');
 
+    const allSubgroups = document.getElementById('all-subgroups-check').checked;
+
+    // Update URL to reflect current parameters
+    const urlParams = new URLSearchParams();
+    urlParams.set('activity_id', input);
+    if (allSubgroups) urlParams.set('all_subgroups', '1');
+    history.replaceState(null, '', '?' + urlParams.toString());
+
     let url = `/api/race/fetch_stream?activity_id=${encodeURIComponent(input)}`;
     if (forceRefresh) url += '&force_refresh=1';
-    if (document.getElementById('all-subgroups-check').checked) url += '&all_subgroups=1';
+    if (allSubgroups) url += '&all_subgroups=1';
 
     try {
         const response = await fetch(url);
@@ -277,7 +289,7 @@ async function fetchRace(forceRefresh = false) {
                         } else {
                             finalData = data;
                         }
-                    } catch {}
+                    } catch { }
                 }
             }
         }
@@ -330,7 +342,7 @@ async function loadRaceById(raceId) {
         });
         if (!loadResp.ok) {
             let errMsg = `Server error: ${loadResp.status}`;
-            try { const d = await loadResp.json(); errMsg = d.error || errMsg; } catch {}
+            try { const d = await loadResp.json(); errMsg = d.error || errMsg; } catch { }
             hideLoading();
             showStatus(errMsg, 'error');
             return;
@@ -350,7 +362,7 @@ async function loadRaceById(raceId) {
             const dataResp = await fetch(`/api/race/data/${raceId}`);
             if (!dataResp.ok) {
                 let errMsg = `Server error: ${dataResp.status}`;
-                try { const d = await dataResp.json(); errMsg = d.error || errMsg; } catch {}
+                try { const d = await dataResp.json(); errMsg = d.error || errMsg; } catch { }
                 hideLoading();
                 showStatus(errMsg, 'error');
                 return;
@@ -1052,7 +1064,7 @@ function updateElevationChart(positions) {
         const isSelected = p.rank === selectedRank;
         const color = isSelected ? '#ff6b35' :
             (p.category && CATEGORY_COLORS[p.category]) ? CATEGORY_COLORS[p.category] :
-            (checkedRanks.has(p.rank) ? '#66bb6a' : '#29b6f6');
+                (checkedRanks.has(p.rank) ? '#66bb6a' : '#29b6f6');
         const size = isSelected ? 12 : 8;
 
         riderTraces.push({
@@ -1246,8 +1258,8 @@ function updateStreamLinks() {
         const mins = Math.floor((t % 3600) / 60);
         const secs = t % 60;
         const timeStr = hrs > 0
-            ? `${hrs}:${mins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}`
-            : `${mins}:${secs.toString().padStart(2,'0')}`;
+            ? `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+            : `${mins}:${secs.toString().padStart(2, '0')}`;
         html += `<a href="${url}" target="_blank" rel="noopener" class="stream-link" title="${s.stream_title}">`;
         html += `<span class="yt-icon">▶</span> ${s.streamer_name} (${timeStr})`;
         html += `</a>`;
@@ -1450,7 +1462,7 @@ function fitMapToRoute() {
         const positions = getRiderPositions(t);
         // Prefer selected rider, then fall back to any rider with valid coords
         const target = (selectedRank !== null && positions.find(p => p.rank === selectedRank && !p.no_data && !isNaN(p.lat) && !isNaN(p.lng)))
-                     || positions.find(p => !p.no_data && !isNaN(p.lat) && !isNaN(p.lng));
+            || positions.find(p => !p.no_data && !isNaN(p.lat) && !isNaN(p.lng));
         if (target) {
             mapState.viewLat = target.lat;
             mapState.viewLng = target.lng;
@@ -1640,7 +1652,7 @@ function drawMap(positions) {
             const labelY = y - selectedDotRadius - 4 * dpr;
             ctx.fillStyle = 'rgba(0,0,0,0.7)';
             ctx.fillRect(x - metrics.width / 2 - pad, labelY - 12 * dpr - pad,
-                         metrics.width + pad * 2, 12 * dpr + pad * 2);
+                metrics.width + pad * 2, 12 * dpr + pad * 2);
             ctx.fillStyle = '#fff';
             ctx.fillText(label, x, labelY);
         }
