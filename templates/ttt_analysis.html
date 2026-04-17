@@ -85,6 +85,25 @@
         .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(247,147,30,0.3); }
         .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
 
+        .btn-tab {
+            padding: 8px 20px;
+            font-size: 0.9rem;
+            border: 2px solid rgba(255,255,255,0.15);
+            background: transparent;
+            color: #888;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-tab:first-child { border-radius: 8px 0 0 8px; }
+        .btn-tab:last-child { border-radius: 0 8px 8px 0; border-left: none; }
+        .btn-tab.active {
+            background: rgba(247,147,30,0.15);
+            border-color: #f7931e;
+            color: #f7931e;
+            font-weight: 600;
+        }
+        .btn-tab:hover:not(.active) { border-color: rgba(255,255,255,0.3); color: #ccc; }
+
         .status-msg {
             margin-top: 12px;
             padding: 12px;
@@ -374,14 +393,40 @@
         </div>
 
         <div class="input-section">
-            <label for="subgroupId">Event Subgroup ID</label>
-            <input type="text" id="subgroupId" placeholder="7028414">
-            <div style="margin-top: 16px;">
-                <label for="teamTags">Team Tags <span style="color:#888; font-weight:normal;">(optional, comma-separated &mdash; e.g. V, RtB, SZ)</span></label>
-                <input type="text" id="teamTags" placeholder="Auto-detect from rider names">
+            <!-- Input mode tabs -->
+            <div style="display:flex; gap:0; margin-bottom:16px;">
+                <button class="btn-tab active" id="tabApi" onclick="switchInputTab('api')">Zwift API</button>
+                <button class="btn-tab" id="tabCsv" onclick="switchInputTab('csv')">Sauce CSV</button>
             </div>
-            <br>
-            <button class="btn-primary" id="fetchBtn" onclick="fetchTTT()">Analyze Race</button>
+
+            <!-- API input -->
+            <div id="inputApi">
+                <label for="subgroupId">Event Subgroup ID</label>
+                <input type="text" id="subgroupId" placeholder="7028414">
+                <div style="margin-top: 16px;">
+                    <label for="teamTags">Team Tags <span style="color:#888; font-weight:normal;">(optional, comma-separated &mdash; e.g. V, RtB, SZ)</span></label>
+                    <input type="text" id="teamTags" placeholder="Auto-detect from rider names">
+                </div>
+                <br>
+                <button class="btn-primary" id="fetchBtn" onclick="fetchTTT()">Analyze Race</button>
+            </div>
+
+            <!-- CSV input -->
+            <div id="inputCsv" style="display:none;">
+                <label for="csvFile">Sauce4Zwift Telemetry CSV</label>
+                <input type="file" id="csvFile" accept=".csv" style="background:rgba(255,255,255,0.08); border:2px solid rgba(255,255,255,0.15); border-radius:8px; color:#fff; padding:10px 14px; font-size:1rem; width:100%; max-width:600px;">
+                <div style="margin-top: 16px;">
+                    <label for="csvSubgroupId">Event Subgroup ID <span style="color:#888; font-weight:normal;">(for route alignment &amp; race distance)</span></label>
+                    <input type="text" id="csvSubgroupId" placeholder="7028414">
+                </div>
+                <div style="margin-top: 16px;">
+                    <label for="csvTeamTags">Team Tags <span style="color:#888; font-weight:normal;">(optional, comma-separated)</span></label>
+                    <input type="text" id="csvTeamTags" placeholder="All riders on one team (reassign via drag & drop)">
+                </div>
+                <br>
+                <button class="btn-primary" id="csvFetchBtn" onclick="fetchCSV()">Analyze CSV</button>
+            </div>
+
             <div class="status-msg" id="statusMsg"></div>
         </div>
 
@@ -433,7 +478,13 @@
                 <div class="chart-wrapper">
                     <canvas id="powerChart"></canvas>
                 </div>
-                <div id="pullStatsTable" style="display:none; margin-top:12px;"></div>
+                <div style="display:flex; align-items:center; gap:8px; margin-top:12px;">
+                    <label style="font-size:0.82rem; color:#aaa; cursor:pointer; display:flex; align-items:center; gap:4px;">
+                        <input type="checkbox" id="excludeShortPulls">
+                        Exclude pulls &lt; 15s
+                    </label>
+                </div>
+                <div id="pullStatsTable" style="display:none; margin-top:8px;"></div>
             </div>
 
             <div class="chart-container">
@@ -499,6 +550,60 @@
     }
     function handleAuth() { window.location.href = '/auth/login'; }
     checkAuth();
+
+    // ---- Input tab switching ----
+    function switchInputTab(mode) {
+        document.getElementById('tabApi').classList.toggle('active', mode === 'api');
+        document.getElementById('tabCsv').classList.toggle('active', mode === 'csv');
+        document.getElementById('inputApi').style.display = mode === 'api' ? '' : 'none';
+        document.getElementById('inputCsv').style.display = mode === 'csv' ? '' : 'none';
+    }
+
+    // ---- CSV upload ----
+    async function fetchCSV() {
+        const fileInput = document.getElementById('csvFile');
+        if (!fileInput.files.length) { setStatus('Please select a CSV file.', 'error'); return; }
+
+        const teamTags = document.getElementById('csvTeamTags').value.trim();
+        const btn = document.getElementById('csvFetchBtn');
+        btn.disabled = true;
+        btn.textContent = 'Analyzing CSV…';
+        setStatus('Processing CSV telemetry data…', 'info');
+
+        try {
+            const formData = new FormData();
+            formData.append('csv_file', fileInput.files[0]);
+            const sgId = document.getElementById('csvSubgroupId').value.trim();
+            if (sgId) formData.append('subgroup_id', sgId);
+            if (teamTags) formData.append('team_tags', teamTags);
+
+            const resp = await fetch('/api/ttt/fetch_csv', {
+                method: 'POST',
+                body: formData,
+            });
+            const data = await resp.json();
+            if (data.error) { setStatus(data.error, 'error'); return; }
+            clearStatus();
+            lastData = data;
+            segmentPoints = [];
+            hiddenTeams = new Set();
+            currentSubgroupId = data.cache_key;
+            allTeamTags = data.team_tags || [];
+            currentAssignments = {};
+            (data.teams || []).forEach(t => {
+                t.riders.forEach(r => {
+                    if (r.activity_id) currentAssignments[String(r.activity_id)] = t.label;
+                });
+            });
+            initSlider(data);
+            renderResults(data);
+        } catch (e) {
+            setStatus('Request failed: ' + e.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Analyze CSV';
+        }
+    }
 
     // Pre-fill subgroup ID from URL params
     (function() {
@@ -692,6 +797,167 @@
     // Auto-fetch if subgroup ID was set from URL
     if (document.getElementById('subgroupId').value) fetchTTT();
 
+    /**
+     * Compute the canonical rider ordering for a focused team.
+     * Riders are sorted by the distance at which they first take a
+     * "long" pull (>= 15 s).  Riders that never take a long pull are
+     * appended at the end in order of first appearance.
+     *
+     * Returns an array of unique rider name strings.
+     */
+    function getRiderOrder(team) {
+        const dist = team.distance_km;
+        const names = team.lead_rider_name;
+        const speeds = team.lead_speed_kph_raw || team.lead_speed_kph;
+        const LONG_PULL_SEC = 15;
+
+        // Compute per-bin duration
+        const binDur = new Array(names.length).fill(0);
+        for (let j = 0; j < names.length; j++) {
+            if (speeds[j] != null && speeds[j] > 0) {
+                binDur[j] = 180.0 / speeds[j];
+            }
+        }
+
+        // Walk bins, track individual pulls, record first long-pull index per rider
+        const firstLongPullIdx = {};  // name -> bin index of start of first long pull
+        let curPull = null;  // {name, startIdx, duration}
+        let prevName = null;
+        for (let i = 0; i < names.length; i++) {
+            const n = names[i];
+            if (!n) { if (curPull) { checkPull(curPull); curPull = null; } prevName = null; continue; }
+            if (n !== prevName) {
+                if (curPull) checkPull(curPull);
+                curPull = {name: n, startIdx: i, duration: 0};
+            }
+            curPull.duration += binDur[i];
+            prevName = n;
+        }
+        if (curPull) checkPull(curPull);
+
+        function checkPull(pull) {
+            if (pull.duration >= LONG_PULL_SEC && !(pull.name in firstLongPullIdx)) {
+                firstLongPullIdx[pull.name] = pull.startIdx;
+            }
+        }
+
+        // All unique rider names in appearance order
+        const allNames = [...new Set(names.filter(n => n))];
+
+        // Sort: riders with a long pull first (by start index), then the rest
+        const withLong = allNames.filter(n => n in firstLongPullIdx)
+            .sort((a, b) => firstLongPullIdx[a] - firstLongPullIdx[b]);
+        const withoutLong = allNames.filter(n => !(n in firstLongPullIdx));
+        return [...withLong, ...withoutLong];
+    }
+
+    function updatePullStatsTable(team, lo, hi) {
+        const el = document.getElementById('pullStatsTable');
+        if (!team) { el.style.display = 'none'; return; }
+        const dist = team.distance_km;
+        const names = team.lead_rider_name;
+        const power = team.lead_power_watts_raw || team.lead_power_watts;
+        const speeds = team.lead_speed_kph_raw || team.lead_speed_kph;
+        const minPullSec = document.getElementById('excludeShortPulls').checked ? 15 : 0;
+
+        // Compute per-bin duration from speed: time = 0.05 km / speed_kph * 3600
+        const binDur = new Array(names.length).fill(0);
+        for (let j = 0; j < names.length; j++) {
+            if (speeds[j] != null && speeds[j] > 0) {
+                binDur[j] = 180.0 / speeds[j];  // seconds to traverse 50m at this speed
+            }
+        }
+
+        // Build individual pulls: [{name, duration, powerSum, powerCount}]
+        const pulls = [];
+        let curPull = null;
+        let prevName = null;
+        for (let i = 0; i < names.length; i++) {
+            if (dist[i] < lo || dist[i] > hi) { if (curPull) { pulls.push(curPull); curPull = null; } prevName = null; continue; }
+            const n = names[i];
+            if (!n) { if (curPull) { pulls.push(curPull); curPull = null; } prevName = null; continue; }
+            if (n !== prevName) {
+                if (curPull) pulls.push(curPull);
+                curPull = {name: n, duration: 0, powerSum: 0, powerCount: 0};
+            }
+            curPull.duration += binDur[i];
+            if (power[i] != null) { curPull.powerSum += power[i]; curPull.powerCount++; }
+            prevName = n;
+        }
+        if (curPull) pulls.push(curPull);
+
+        // Filter out short pulls
+        const filtered = pulls.filter(p => p.duration >= minPullSec);
+
+        // Use the canonical rider ordering (by first long pull) so colors
+        // match the per-rider chart breakdown.
+        const canonicalOrder = getRiderOrder(team);
+        const colorIndex = {};  // name -> index into RIDER_COLORS
+        canonicalOrder.forEach((n, i) => { colorIndex[n] = i; });
+
+        // Aggregate per rider
+        const stats = {};
+        for (const p of filtered) {
+            if (!stats[p.name]) stats[p.name] = {pullCount: 0, totalDuration: 0, powerSum: 0, powerCount: 0};
+            stats[p.name].pullCount++;
+            stats[p.name].totalDuration += p.duration;
+            stats[p.name].powerSum += p.powerSum;
+            stats[p.name].powerCount += p.powerCount;
+        }
+
+        // Display in canonical order, skipping riders with no qualifying pulls
+        const riderOrder = canonicalOrder.filter(n => stats[n] && stats[n].pullCount > 0);
+
+        const weightMap = {};
+        team.riders.forEach(r => { weightMap[r.name] = r.weight_kg || 75; });
+
+        let html = '<table style="width:100%; border-collapse:collapse; font-size:0.85rem;">' +
+            '<thead><tr style="border-bottom:1px solid #555; text-align:left;">' +
+            '<th style="padding:4px 8px; color:#ccc;">Rider</th>' +
+            '<th style="padding:4px 8px; color:#ccc;">Pulls</th>' +
+            '<th style="padding:4px 8px; color:#ccc;">Avg Pull Duration</th>' +
+            '<th style="padding:4px 8px; color:#ccc;">Total Time at Front</th>' +
+            '<th style="padding:4px 8px; color:#ccc;">Avg Power (W)</th>' +
+            '<th style="padding:4px 8px; color:#ccc;">Avg Power (W/kg)</th>' +
+            '</tr></thead><tbody>';
+        riderOrder.forEach((name, ri) => {
+            const s = stats[name];
+            if (!s || s.pullCount === 0) return;
+            const c = RIDER_COLORS[(colorIndex[name] ?? ri) % RIDER_COLORS.length];
+            const avgDur = s.totalDuration / s.pullCount;
+            const avgPow = s.powerCount > 0 ? s.powerSum / s.powerCount : 0;
+            const wt = weightMap[name] || team.avg_weight_kg || 75;
+            const shortName = name.replace(/\s*[\(\[].*/, '').trim().split(/\s+/).slice(0, 2).join(' ');
+            const fmtTime = sec => {
+                const m = Math.floor(sec / 60);
+                const s = Math.round(sec % 60);
+                return m > 0 ? `${m}m ${s}s` : `${s}s`;
+            };
+            html += `<tr style="border-bottom:1px solid #333;">` +
+                `<td style="padding:4px 8px; color:${c}; font-weight:600;">${shortName}</td>` +
+                `<td style="padding:4px 8px; color:#ddd;">${s.pullCount}</td>` +
+                `<td style="padding:4px 8px; color:#ddd;">${fmtTime(avgDur)}</td>` +
+                `<td style="padding:4px 8px; color:#ddd;">${fmtTime(s.totalDuration)}</td>` +
+                `<td style="padding:4px 8px; color:#ddd;">${avgPow.toFixed(0)}</td>` +
+                `<td style="padding:4px 8px; color:#ddd;">${(avgPow / wt).toFixed(1)}</td>` +
+                `</tr>`;
+        });
+        html += '</tbody></table>';
+        el.innerHTML = html;
+        el.style.display = 'block';
+    }
+
+    // Exclude short pulls checkbox — triggers re-render of pull stats
+    document.getElementById('excludeShortPulls').addEventListener('change', () => {
+        if (lastData) {
+            const teams = lastData.teams || [];
+            const ft = focusTeam ? teams.find(t => t.label === focusTeam) : null;
+            const lo = parseFloat(document.getElementById('distStart').value);
+            const hi = parseFloat(document.getElementById('distEnd').value);
+            updatePullStatsTable(ft, lo, hi);
+        }
+    });
+
     function initSlider(data) {
         const maxDist = Math.max(...data.teams.map(t => Math.max(...t.distance_km)));
         const raceDist = data.race_distance_km || maxDist;
@@ -870,12 +1136,21 @@
         if (lastData) updateSegmentTimes(lastData.teams);
 
         // Update chart x-axis bounds
-        [speedChartInstance, powerChartInstance, draftChartInstance, riderChartInstance].forEach(chart => {
+        [speedChartInstance, powerChartInstance, draftChartInstance].forEach(chart => {
             if (!chart) return;
             chart.options.scales.x.min = lo;
             chart.options.scales.x.max = hi;
             chart.update('none');
         });
+
+        // Re-render rider chart so average lines update for the new range
+        if (lastRiderData) {
+            renderRiderChart(lastRiderData);
+        } else if (riderChartInstance) {
+            riderChartInstance.options.scales.x.min = lo;
+            riderChartInstance.options.scales.x.max = hi;
+            riderChartInstance.update('none');
+        }
     }
 
     function renderResults(data) {
@@ -993,7 +1268,7 @@
             // Use raw (unsmoothed) array when available — smoothed values
             // bleed power/speed across rider boundaries.
             const src = rawKey && team[rawKey] ? team[rawKey] : team[valueKey];
-            const riderNames = [...new Set(team.lead_rider_name.filter(n => n))];
+            const riderNames = getRiderOrder(team);
             return riderNames.map((name, ri) => {
                 const c = RIDER_COLORS[ri % RIDER_COLORS.length];
                 // Short display name: take first name or everything before '(' / '['
@@ -1100,7 +1375,7 @@
         const powerUnit = document.getElementById('powerToggleWkg').classList.contains('active') ? 'Wkg' : 'W';
 
         function buildPerRiderPowerDatasets(team) {
-            const riderNames = [...new Set(team.lead_rider_name.filter(n => n))];
+            const riderNames = getRiderOrder(team);
             const isWkg = powerUnit === 'Wkg';
             // Use raw (unsmoothed) power — smoothing bleeds across rider boundaries
             const src = team.lead_power_watts_raw || team.lead_power_watts;
@@ -1127,76 +1402,6 @@
                     yAxisID: 'y',
                 };
             });
-        }
-
-        function updatePullStatsTable(team, lo, hi) {
-            const el = document.getElementById('pullStatsTable');
-            if (!team) { el.style.display = 'none'; return; }
-            const dist = team.distance_km;
-            const names = team.lead_rider_name;
-            const power = team.lead_power_watts_raw || team.lead_power_watts;
-            const speeds = team.lead_speed_kph_raw || team.lead_speed_kph;
-
-            // Compute per-bin duration from speed: time = 0.05 km / speed_kph * 3600
-            const binDur = new Array(names.length).fill(0);
-            for (let j = 0; j < names.length; j++) {
-                if (speeds[j] != null && speeds[j] > 0) {
-                    binDur[j] = 180.0 / speeds[j];  // seconds to traverse 50m at this speed
-                }
-            }
-
-            // Aggregate per rider, filtered to [lo, hi] distance range
-            const riderOrder = [...new Set(names.filter((n, i) => n && dist[i] >= lo && dist[i] <= hi))];
-            const stats = {};
-            riderOrder.forEach(n => { stats[n] = {pullCount: 0, totalDuration: 0, powerSum: 0, powerCount: 0}; });
-            let prevName = null;
-            for (let i = 0; i < names.length; i++) {
-                if (dist[i] < lo || dist[i] > hi) { prevName = null; continue; }
-                const n = names[i];
-                if (!n || !stats[n]) { prevName = null; continue; }
-                if (n !== prevName) stats[n].pullCount++;
-                stats[n].totalDuration += binDur[i];
-                if (power[i] != null) { stats[n].powerSum += power[i]; stats[n].powerCount++; }
-                prevName = n;
-            }
-
-            const weightMap = {};
-            team.riders.forEach(r => { weightMap[r.name] = r.weight_kg || 75; });
-
-            let html = '<table style="width:100%; border-collapse:collapse; font-size:0.85rem;">' +
-                '<thead><tr style="border-bottom:1px solid #555; text-align:left;">' +
-                '<th style="padding:4px 8px; color:#ccc;">Rider</th>' +
-                '<th style="padding:4px 8px; color:#ccc;">Pulls</th>' +
-                '<th style="padding:4px 8px; color:#ccc;">Avg Pull Duration</th>' +
-                '<th style="padding:4px 8px; color:#ccc;">Total Time at Front</th>' +
-                '<th style="padding:4px 8px; color:#ccc;">Avg Power (W)</th>' +
-                '<th style="padding:4px 8px; color:#ccc;">Avg Power (W/kg)</th>' +
-                '</tr></thead><tbody>';
-            riderOrder.forEach((name, ri) => {
-                const s = stats[name];
-                if (!s || s.pullCount === 0) return;
-                const c = RIDER_COLORS[ri % RIDER_COLORS.length];
-                const avgDur = s.totalDuration / s.pullCount;
-                const avgPow = s.powerCount > 0 ? s.powerSum / s.powerCount : 0;
-                const wt = weightMap[name] || team.avg_weight_kg || 75;
-                const shortName = name.replace(/\s*[\(\[].*/, '').trim().split(/\s+/).slice(0, 2).join(' ');
-                const fmtTime = sec => {
-                    const m = Math.floor(sec / 60);
-                    const s = Math.round(sec % 60);
-                    return m > 0 ? `${m}m ${s}s` : `${s}s`;
-                };
-                html += `<tr style="border-bottom:1px solid #333;">` +
-                    `<td style="padding:4px 8px; color:${c}; font-weight:600;">${shortName}</td>` +
-                    `<td style="padding:4px 8px; color:#ddd;">${s.pullCount}</td>` +
-                    `<td style="padding:4px 8px; color:#ddd;">${fmtTime(avgDur)}</td>` +
-                    `<td style="padding:4px 8px; color:#ddd;">${fmtTime(s.totalDuration)}</td>` +
-                    `<td style="padding:4px 8px; color:#ddd;">${avgPow.toFixed(0)}</td>` +
-                    `<td style="padding:4px 8px; color:#ddd;">${(avgPow / wt).toFixed(1)}</td>` +
-                    `</tr>`;
-            });
-            html += '</tbody></table>';
-            el.innerHTML = html;
-            el.style.display = 'block';
         }
 
         const powerDatasets = [
@@ -1499,6 +1704,18 @@
         const pow = rd.power_watts;
         const draft = rd.draft_watts;
 
+        // Compute averages over the visible range for annotation lines
+        let powSum = 0, draftSum = 0, cnt = 0;
+        for (let i = 0; i < dist.length; i++) {
+            if (dist[i] >= lo && dist[i] <= hi && pow[i] != null) {
+                powSum += pow[i];
+                draftSum += (draft[i] != null ? draft[i] : 0);
+                cnt++;
+            }
+        }
+        const avgPow = cnt > 0 ? powSum / cnt : 0;
+        const avgDraft = cnt > 0 ? draftSum / cnt : 0;
+
         const ctx = document.getElementById('riderChart').getContext('2d');
         riderChartInstance = new Chart(ctx, {
             type: 'line',
@@ -1528,6 +1745,17 @@
                         order: 2,
                     },
                     {
+                        label: `Avg Power (${avgPow.toFixed(0)} W)`,
+                        data: [{x: lo, y: avgPow}, {x: hi, y: avgPow}],
+                        borderColor: 'rgba(247,147,30,0.5)',
+                        borderWidth: 1.5,
+                        borderDash: [6, 4],
+                        pointRadius: 0,
+                        tension: 0,
+                        yAxisID: 'y',
+                        order: 2,
+                    },
+                    {
                         label: 'Draft Estimate (W)',
                         data: dist.map((d, i) => ({ x: d, y: draft[i] })),
                         borderColor: '#4fc3f7',
@@ -1535,6 +1763,17 @@
                         borderWidth: 1.5,
                         pointRadius: 0,
                         tension: 0.3,
+                        yAxisID: 'y',
+                        order: 1,
+                    },
+                    {
+                        label: `Avg Draft (${avgDraft.toFixed(0)} W)`,
+                        data: [{x: lo, y: avgDraft}, {x: hi, y: avgDraft}],
+                        borderColor: 'rgba(79,195,247,0.5)',
+                        borderWidth: 1.5,
+                        borderDash: [6, 4],
+                        pointRadius: 0,
+                        tension: 0,
                         yAxisID: 'y',
                         order: 1,
                     },

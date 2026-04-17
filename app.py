@@ -2176,6 +2176,299 @@ def ttt_analysis():
     return render_template('ttt_analysis.html')
 
 
+@app.route('/api/ttt/fetch_csv', methods=['POST'])
+def api_ttt_fetch_csv():
+    """Analyze a TTT race from Sauce4Zwift telemetry CSV data.
+
+    Accepts a multipart form upload with:
+      - ``csv_file``: the CSV exported from the Sauce telemetry mod.
+      - ``subgroup_id``: event subgroup ID (for route/distance metadata).
+      - ``team_tags`` (optional): comma-separated team tag strings.
+
+    The CSV must contain columns:
+      athlete_id, timestamp, world_time, power, hr, speed, cadence,
+      lat, lng, draft, altitude, distance
+
+    Units (Sauce defaults): speed in km/h, distance in metres,
+    altitude in metres, draft in watts.
+    """
+    import csv
+    import io
+    import hashlib
+    from collections import defaultdict
+
+    f = request.files.get('csv_file')
+    if not f:
+        return jsonify({'error': 'No CSV file uploaded.'}), 400
+
+    raw_bytes = f.read()
+    csv_hash = hashlib.md5(raw_bytes).hexdigest()[:10]
+    cache_key = f'csv_{csv_hash}'
+    text = raw_bytes.decode('utf-8-sig')
+
+    reader = csv.DictReader(io.StringIO(text))
+    rows = list(reader)
+    if not rows:
+        return jsonify({'error': 'CSV file is empty.'}), 400
+
+    required_cols = {'athlete_id', 'world_time', 'power', 'speed',
+                     'altitude', 'distance', 'draft', 'lat', 'lng'}
+    missing = required_cols - set(rows[0].keys())
+    if missing:
+        return jsonify({'error': f'CSV missing columns: {", ".join(sorted(missing))}'}), 400
+
+    # ---- Fetch event metadata via subgroup_id ----
+    raw_sg = request.form.get('subgroup_id', '').strip()
+    event_name = 'Sauce CSV Import'
+    route_id = None
+    event_distance_km = None
+
+    headers = get_headers()
+    if raw_sg and headers:
+        try:
+            event_subgroup_id = int(raw_sg)
+        except ValueError:
+            return jsonify({'error': 'subgroup_id must be a number'}), 400
+
+        # Fetch one participant to resolve event info
+        participants, _ = get_race_entries(event_subgroup_id, headers, limit=1)
+        if participants:
+            first_act, _ = get_activity_details(participants[0]['activity_id'], headers)
+            if first_act:
+                ei = first_act.get('eventInfo', {})
+                event_name = ei.get('name', event_name)
+                eid = ei.get('id')
+                if eid:
+                    try:
+                        ev_resp = _request_with_retry('GET', f'{BASE_URL}/events/{eid}', headers=headers, timeout=15)
+                        if ev_resp.status_code == 200:
+                            ev = ev_resp.json()
+                            event_name = ev.get('name', event_name)
+                            for sg in ev.get('eventSubgroups', []):
+                                if sg.get('id') == event_subgroup_id:
+                                    label = sg.get('subgroupLabel', '')
+                                    if label:
+                                        event_name = f'{event_name} — {label}'
+                                    route_id = sg.get('routeId')
+                                    sg_laps = sg.get('laps') or 1
+                                    if route_id:
+                                        from shared.route_lookup import get_route_info as _get_ri
+                                        ri = _get_ri(route_id)
+                                        if ri and ri.get('distanceInMeters'):
+                                            leadin = ri.get('leadinDistanceInMeters', 0)
+                                            event_distance_km = round((ri['distanceInMeters'] * sg_laps + leadin) / 1000, 2)
+                                    break
+                    except Exception:
+                        pass
+    elif raw_sg and not headers:
+        return jsonify({'error': 'Not authenticated. Log in to fetch event metadata.'}), 401
+
+    # ---- Group rows by athlete_id ----
+    athletes_raw = defaultdict(list)
+    for row in rows:
+        athletes_raw[row['athlete_id'].strip()].append(row)
+
+    if not athletes_raw:
+        return jsonify({'error': 'No athlete data found in CSV.'}), 400
+
+    # ---- Resolve athlete names + weights from Zwift profiles ----
+    # athlete_id in the Sauce CSV is the Zwift profile (player) ID.
+    profile_lookup = {}  # athlete_id str -> {'name': ..., 'weight_kg': ...}
+
+    # First, try to match from race entries (already fetched if subgroup_id given)
+    if raw_sg and headers:
+        full_participants, _ = get_race_entries(int(raw_sg), headers)
+        if full_participants:
+            for p in full_participants:
+                pid = str(p.get('player_id', ''))
+                if pid and pid in athletes_raw:
+                    profile_lookup[pid] = {
+                        'name': p['name'],
+                        'weight_kg': p.get('weight_kg', 75.0),
+                    }
+
+    # For any athletes not matched via race entries, fetch profiles directly
+    if headers:
+        missing_ids = [aid for aid in athletes_raw if aid not in profile_lookup]
+        for aid in missing_ids:
+            try:
+                resp = _request_with_retry(
+                    'GET', f'{BASE_URL}/profiles/{aid}',
+                    headers=headers, timeout=10,
+                )
+                if resp.status_code == 200:
+                    p = resp.json()
+                    name = f"{p.get('firstName', '')} {p.get('lastName', '')}".strip()
+                    wt_g = p.get('weightInGrams', 0) or p.get('weight', 0)
+                    profile_lookup[aid] = {
+                        'name': name or f'Athlete {aid}',
+                        'weight_kg': round(wt_g / 1000, 1) if wt_g else 75.0,
+                    }
+            except Exception:
+                pass
+
+    # ---- Derive a common time origin across all athletes ----
+    # world_time is a game clock shared by all riders, so use the global
+    # minimum as the zero point for relative seconds.
+    global_t0 = min(float(r['world_time']) for r in rows)
+
+    # ---- Build processed rider dicts (same structure as api_ttt_fetch) ----
+    all_processed = {}
+    rider_latlng = {}  # act_id -> (lats, lngs) for route alignment
+    for athlete_id, arows in athletes_raw.items():
+        arows.sort(key=lambda r: float(r['world_time']))
+
+        world_times = np.array([float(r['world_time']) for r in arows])
+        time_sec = (world_times - global_t0) / 1000.0
+
+        speed_kmh = np.array([float(r['speed']) for r in arows])
+        speed_mps = speed_kmh / 3.6
+        distance_m = np.array([float(r['distance']) for r in arows])
+        altitude_m = np.array([float(r['altitude']) for r in arows])
+        power = np.array([float(r['power']) for r in arows])
+        draft_watts = np.array([float(r['draft']) for r in arows])
+        lats = np.array([float(r['lat']) for r in arows])
+        lngs = np.array([float(r['lng']) for r in arows])
+
+        if len(time_sec) < 10:
+            continue
+
+        # Smooth draft slightly (same 5-sample window as the API path)
+        window = min(5, len(draft_watts))
+        if window > 1:
+            kernel = np.ones(window) / window
+            draft_watts = np.convolve(draft_watts, kernel, mode='same')
+
+        act_id = str(athlete_id)
+        prof = profile_lookup.get(act_id, {})
+        all_processed[act_id] = {
+            'name': prof.get('name', f'Athlete {athlete_id}'),
+            'activity_id': act_id,
+            'weight_kg': prof.get('weight_kg', 75.0),
+            'time_sec': time_sec,
+            'speed_mps': speed_mps,
+            'distance_m': distance_m,
+            'altitude_m': altitude_m,
+            'power': power,
+            'draft_watts': draft_watts,
+        }
+        rider_latlng[act_id] = (lats, lngs)
+
+    if not all_processed:
+        return jsonify({'error': 'No valid athlete data (need >= 10 samples each).'}), 400
+
+    # ---- Route-project riders for accurate distance alignment ----
+    route_data = None
+    leadin_m = 0.0
+    if route_id:
+        from shared.route_lookup import get_route_info as _get_ri
+        ri = _get_ri(route_id)
+        if ri:
+            route_slug = ri['name'].lower().replace(' ', '-').replace("'", "")
+            leadin_m = ri.get('leadinDistanceInMeters', 0.0)
+            from race_replay.data_cleaner import load_route_data, align_riders_to_route
+            route_data = load_route_data(route_slug)
+
+    if route_data:
+        import pandas as pd
+
+        alignment_riders = []
+        act_id_order = []
+
+        for act_id, rd in all_processed.items():
+            lats, lngs = rider_latlng[act_id]
+            adf = pd.DataFrame({
+                'lat': lats,
+                'lng': lngs,
+                'distance_km': rd['distance_m'] / 1000.0,
+                'time_sec': rd['time_sec'],
+                'speed_kmh': rd['speed_mps'] * 3.6,
+            })
+            alignment_riders.append({'data': adf, 'rank': len(alignment_riders) + 1})
+            act_id_order.append(act_id)
+
+        if alignment_riders:
+            aligned, _ = align_riders_to_route(
+                alignment_riders, route_data,
+                leadin_distance_m=leadin_m,
+                detect_late_joiners=False,
+            )
+            race_finish_m = event_distance_km * 1000 if event_distance_km else None
+            for i, act_id in enumerate(act_id_order):
+                adf = aligned[i]['data']
+                aligned_dist = adf['distance_km'].values * 1000.0
+                raw_dist = all_processed[act_id]['distance_m']
+                if len(aligned_dist) != len(raw_dist):
+                    logger.warning("TTT CSV: rider %s alignment length mismatch (%d vs %d), using raw distance",
+                                   all_processed[act_id]['name'], len(aligned_dist), len(raw_dist))
+                    continue
+
+                if race_finish_m is not None:
+                    past_finish = np.where(aligned_dist >= race_finish_m)[0]
+                    if len(past_finish) > 0:
+                        finish_idx = past_finish[0]
+                        offset = aligned_dist[finish_idx] - raw_dist[finish_idx]
+                        aligned_dist[finish_idx + 1:] = raw_dist[finish_idx + 1:] + offset
+
+                all_processed[act_id]['route_distance_m'] = aligned_dist
+
+    # ---- Resample to integer-second grid ----
+    # Sauce samples are synchronised across athletes but may not land on
+    # exact integer seconds.  Resampling keeps the slider/bin logic clean.
+    for act_id, rd in all_processed.items():
+        t = rd['time_sec']
+        int_start = int(np.ceil(t[0]))
+        int_end = int(np.floor(t[-1]))
+        if int_end <= int_start:
+            continue
+        int_times = np.arange(int_start, int_end + 1, dtype=float)
+        for key in ('speed_mps', 'distance_m', 'altitude_m', 'power', 'draft_watts'):
+            rd[key] = np.interp(int_times, t, rd[key])
+        if 'route_distance_m' in rd:
+            rd['route_distance_m'] = np.interp(int_times, t, rd['route_distance_m'])
+        rd['time_sec'] = int_times
+
+    # ---- Team assignment by tags ----
+    raw_tags = request.form.get('team_tags', '').strip()
+    if raw_tags:
+        team_tags = [t.strip() for t in raw_tags.split(',') if t.strip()]
+    else:
+        team_tags = ['Team']
+
+    team_assignments = {act_id: team_tags[0] for act_id in all_processed}
+
+    team_results = _build_ttt_team_results(all_processed, team_assignments, team_tags)
+
+    # Use event distance if known, otherwise derive from max rider distance
+    def _csv_max_dist():
+        best = 0
+        for rd in all_processed.values():
+            d = rd.get('route_distance_m', rd['distance_m'])
+            best = max(best, d[-1])
+        return best / 1000
+    race_distance_km = event_distance_km or round(_csv_max_dist(), 2)
+
+    _ttt_cache[cache_key] = {
+        'event_name': event_name,
+        'ttt_bike': 'N/A (Sauce CSV — actual draft data)',
+        'all_processed': all_processed,
+        'team_tags': team_tags,
+        'participants': [],
+        'race_distance_km': race_distance_km,
+        'team_assignments': dict(team_assignments),
+    }
+
+    return jsonify({
+        'event_name': event_name,
+        'teams': team_results,
+        'ttt_bike': 'N/A (Sauce CSV — actual draft data)',
+        'race_distance_km': race_distance_km,
+        'unassigned': [],
+        'team_tags': team_tags,
+        'cache_key': cache_key,
+    })
+
+
 @app.route('/api/ttt/fetch', methods=['POST'])
 def api_ttt_fetch():
     """Fetch and analyze a TTT race.
@@ -2842,26 +3135,41 @@ def _build_ttt_team_results(all_processed, team_assignments, tag_order):
     return team_results
 
 
+def _resolve_ttt_cache_key(data):
+    """Return the _ttt_cache key from a request payload.
+
+    Supports both integer subgroup_id (API-fetched races) and string
+    cache_key (CSV uploads).  Returns None on invalid input.
+    """
+    raw = data.get('subgroup_id', '')
+    if isinstance(raw, str) and raw.startswith('csv_'):
+        return raw
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        return None
+
+
 @app.route('/api/ttt/reassign', methods=['POST'])
 def api_ttt_reassign():
     """Re-aggregate TTT team charts using updated rider-to-team assignments.
 
     Uses cached processed data from the most recent fetch so no API calls
     are needed.  Expects JSON: ``{subgroup_id, assignments: {activity_id: tag}}``.
+    ``subgroup_id`` can be an integer (API fetch) or a string cache key (CSV).
     """
     data = request.json or {}
-    try:
-        subgroup_id = int(data.get('subgroup_id', 0))
-    except (ValueError, TypeError):
+    cache_key = _resolve_ttt_cache_key(data)
+    if cache_key is None:
         return jsonify({'error': 'Invalid subgroup_id'}), 400
 
-    if subgroup_id not in _ttt_cache:
+    if cache_key not in _ttt_cache:
         return jsonify({'error': 'No cached data. Fetch the race first.'}), 400
 
     raw_assignments = data.get('assignments', {})
     assignments = {str(k): v for k, v in raw_assignments.items()}
 
-    cached = _ttt_cache[subgroup_id]
+    cached = _ttt_cache[cache_key]
     all_processed = cached['all_processed']
 
     # Preserve original tag order, then append any new tags
@@ -2899,20 +3207,20 @@ def api_ttt_rider():
     """Return individual rider data for the drilldown chart.
 
     Expects JSON: ``{subgroup_id, activity_id}``.
+    ``subgroup_id`` can be an integer (API fetch) or a string cache key (CSV).
     Returns distance_km, altitude_m, power_watts, and draft_watts arrays
     sampled every ~50 m for charting.
     """
     data = request.json or {}
-    try:
-        subgroup_id = int(data.get('subgroup_id', 0))
-    except (ValueError, TypeError):
+    cache_key = _resolve_ttt_cache_key(data)
+    if cache_key is None:
         return jsonify({'error': 'Invalid subgroup_id'}), 400
 
-    if subgroup_id not in _ttt_cache:
+    if cache_key not in _ttt_cache:
         return jsonify({'error': 'No cached data. Fetch the race first.'}), 400
 
     act_id = str(data.get('activity_id', ''))
-    cached = _ttt_cache[subgroup_id]
+    cached = _ttt_cache[cache_key]
     rd = cached['all_processed'].get(act_id)
     if not rd:
         return jsonify({'error': 'Rider not found in cache'}), 404
@@ -2941,16 +3249,16 @@ def api_ttt_debug_bins():
     """DEBUG: Show per-second leader data for a distance range.
 
     Expects JSON: ``{subgroup_id, team_tag, dist_start_km, dist_end_km}``.
+    ``subgroup_id`` can be an integer (API fetch) or a string cache key (CSV).
     """
     data = request.json or {}
-    try:
-        subgroup_id = int(data.get('subgroup_id', 0))
-    except (ValueError, TypeError):
+    cache_key = _resolve_ttt_cache_key(data)
+    if cache_key is None:
         return jsonify({'error': 'Invalid subgroup_id'}), 400
-    if subgroup_id not in _ttt_cache:
+    if cache_key not in _ttt_cache:
         return jsonify({'error': 'No cached data'}), 400
 
-    cached = _ttt_cache[subgroup_id]
+    cached = _ttt_cache[cache_key]
     all_processed = cached['all_processed']
     assignments = cached['team_assignments']
     tag = data.get('team_tag', '')
