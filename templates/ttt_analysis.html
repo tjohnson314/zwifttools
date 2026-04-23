@@ -480,8 +480,13 @@
                 </div>
                 <div style="display:flex; align-items:center; gap:8px; margin-top:12px;">
                     <label style="font-size:0.82rem; color:#aaa; cursor:pointer; display:flex; align-items:center; gap:4px;">
-                        <input type="checkbox" id="excludeShortPulls">
-                        Exclude pulls &lt; 15s
+                        Exclude pulls:
+                        <select id="excludeShortPulls" style="font-size:0.82rem;">
+                            <option value="0">None</option>
+                            <option value="5">&lt; 5s</option>
+                            <option value="10">&lt; 10s</option>
+                            <option value="15">&lt; 15s</option>
+                        </select>
                     </label>
                 </div>
                 <div id="pullStatsTable" style="display:none; margin-top:8px;"></div>
@@ -858,7 +863,7 @@
         const names = team.lead_rider_name;
         const power = team.lead_power_watts_raw || team.lead_power_watts;
         const speeds = team.lead_speed_kph_raw || team.lead_speed_kph;
-        const minPullSec = document.getElementById('excludeShortPulls').checked ? 15 : 0;
+        const minPullSec = parseInt(document.getElementById('excludeShortPulls').value) || 0;
 
         // Compute per-bin duration from speed: time = 0.05 km / speed_kph * 3600
         const binDur = new Array(names.length).fill(0);
