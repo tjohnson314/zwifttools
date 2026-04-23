@@ -592,6 +592,7 @@
             lastData = data;
             segmentPoints = [];
             hiddenTeams = new Set();
+            riderCache = {};
             currentSubgroupId = data.cache_key;
             allTeamTags = data.team_tags || [];
             currentAssignments = {};
@@ -623,6 +624,7 @@
     let riderChartInstance = null;
     let lastData = null;  // cached response for slider re-render
     let lastRiderData = null;  // cached rider drilldown data for slider re-render
+    let riderCache = {};  // activity_id -> rider drilldown data
 
     // ---- Team visibility toggle ----
     let hiddenTeams = new Set();  // team labels that are toggled off
@@ -777,6 +779,7 @@
             lastData = data;
             segmentPoints = [];
             hiddenTeams = new Set();
+            riderCache = {};
             currentSubgroupId = sgId;
             const url = new URL(window.location);
             url.searchParams.set('subgroup', sgId);
@@ -1679,6 +1682,12 @@
             lastRiderData = null;
             return;
         }
+        // Use client-side cache if available
+        if (riderCache[actId]) {
+            lastRiderData = riderCache[actId];
+            renderRiderChart(lastRiderData);
+            return;
+        }
         try {
             const resp = await fetch('/api/ttt/rider', {
                 method: 'POST',
@@ -1687,6 +1696,7 @@
             });
             const rd = await resp.json();
             if (rd.error) { setStatus(rd.error, 'error'); return; }
+            riderCache[actId] = rd;
             lastRiderData = rd;
             renderRiderChart(rd);
         } catch (e) {
