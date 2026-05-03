@@ -1,0 +1,18 @@
+{
+    "manifest_version": 1,
+    "name": "Guild Wars 2",
+    "description": "Live leaderboard for Guild Wars 2 using category podium points plus power and demographic bonuses",
+    "version": "0.1.0",
+    "author": "zwifttools",
+    "windows": [{
+        "id": "guild-wars-2",
+        "file": "guild-wars-2.html",
+        "name": "Guild Wars 2",
+        "description": "Live Guild Wars 2 leaderboard with 49-point scoring",
+        "overlay": true,
+        "default_bounds": {
+            "width": 390,
+            "height": 760
+        }
+    }]
+}

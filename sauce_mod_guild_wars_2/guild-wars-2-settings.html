@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html class="settings-page" tabindex="0" data-settings-key="guild-wars-2-settings-v1">
+    <head>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+        <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';"/>
+
+        <title>Guild Wars 2 Settings - Sauce for Zwift</title>
+
+        <script src="/pages/src/preloads.js"></script>
+
+        <link id="favicon" rel="shortcut icon" href="/pages/images/favicon.png"/>
+        <link rel="stylesheet" href="/pages/css/common.css"/>
+        <link rel="stylesheet" href="/pages/css/settings.css"/>
+
+        <script type="module">
+            import {settingsMain} from './guild-wars-2.mjs';
+            settingsMain();
+        </script>
+    </head>
+    <body>
+        <div id="titlebar">
+            <header>
+                <div class="title">Guild Wars 2 Settings</div>
+                <div class="filler"></div>
+                <div class="buttons">
+                    <div title="Close" class="button close electron-only"><ms>close</ms></div>
+                </div>
+            </header>
+        </div>
+        <div id="content">
+            <form id="options" class="section">
+                <div class="option-group">
+                    <label><key>Watched categories:</key></label>
+                    <label><input type="checkbox" name="category" value="A"/> Category A</label>
+                    <label><input type="checkbox" name="category" value="B"/> Category B</label>
+                    <label><input type="checkbox" name="category" value="C"/> Category C</label>
+                    <label><input type="checkbox" name="category" value="D"/> Category D</label>
+                    <label><input type="checkbox" name="category" value="E"/> Category E</label>
+                </div>
+                <div class="note" id="category-note">Select one or more categories to include in scoring and bonuses.</div>
+            </form>
+        </div>
+    </body>
+</html>

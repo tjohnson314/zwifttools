@@ -1,0 +1,283 @@
+body {
+    font-family: 'Noto Sans', sans-serif;
+    color: white;
+    margin: 0;
+    padding: 0;
+    font-size: 14px;
+    background: linear-gradient(160deg, rgba(6, 9, 16, 0.9), rgba(10, 14, 24, 0.88));
+}
+
+#content {
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 4px 8px 8px;
+}
+
+.no-data {
+    text-align: center;
+    padding: 2em 1em;
+    color: #aaa;
+    font-style: italic;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.total-scores {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 8px 0 4px;
+}
+
+.team {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.team-name {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.team-score {
+    font-size: 28px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.score-divider {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.score-of {
+    font-size: 11px;
+    color: #95a1b3;
+}
+
+.team-left .team-name,
+.team-left .team-score,
+.team-left.rider-name,
+.team-left.rider-team-tag,
+.team-left.bonus-rider {
+    color: #ff8f5e;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.55);
+}
+
+.team-right .team-name,
+.team-right .team-score,
+.team-right.rider-name,
+.team-right.rider-team-tag,
+.team-right.bonus-rider {
+    color: #4da6ff;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.55);
+}
+
+.score-bar {
+    display: flex;
+    height: 6px;
+    border-radius: 3px;
+    overflow: hidden;
+    background: rgba(8, 12, 20, 0.8);
+    margin: 4px 0 10px;
+    gap: 2px;
+}
+
+.score-bar-left {
+    background: #ff6b35;
+    border-radius: 3px 0 0 3px;
+    transition: width 0.4s ease;
+}
+
+.score-bar-right {
+    background: #4da6ff;
+    border-radius: 0 3px 3px 0;
+    transition: width 0.4s ease;
+    margin-left: auto;
+}
+
+.categories {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.category {
+    background: rgba(8, 12, 20, 0.58);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    padding: 5px 8px;
+}
+
+.cat-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+}
+
+.cat-badge {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    line-height: 20px;
+    text-align: center;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    background: hsl(var(--hue), 60%, 30%);
+    color: hsl(var(--hue), 80%, 85%);
+}
+
+.cat-count {
+    font-size: 11px;
+    color: #a1adc0;
+    margin-left: auto;
+}
+
+.cat-empty {
+    font-size: 11px;
+    color: #8491a4;
+    font-style: italic;
+    padding: 2px 0;
+}
+
+.cat-rider {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 0;
+    font-size: 12px;
+}
+
+.rider-pos {
+    width: 18px;
+    text-align: right;
+    color: #a2afc2;
+    font-variant-numeric: tabular-nums;
+}
+
+.rider-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rider-team-tag {
+    font-size: 10px;
+    font-weight: 600;
+    opacity: 0.7;
+}
+
+.rider-gap {
+    font-size: 10px;
+    color: #c0c9d6;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.rider-points {
+    width: 24px;
+    text-align: right;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: #d8deea;
+}
+
+.bonuses {
+    margin-top: 10px;
+    background: rgba(8, 12, 20, 0.58);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    padding: 6px 8px;
+}
+
+.section-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #b2bece;
+    margin-bottom: 4px;
+}
+
+.bonus-row {
+    display: grid;
+    grid-template-columns: 18px minmax(120px, 1.6fr) minmax(0, 2.1fr) auto auto;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 0;
+    font-size: 12px;
+}
+
+.bonus-icon {
+    font-size: 14px;
+    width: 18px;
+    text-align: center;
+    color: #c1cad7;
+}
+
+.bonus-label {
+    white-space: normal;
+    line-height: 1.2;
+    color: #c3ccda;
+    font-size: 11px;
+}
+
+.bonus-rider {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bonus-value {
+    font-size: 11px;
+    color: #ced6e1;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.bonus-pending {
+    min-width: 0;
+    font-size: 11px;
+    color: #8f9caf;
+    font-style: italic;
+}
+
+.bonus-points {
+    width: 20px;
+    text-align: right;
+    font-weight: 700;
+    color: #d8deea;
+}
+
+.bonus-points.dimmed {
+    color: #8c99ad;
+}
+
+.bonus-note {
+    grid-column: 2 / -1;
+    font-size: 10px;
+    color: #9aa8bd;
+}
+
+.rider-count {
+    margin-top: 8px;
+    text-align: center;
+    font-size: 10px;
+    color: #9ca8bb;
+}
+
+#rider-count {
+    font-weight: 700;
+    color: #c3ccda;
+}

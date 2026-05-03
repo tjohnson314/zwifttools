@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html class="transparent-bg" tabindex="0">
+<head>
+    <meta charset="utf-8"/>
+    <title>Guild Wars 2 - Preview</title>
+    <link rel="stylesheet" href="/pages/css/common.css"/>
+    <link rel="stylesheet" href="../../sauce4zwift/pages/css/common.css"/>
+    <link rel="stylesheet" href="guild-wars-2.css"/>
+    <style>
+        html, body { background: #1a1a1e; }
+        body {
+            max-width: 390px;
+            margin: 20px auto;
+            border: 1px solid #333;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        #titlebar { background: rgba(255,255,255,0.06); padding: 4px 10px; }
+        #titlebar header { display: flex; align-items: center; }
+        #titlebar .title { font-size: 12px; color: #aaa; font-weight: 600; }
+        #titlebar .filler { flex: 1; }
+    </style>
+</head>
+<body>
+    <div id="titlebar">
+        <header>
+            <div class="title">Guild Wars 2</div>
+            <div class="filler"></div>
+        </header>
+    </div>
+    <div id="content">
+        <div class="scoreboard">
+            <div class="total-scores">
+                <div class="team team-left">
+                    <span class="team-name">RtB</span>
+                    <span class="team-score">21</span>
+                </div>
+                <div class="score-divider">
+                    <span class="score-of">/&thinsp;49</span>
+                </div>
+                <div class="team team-right">
+                    <span class="team-score">18</span>
+                    <span class="team-name">Fellowship</span>
+                </div>
+            </div>
+
+            <div class="score-bar">
+                <div class="score-bar-left" style="width: 42.8%;"></div>
+                <div class="score-bar-right" style="width: 36.7%;"></div>
+            </div>
+
+            <div class="categories">
+                <div class="category">
+                    <div class="cat-header">
+                        <span class="cat-badge" style="--hue: 0deg;">A</span>
+                        <span class="cat-count">16 riders</span>
+                    </div>
+                    <div class="cat-rider">
+                        <span class="rider-pos">1.</span>
+                        <span class="rider-name team-left">[RtB] S. Rider</span>
+                        <span class="rider-gap">+8.6s</span>
+                        <span class="rider-team-tag team-left">RtB</span>
+                        <span class="rider-points">+3</span>
+                    </div>
+                    <div class="cat-rider">
+                        <span class="rider-pos">2.</span>
+                        <span class="rider-name team-right">[Fell] A. Rider</span>
+                        <span class="rider-team-tag team-right">Fell</span>
+                        <span class="rider-points">+2</span>
+                    </div>
+                    <div class="cat-rider">
+                        <span class="rider-pos">3.</span>
+                        <span class="rider-name team-left">[RtB] M. Rider</span>
+                        <span class="rider-team-tag team-left">RtB</span>
+                        <span class="rider-points">+1</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bonuses">
+                <div class="section-title">Points</div>
+                <div class="bonus-list">
+                    <div class="bonus-row">
+                        <span class="bonus-icon"><ms>fitness_center</ms></span>
+                        <span class="bonus-label">A Best 5m W/kg</span>
+                        <span class="bonus-rider team-right">[Fellowship] P. Rider</span>
+                        <span class="bonus-value">4.52 W/kg</span>
+                        <span class="bonus-points">+1</span>
+                        <div class="bonus-note">* incomplete data: using current avg W/kg where 5m peak is unavailable</div>
+                    </div>
+                    <div class="bonus-row">
+                        <span class="bonus-icon"><ms>offline_bolt</ms></span>
+                        <span class="bonus-label">A Best 30s W/kg</span>
+                        <span class="bonus-pending">pending</span>
+                        <span class="bonus-points dimmed">+1</span>
+                    </div>
+                    <div class="bonus-row">
+                        <span class="bonus-icon"><ms>female</ms></span>
+                        <span class="bonus-label">Fastest Woman</span>
+                        <span class="bonus-rider team-left">[RtB] T. Rider</span>
+                        <span class="bonus-value">Pos 12</span>
+                        <span class="bonus-points">+2</span>
+                    </div>
+                    <div class="bonus-row">
+                        <span class="bonus-icon"><ms>elderly</ms></span>
+                        <span class="bonus-label">Fastest 60+</span>
+                        <span class="bonus-pending">pending</span>
+                        <span class="bonus-points dimmed">+2</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rider-count">42 tagged riders found</div>
+        </div>
+    </div>
+</body>
+</html>

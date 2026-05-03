@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html class="transparent-bg" tabindex="0" data-settings-key="guild-wars-2-settings-v1">
+    <head>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+        <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';"/>
+
+        <title>Guild Wars 2 - Sauce for Zwift</title>
+
+        <script src="/pages/src/preloads.js"></script>
+
+        <link id="favicon" rel="shortcut icon" href="/pages/images/favicon.png"/>
+        <link rel="stylesheet" href="/pages/css/common.css"/>
+        <link rel="stylesheet" href="guild-wars-2.css"/>
+
+        <script type="module">
+            import {main} from './guild-wars-2.mjs';
+            main();
+        </script>
+    </head>
+    <body>
+        <div id="titlebar" class="always-visible">
+            <header>
+                <div class="title">Guild Wars 2</div>
+                <div class="filler"></div>
+                <div class="buttons">
+                    <a class="button open-settings" href="guild-wars-2-settings.html?width=320&height=300&child-window"
+                       title="Open settings" target="guild-wars-2-settings"><ms>settings</ms></a>
+                    <div title="Minimize" class="button minimize electron-only"><ms>minimize</ms></div>
+                    <div title="Close" class="button close electron-only"><ms>close</ms></div>
+                </div>
+            </header>
+        </div>
+        <div id="content">
+            <div class="no-data">Waiting for race data...</div>
+
+            <div class="scoreboard hidden">
+                <div class="total-scores">
+                    <div class="team team-left">
+                        <span class="team-name" id="team-left-name">Community 1</span>
+                        <span class="team-score" id="score-left">0</span>
+                    </div>
+                    <div class="score-divider">
+                        <span class="score-of" id="score-total">/&thinsp;49</span>
+                    </div>
+                    <div class="team team-right">
+                        <span class="team-score" id="score-right">0</span>
+                        <span class="team-name" id="team-right-name">Community 2</span>
+                    </div>
+                </div>
+
+                <div class="score-bar">
+                    <div class="score-bar-left" id="bar-left"></div>
+                    <div class="score-bar-right" id="bar-right"></div>
+                </div>
+
+                <div class="categories" id="categories"></div>
+
+                <div class="bonuses">
+                    <div class="section-title">Points</div>
+                    <div class="bonus-list" id="bonus-list"></div>
+                </div>
+
+                <div class="rider-count">
+                    <span id="rider-count">0</span> tagged riders found
+                </div>
+            </div>
+        </div>
+    </body>
+</html>
