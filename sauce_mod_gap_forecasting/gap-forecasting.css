@@ -1,0 +1,61 @@
+body {
+    font-family: 'Noto Sans', sans-serif;
+    color: white;
+    margin: 0;
+    padding: 0;
+}
+
+#content {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    height: calc(100% - 2em);
+    padding: 0.5em;
+    gap: 0.5em;
+}
+
+.gap-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1 1 0;
+    min-height: 0;
+    padding: 0.35em 0.5em;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 0.5em;
+}
+
+.gap-value {
+    font-size: 2.4em;
+    font-weight: bold;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+}
+
+.gap-label {
+    font-size: 0.8em;
+    color: #aaa;
+    text-transform: uppercase;
+}
+
+.forecast-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.3em;
+    margin-top: 0.2em;
+}
+
+.forecast-value {
+    font-size: 1.6em;
+    font-weight: bold;
+    font-variant-numeric: tabular-nums;
+    color: #4fc3f7;
+}
+
+.forecast-label {
+    font-size: 0.7em;
+    color: #aaa;
+    text-transform: uppercase;
+}

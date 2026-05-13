@@ -1,0 +1,145 @@
+:root {
+    --bg: #0f1217;
+    --panel: #151b22;
+    --ink: #ecf5ff;
+    --muted: #8ea1b6;
+    --accent: #f5d53b;
+    --danger: #ff5d61;
+}
+
+html,
+body {
+    margin: 0;
+    background: radial-gradient(circle at 20% 10%, #17212d 0%, #0f1217 55%, #0b0e12 100%);
+    color: var(--ink);
+}
+
+#content {
+    padding: 10px;
+}
+
+.hud {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.chip {
+    background: rgba(14, 19, 26, 0.92);
+    border: 1px solid rgba(143, 169, 196, 0.25);
+    border-radius: 9px;
+    padding: 6px 10px;
+    min-width: 110px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+}
+
+.chip span {
+    color: var(--muted);
+}
+
+.chip-select {
+    gap: 10px;
+}
+
+.chip-select select {
+    background: #111824;
+    color: var(--ink);
+    border: 1px solid rgba(143, 169, 196, 0.35);
+    border-radius: 6px;
+    font-size: 12px;
+    padding: 2px 6px;
+}
+
+#map {
+    width: 100%;
+    max-width: 820px;
+    height: 820px;
+    background: linear-gradient(180deg, #0e151e 0%, #0a0f16 100%);
+    border: 1px solid rgba(187, 212, 236, 0.2);
+    border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+    overflow: hidden;
+}
+
+#map .entity.point.pacman-ghost {
+    font-size: 0.55em;
+}
+
+#map .entity.point.pacman-pellet {
+    font-size: 0.28em;
+    --border-color: rgba(0,0,0,0.5);
+}
+
+.message {
+    margin: 0 0 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(255, 93, 97, 0.12);
+    border: 1px solid rgba(255, 93, 97, 0.45);
+    color: #ffd8d9;
+    font-size: 13px;
+}
+
+.game-layout {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+}
+
+.ghost-panel {
+    min-width: 240px;
+    max-width: 300px;
+    background: rgba(14, 19, 26, 0.92);
+    border: 1px solid rgba(143, 169, 196, 0.25);
+    border-radius: 12px;
+    padding: 10px;
+}
+
+.ghost-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.ghost-table th {
+    color: var(--muted);
+    font-weight: 600;
+    text-align: right;
+    padding: 3px 6px;
+    border-bottom: 1px solid rgba(143, 169, 196, 0.18);
+}
+
+.ghost-table th:first-child,
+.ghost-table td:first-child {
+    text-align: left;
+}
+
+.ghost-table td {
+    color: var(--ink);
+    text-align: right;
+    padding: 5px 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.ghost-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+@media (max-width: 1180px) {
+    .game-layout {
+        flex-direction: column;
+    }
+
+    .ghost-panel {
+        max-width: none;
+        width: 100%;
+    }
+}
+
+.hidden {
+    display: none;
+}

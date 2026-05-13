@@ -1,0 +1,18 @@
+{
+    "manifest_version": 1,
+    "name": "Surface Telemetry Recorder",
+    "description": "Records self telemetry with manual surface type tagging for CRR mapping",
+    "version": "0.1.0",
+    "author": "zwifttools",
+    "windows": [{
+        "id": "surface-telemetry",
+        "file": "surface-telemetry.html",
+        "name": "Surface Telemetry",
+        "description": "Record telemetry with surface tagging",
+        "overlay": true,
+        "default_bounds": {
+            "width": 280,
+            "height": 420
+        }
+    }]
+}

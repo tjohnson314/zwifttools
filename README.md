@@ -60,7 +60,7 @@ Standalone browser overlays for [Sauce4Zwift](https://www.sauce.llc/), installed
 | Mod | Directory | Description |
 |-----|-----------|-------------|
 | **TTT Gaps** | `sauce_mod/` | Live inter-rider gap table for TTT pacing — shows gap distance (color-coded), power, and speed for nearby riders. Configurable target gap and team roster filter. |
-| **Gap Ahead** | `sauce_mod_gap_ahead/` | Minimal overlay showing distance in meters to the nearest rider ahead. |
+| **Gap Forecasting** | `sauce_mod_gap_forecasting/` | Minimal overlay showing the nearest rider gaps ahead and behind with a short forecast. |
 | **Surface Telemetry** | `sauce_mod_surface_telemetry/` | Records your telemetry with manual surface type tagging (Tarmac, Cobbles, Brick, Wood, Dirt, Gravel) for CRR mapping. Exports CSV. |
 | **Team Race Score** | `sauce_mod_team_race/` | Live team race scoreboard — tracks two teams across categories with 3/2/1 point scoring, gap-to-rival, and power stats. |
 | **Race Telemetry** | `sauce_mod_telemetry/` | Records per-second telemetry for all nearby riders (power, HR, speed, cadence, location, draft). Exports rider telemetry + profiles as separate CSVs. |

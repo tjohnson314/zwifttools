@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html class="transparent-bg" tabindex="0">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';"/>
+    <title>Surface Telemetry - Sauce for Zwift™</title>
+    <script src="/pages/src/preloads.js"></script>
+    <link id="favicon" rel="shortcut icon" href="/pages/images/favicon.png"/>
+    <link rel="stylesheet" href="/pages/css/common.css"/>
+    <link rel="stylesheet" href="surface-telemetry.css"/>
+    <script type="module">
+        import {main} from './surface-telemetry.mjs';
+        main();
+    </script>
+</head>
+<body>
+    <div id="titlebar" class="always-visible">
+        <header>
+            <div class="title">Surface Telemetry</div>
+            <div class="filler"></div>
+            <div class="buttons">
+                <div title="Minimize" class="button minimize electron-only"><ms>minimize</ms></div>
+                <div title="Close" class="button close electron-only"><ms>close</ms></div>
+            </div>
+        </header>
+    </div>
+    <div class="container">
+        <div class="status-row">
+            <span class="indicator stopped"></span>
+            <span class="status-text">Stopped</span>
+            <span class="sample-count">0</span> samples
+        </div>
+        <div class="status-row">
+            <span class="duration">0:00</span>
+            <span class="current-surface-label">Surface: <strong class="current-surface">—</strong></span>
+        </div>
+
+        <div class="controls">
+            <button class="btn-record">Start</button>
+            <button class="btn-download" disabled>Download</button>
+        </div>
+
+        <div class="surface-buttons">
+            <button class="surface-btn active" data-surface="Tarmac">🛣️ Tarmac</button>
+            <button class="surface-btn" data-surface="Cobbles">🧱 Cobbles</button>
+            <button class="surface-btn" data-surface="Brick">🟫 Brick</button>
+            <button class="surface-btn" data-surface="Wood">🪵 Wood</button>
+            <button class="surface-btn" data-surface="Dirt">🟤 Dirt</button>
+            <button class="surface-btn" data-surface="Gravel">⬜ Gravel</button>
+            <button class="surface-btn" data-surface="Snow">❄️ Snow</button>
+            <button class="surface-btn" data-surface="Grass">🌿 Grass</button>
+            <button class="surface-btn" data-surface="Sand">🏖️ Sand</button>
+        </div>
+
+        <div class="tag-log">
+            <div class="tag-log-header">Surface Tags (<span class="tag-count">0</span>)</div>
+            <div class="tag-log-list"></div>
+        </div>
+    </div>
+</body>
+</html>

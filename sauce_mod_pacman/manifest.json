@@ -1,0 +1,18 @@
+{
+    "manifest_version": 1,
+    "name": "Pacman Scotland",
+    "description": "Turn a Zwift Scotland ride into a Pacman-style road game.",
+    "version": "0.1.0",
+    "author": "zwifttools",
+    "windows": [{
+        "id": "pacman-scotland",
+        "file": "pacman.html",
+        "name": "Pacman Scotland",
+        "description": "Scotland map viewport with ghosts, pellets, lives, and teleport respawn",
+        "overlay": true,
+        "default_bounds": {
+            "width": 860,
+            "height": 900
+        }
+    }]
+}

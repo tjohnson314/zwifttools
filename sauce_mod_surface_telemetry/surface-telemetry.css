@@ -1,0 +1,114 @@
+.container {
+    padding: 0.5em;
+    font-size: 0.85em;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4em;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+.status-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    font-size: 0.9em;
+}
+
+.indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.indicator.stopped { background: #888; }
+.indicator.recording { background: #e22; animation: pulse 1s infinite; }
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+.current-surface {
+    color: #4fc3f7;
+}
+
+.controls {
+    display: flex;
+    gap: 0.4em;
+}
+
+.controls button {
+    flex: 1;
+    padding: 0.35em 0.6em;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background: #333;
+    color: #eee;
+    cursor: pointer;
+    font-size: 0.9em;
+}
+
+.controls button:hover:not(:disabled) { background: #444; }
+.controls button:disabled { opacity: 0.4; cursor: default; }
+.btn-record.active { background: #822; border-color: #c44; }
+
+.surface-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 4px;
+}
+
+.surface-btn {
+    padding: 0.4em 0.2em;
+    border: 2px solid #444;
+    border-radius: 6px;
+    background: #2a2a2a;
+    color: #ccc;
+    cursor: pointer;
+    font-size: 0.8em;
+    text-align: center;
+    transition: all 0.15s;
+}
+
+.surface-btn:hover { background: #3a3a3a; border-color: #666; }
+
+.surface-btn.active {
+    background: #1a3a5a;
+    border-color: #4fc3f7;
+    color: #fff;
+    font-weight: bold;
+}
+
+.tag-log {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.tag-log-header {
+    font-size: 0.8em;
+    color: #888;
+    padding: 0.3em 0;
+    border-bottom: 1px solid #333;
+}
+
+.tag-log-list {
+    flex: 1;
+    overflow-y: auto;
+    font-size: 0.75em;
+    color: #aaa;
+}
+
+.tag-log-list .tag-entry {
+    padding: 2px 0;
+    border-bottom: 1px solid #222;
+}
+
+.tag-log-list .tag-entry .tag-surface {
+    color: #4fc3f7;
+    font-weight: bold;
+}

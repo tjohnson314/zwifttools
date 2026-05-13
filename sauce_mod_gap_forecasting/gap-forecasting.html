@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html class="transparent-bg" tabindex="0" data-settings-key="gap-forecasting-settings-v1">
+    <head>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+        <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';"/>
+
+        <title>Gap Forecasting - Sauce for Zwift™</title>
+
+        <script src="/pages/src/preloads.js"></script>
+
+        <link id="favicon" rel="shortcut icon" href="/pages/images/favicon.png"/>
+        <link rel="stylesheet" href="/pages/css/common.css"/>
+        <link rel="stylesheet" href="gap-forecasting.css"/>
+
+        <script type="module">
+            import {main} from './gap-forecasting.mjs';
+            main();
+        </script>
+    </head>
+    <body>
+        <div id="titlebar" class="always-visible">
+            <header>
+                <div class="title">Gap Forecasting</div>
+                <div class="filler"></div>
+                <div class="buttons">
+                          <a class="button open-settings" href="gap-forecasting-settings.html?width=300&height=200&child-window"
+                              title="Open settings" target="gap-forecasting-settings"><ms>settings</ms></a>
+                    <div title="Minimize" class="button minimize electron-only"><ms>minimize</ms></div>
+                    <div title="Close" class="button close electron-only"><ms>close</ms></div>
+                </div>
+            </header>
+        </div>
+        <div id="content">
+            <section class="gap-panel" data-direction="ahead">
+                <div class="gap-value">—</div>
+                <div class="gap-label">meters ahead</div>
+                <div class="forecast-row" style="display: none;">
+                    <span class="forecast-value">—</span>
+                    <span class="forecast-label">in 0s</span>
+                </div>
+            </section>
+            <section class="gap-panel" data-direction="behind">
+                <div class="gap-value">—</div>
+                <div class="gap-label">meters behind</div>
+                <div class="forecast-row" style="display: none;">
+                    <span class="forecast-value">—</span>
+                    <span class="forecast-label">in 0s</span>
+                </div>
+            </section>
+        </div>
+    </body>
+</html>

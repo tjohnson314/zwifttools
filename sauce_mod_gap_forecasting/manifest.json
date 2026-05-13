@@ -1,0 +1,18 @@
+{
+    "manifest_version": 1,
+    "name": "Gap Forecasting",
+    "description": "Shows the closest rider gaps ahead and behind with forecasting",
+    "version": "0.1.0",
+    "author": "zwifttools",
+    "windows": [{
+        "id": "gap-forecasting",
+        "file": "gap-forecasting.html",
+        "name": "Gap Forecasting",
+        "description": "Closest rider gaps ahead and behind with forecasted change",
+        "overlay": true,
+        "default_bounds": {
+            "width": 240,
+            "height": 120
+        }
+    }]
+}

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html class="settings-page" tabindex="0" data-settings-key="gap-forecasting-settings-v1">
+    <head>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+        <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';"/>
+
+        <title>Gap Forecasting Settings - Sauce for Zwift™</title>
+
+        <script src="/pages/src/preloads.js"></script>
+
+        <link id="favicon" rel="shortcut icon" href="/pages/images/favicon.png"/>
+        <link rel="stylesheet" href="/pages/css/common.css"/>
+        <link rel="stylesheet" href="/pages/css/settings.css"/>
+
+        <script type="module">
+            import {settingsMain} from './gap-forecasting.mjs';
+            settingsMain();
+        </script>
+    </head>
+    <body>
+        <div id="titlebar">
+            <header>
+                <div class="title">Gap Forecasting Settings</div>
+                <div class="filler"></div>
+                <div class="buttons">
+                    <div title="Close" class="button close electron-only"><ms>close</ms></div>
+                </div>
+            </header>
+        </div>
+        <div id="content">
+            <form id="options" class="section">
+                <label>
+                    <key>Forecast horizon:</key>
+                    <select name="forecastHorizon">
+                        <option value="0">Off</option>
+                        <option value="1">1 second</option>
+                        <option value="2">2 seconds</option>
+                        <option value="3">3 seconds</option>
+                        <option value="4">4 seconds</option>
+                        <option value="5">5 seconds</option>
+                    </select>
+                </label>
+            </form>
+        </div>
+    </body>
+</html>

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html class="settings-page" tabindex="0" data-settings-key="ttt-gaps-settings-v1">
+    <head>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+        <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';"/>
+
+        <title>TTT Gaps Settings</title>
+
+        <script src="/pages/src/preloads.js"></script>
+
+        <link rel="stylesheet" href="/pages/css/common.css"/>
+
+        <style>
+            body {
+                font-family: 'Noto Sans', sans-serif;
+                color: white;
+                padding: 12px 16px;
+                font-size: 14px;
+            }
+            h2 {
+                font-size: 15px;
+                margin: 16px 0 8px;
+                color: #aaa;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+            }
+            h2:first-child { margin-top: 0; }
+            label {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                margin: 6px 0;
+            }
+            label key {
+                min-width: 120px;
+                color: #ccc;
+            }
+            input[type="number"] {
+                width: 60px;
+                background: #222;
+                border: 1px solid #444;
+                color: white;
+                padding: 3px 6px;
+                border-radius: 3px;
+            }
+            input[type="text"] {
+                flex: 1;
+                background: #222;
+                border: 1px solid #444;
+                color: white;
+                padding: 3px 6px;
+                border-radius: 3px;
+            }
+            .athlete-pick {
+                display: flex;
+                padding: 3px 0;
+                cursor: pointer;
+            }
+            .athlete-pick:hover {
+                background: rgba(255,255,255,0.05);
+            }
+            #nearby-athletes {
+                max-height: 200px;
+                overflow-y: auto;
+                border: 1px solid #333;
+                border-radius: 4px;
+                padding: 4px 8px;
+                margin-top: 4px;
+            }
+            .empty {
+                color: #666;
+                font-style: italic;
+                padding: 8px;
+            }
+        </style>
+
+        <script type="module">
+            import {settingsMain} from './ttt.mjs';
+            settingsMain();
+        </script>
+    </head>
+    <body>
+        <form id="settings">
+            <h2>Gap Target</h2>
+            <label>
+                <key>Target gap (m):</key>
+                <input type="number" name="targetGapMeters" min="0.5" max="20" step="0.5" value="2.0"/>
+            </label>
+
+            <h2>Team Filter</h2>
+            <label>
+                <input type="checkbox" name="filterToTeam"/>
+                <key>Show only team members</key>
+            </label>
+
+            <label>
+                <key>Athlete IDs:</key>
+                <input type="text" name="teamAthleteIds" placeholder="123456, 789012, ..."/>
+            </label>
+
+            <h2>Nearby Athletes</h2>
+            <p style="color: #888; font-size: 12px; margin: 0 0 4px;">
+                Tick riders to add to your team roster:
+            </p>
+            <div id="nearby-athletes">
+                <div class="empty">Loading...</div>
+            </div>
+        </form>
+    </body>
+</html>

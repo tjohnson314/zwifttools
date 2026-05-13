@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html class="passive-overlay-scrollbars" data-settings-key="pacman-settings-v1">
+    <head>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+        <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';"/>
+        <title>Pacman Scotland</title>
+        <script src="/pages/src/preloads.js"></script>
+        <link rel="stylesheet" href="/pages/css/common.css"/>
+        <link rel="stylesheet" href="/pages/css/map.css"/>
+        <link rel="stylesheet" href="pacman.css"/>
+        <script type="module">
+            import {main} from './pacman.mjs';
+            main();
+        </script>
+    </head>
+    <body>
+        <div id="titlebar">
+            <header>
+                <div class="logo"><img src="/pages/images/icon128.png"/></div>
+                <div class="title">
+                    <div class="top">Pacman Scotland</div>
+                    <div class="bottom" id="status">Initializing...</div>
+                </div>
+                <div class="filler"></div>
+                <div class="buttons">
+                    <div title="Minimize" class="button minimize electron-only"><ms>minimize</ms></div>
+                    <div title="Close this window" class="button close electron-only"><ms>close</ms></div>
+                </div>
+            </header>
+        </div>
+
+        <div id="content">
+            <div class="hud">
+                <div class="chip"><span>Lives</span><strong id="lives">3</strong></div>
+                <div class="chip"><span>Score</span><strong id="score">0</strong></div>
+                <div class="chip"><span>Pellets</span><strong id="pellets">0</strong></div>
+                <div class="chip"><span>Collision</span><strong id="collision-threshold">-</strong></div>
+                <div class="chip chip-select">
+                    <span>Difficulty</span>
+                    <select id="difficulty-select">
+                        <option value="easy">Easy</option>
+                        <option value="normal" selected>Normal</option>
+                        <option value="hard">Hard</option>
+                        <option value="pro">Pro</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="message hidden" id="message"></div>
+            <div class="game-layout">
+                <div id="map" class="map"></div>
+                <aside class="ghost-panel" id="ghost-panel">
+                    <table class="ghost-table">
+                        <thead><tr><th>Ghost</th><th>Dist</th><th>Grade</th><th>Speed</th></tr></thead>
+                        <tbody>
+                            <tr><td>1</td><td id="ghost-dist-1">-</td><td id="ghost-grade-1">-</td><td id="ghost-speed-1">-</td></tr>
+                            <tr><td>2</td><td id="ghost-dist-2">-</td><td id="ghost-grade-2">-</td><td id="ghost-speed-2">-</td></tr>
+                            <tr><td>3</td><td id="ghost-dist-3">-</td><td id="ghost-grade-3">-</td><td id="ghost-speed-3">-</td></tr>
+                            <tr><td>4</td><td id="ghost-dist-4">-</td><td id="ghost-grade-4">-</td><td id="ghost-speed-4">-</td></tr>
+                        </tbody>
+                    </table>
+                </aside>
+            </div>
+        </div>
+    </body>
+</html>

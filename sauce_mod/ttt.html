@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html class="transparent-bg" tabindex="0" data-settings-key="ttt-gaps-settings-v1">
+    <head>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+        <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';"/>
+
+        <title>TTT Gaps - Sauce for Zwift™</title>
+
+        <script src="/pages/src/preloads.js"></script>
+
+        <link id="favicon" rel="shortcut icon" href="/pages/images/favicon.png"/>
+        <link rel="stylesheet" href="/pages/css/common.css"/>
+        <link rel="stylesheet" href="ttt.css"/>
+
+        <script type="module">
+            import {main} from './ttt.mjs';
+            main();
+        </script>
+    </head>
+    <body>
+        <div id="titlebar" class="always-visible">
+            <header>
+                <div class="title">TTT Gaps</div>
+                <div class="filler"></div>
+                <div class="buttons">
+                    <a class="button open-settings" href="ttt-settings.html?width=360&height=400&child-window"
+                       title="Open settings" target="ttt-settings"><ms>settings</ms></a>
+                    <div title="Minimize" class="button minimize electron-only"><ms>minimize</ms></div>
+                    <div title="Close" class="button close electron-only"><ms>close</ms></div>
+                </div>
+            </header>
+        </div>
+        <div id="content">
+            <div class="no-data">Waiting for nearby data...</div>
+            <table class="gaps-table hidden">
+                <thead>
+                    <tr>
+                        <th class="pos">#</th>
+                        <th class="name">Rider</th>
+                        <th class="gap-dist">Gap</th>
+                        <th class="power">Power</th>
+                        <th class="speed">Speed</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </body>
+</html>

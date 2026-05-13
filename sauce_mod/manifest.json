@@ -1,0 +1,18 @@
+{
+    "manifest_version": 1,
+    "name": "TTT Gaps",
+    "description": "Shows inter-rider gap distances for team time trial coordination",
+    "version": "0.1.0",
+    "author": "zwifttools",
+    "windows": [{
+        "id": "ttt-gaps",
+        "file": "ttt.html",
+        "name": "TTT Gaps",
+        "description": "Inter-rider gap distances for your team paceline",
+        "overlay": true,
+        "default_bounds": {
+            "width": 360,
+            "height": 400
+        }
+    }]
+}
