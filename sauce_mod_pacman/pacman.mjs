@@ -14,15 +14,22 @@ const GHOST_COUNT = 4;
 const GHOST_BASE_SPEED = 8.5;
 const GLOBAL_GHOST_SPEED_MULT = 0.80;
 const SIM_HZ = 10;
+const TICK_PROFILE_LOG_LINES = 12;
+const GHOST_REGRESSION_PENALTY_SCALE = 2.2;
+const GHOST_REVISIT_PENALTY_M = 180;
+const GHOST_RECENT_NODE_MEMORY = 6;
+const GHOST_NODE_EPS_M = 0.25;
+const GHOST_MIN_HOP_CONSUME_M = 0.35;
 const GHOST_SPAWN_MIN_DIST_M = 500;
 const CATCH_GRACE_PERIOD_MS = 12000;
-const TELEPORT_MSG_HOLD_MS = 20000;
+const HUNTER_DEBUG_MAX_LINES = 18;
 
 const DIFFICULTY_PRESETS = {
     easy: {downhillRel: 0.90, flatRel: 0.95, uphillRel: 0.98},
     normal: {downhillRel: 0.95, flatRel: 1.00, uphillRel: 1.05},
     hard: {downhillRel: 0.97, flatRel: 1.03, uphillRel: 1.10},
     pro: {downhillRel: 0.98, flatRel: 1.03, uphillRel: 1.16},
+    max: {downhillRel: 1.00, flatRel: 1.00, uphillRel: 1.00},
 };
 
 const PLAYER_REF_SPEEDS_KMH = [
@@ -66,21 +73,34 @@ const game = {
     player: {
         state: null,
         graphPos: null,
+        travelDir: 1,
         point: null,
         visualPoint: null,
+        lastSimPoint: null,
         home: null,
     },
     roads: new Map(),
     nodes: [],
     nodeKeyMap: new Map(),
     adjacency: new Map(),
+    reverseAdjacency: new Map(),
+    pathNodes: [],
+    pathAdjacency: new Map(),
+    playerPathCache: null,
+    playerNodeField: null,
     pellets: [],
     ghosts: [],
     closestPelletHint: null,
     lastPelletHintTs: 0,
+    lastSimStepTs: null,
+    lastSimDtMs: null,
+    graphEdgeCount: 0,
+    pathEdgeCount: 0,
+    tickCounter: 0,
+    currentTickProfile: null,
+    tickProfileLog: [],
     difficulty: 'normal',
     catchGraceUntilTs: 0,
-    respawnTeleportPending: false,
     componentCount: 0,
 };
 
@@ -97,8 +117,44 @@ let difficultySelectEl;
 let ghostDistanceEls = [];
 let ghostGradeEls = [];
 let ghostSpeedEls = [];
+let ghostChipEls = [];
+let ghostNameEls = [];
+let hunterDebugLogEl;
+let hunterDebugLines = [];
 let simInterval;
 let drawQueued = false;
+
+
+function isHunterGhost(ghost) {
+    return ghost?.behavior === 'pursue' || ghost?.name === 'Hunter' || ghost?.id === 'ghost-4';
+}
+
+
+function fmtDecisionNum(value) {
+    return Number.isFinite(value) ? Number(value).toFixed(2) : 'inf';
+}
+
+
+function renderHunterDebugLog() {
+    if (!hunterDebugLogEl) {
+        return;
+    }
+    hunterDebugLogEl.textContent = hunterDebugLines.length ?
+        hunterDebugLines.join('\n') :
+        'Waiting for Hunter decisions...';
+}
+
+
+function pushHunterDecisionLog(event, payload={}) {
+    const ts = new Date().toISOString().slice(11, 23);
+    const line = `${ts} ${event} ${JSON.stringify(payload)}`;
+    hunterDebugLines.push(line);
+    if (hunterDebugLines.length > HUNTER_DEBUG_MAX_LINES) {
+        hunterDebugLines.splice(0, hunterDebugLines.length - HUNTER_DEBUG_MAX_LINES);
+    }
+    renderHunterDebugLog();
+    console.log(`[HunterDecision] ${event}`, payload);
+}
 let zwiftMap;
 let mapWorldList;
 let messageHoldUntilTs = 0;
@@ -121,6 +177,25 @@ export async function main() {
     ghostDistanceEls = [1, 2, 3, 4].map(i => document.getElementById(`ghost-dist-${i}`));
     ghostGradeEls = [1, 2, 3, 4].map(i => document.getElementById(`ghost-grade-${i}`));
     ghostSpeedEls = [1, 2, 3, 4].map(i => document.getElementById(`ghost-speed-${i}`));
+    ghostChipEls = [1, 2, 3, 4].map(i => document.getElementById(`ghost-chip-${i}`));
+    ghostNameEls = [1, 2, 3, 4].map(i => document.getElementById(`ghost-name-${i}`));
+    hunterDebugLogEl = document.getElementById('hunter-debug-log');
+    const hunterDebugCopyBtn = document.getElementById('hunter-debug-copy-btn');
+    if (hunterDebugCopyBtn) {
+        hunterDebugCopyBtn.addEventListener('click', () => {
+            const logText = hunterDebugLogEl.textContent;
+            navigator.clipboard.writeText(logText).then(() => {
+                const originalText = hunterDebugCopyBtn.textContent;
+                hunterDebugCopyBtn.textContent = 'Copied!';
+                setTimeout(() => {
+                    hunterDebugCopyBtn.textContent = originalText;
+                }, 1500);
+            }).catch(err => {
+                console.error('Failed to copy logs:', err);
+            });
+        });
+    }
+    renderHunterDebugLog();
 
     const storedDifficulty = Common.settingsStore.get('difficulty');
     const initialDifficulty = DIFFICULTY_PRESETS[storedDifficulty] ? storedDifficulty : 'normal';
@@ -173,6 +248,25 @@ function pointDistanceToSegmentCm(point, a, b) {
 }
 
 
+function minMovingPointDistanceM(a0, a1, b0, b1) {
+    if (!a0 || !a1 || !b0 || !b1) {
+        return Infinity;
+    }
+    const r0x = a0[0] - b0[0];
+    const r0y = a0[1] - b0[1];
+    const vx = (a1[0] - a0[0]) - (b1[0] - b0[0]);
+    const vy = (a1[1] - a0[1]) - (b1[1] - b0[1]);
+    const vv = vx * vx + vy * vy;
+    let t = 0;
+    if (vv > 1e-9) {
+        t = clamp(-(r0x * vx + r0y * vy) / vv, 0, 1);
+    }
+    const rx = r0x + vx * t;
+    const ry = r0y + vy * t;
+    return Math.hypot(rx, ry) / 100;
+}
+
+
 function onSelfState(data) {
     if (!data?.state) {
         return;
@@ -200,8 +294,15 @@ function onSelfState(data) {
         return;
     }
 
+    const prevPlayerPos = game.player.graphPos;
     game.player.state = state;
     game.player.graphPos = pos;
+    if (prevPlayerPos && prevPlayerPos.roadId === pos.roadId) {
+        const delta = pos.offsetM - prevPlayerPos.offsetM;
+        if (Math.abs(delta) > 0.5) {
+            game.player.travelDir = delta > 0 ? +1 : -1;
+        }
+    }
     const visualPoint = Number.isFinite(state.x) && Number.isFinite(state.y) ?
         [state.x, state.y] : graphPosToPoint(pos);
     game.player.visualPoint = visualPoint;
@@ -258,8 +359,12 @@ async function loadScotlandGraph() {
     }
 
     addNearbyControlPointEdges(10);
+    mergeZeroLengthNodes();
+    buildReverseAdjacency();
+    buildCompressedPathGraph();
 
     computeConnectedComponents();
+    game.graphEdgeCount = Array.from(game.adjacency.values()).reduce((sum, edges) => sum + edges.length, 0);
 
     pelletsEl.textContent = String(game.pellets.filter(p => !p.collected).length);
 }
@@ -270,9 +375,19 @@ function resetGraphState() {
     game.nodes = [];
     game.nodeKeyMap.clear();
     game.adjacency.clear();
+    game.reverseAdjacency.clear();
+    game.pathNodes = [];
+    game.pathAdjacency.clear();
+    game.playerPathCache = null;
+    game.playerNodeField = null;
     game.pellets = [];
     seenPelletRoads.clear();
     game.componentCount = 0;
+    game.graphEdgeCount = 0;
+    game.pathEdgeCount = 0;
+    game.tickCounter = 0;
+    game.currentTickProfile = null;
+    game.tickProfileLog = [];
 }
 
 
@@ -321,6 +436,7 @@ function addRoadInternalEdges(roadInfo) {
 function addNearbyControlPointEdges(maxDistanceM) {
     const roads = Array.from(game.roads.values());
     const bestByRoadPair = new Map();
+    const extraEndpointPairs = [];
     for (let i = 0; i < roads.length; i++) {
         const roadA = roads[i];
         for (let j = i + 1; j < roads.length; j++) {
@@ -334,14 +450,20 @@ function addNearbyControlPointEdges(maxDistanceM) {
                     if (distM > maxDistanceM) {
                         continue;
                     }
+                    const candidate = {
+                        roadAId: roadA.id,
+                        roadBId: roadB.id,
+                        nodeAId: cpA.nodeId,
+                        nodeBId: cpB.nodeId,
+                        distanceM: distM,
+                    };
                     if (!best || distM < best.distanceM) {
-                        best = {
-                            roadAId: roadA.id,
-                            roadBId: roadB.id,
-                            nodeAId: cpA.nodeId,
-                            nodeBId: cpB.nodeId,
-                            distanceM: distM,
-                        };
+                        best = candidate;
+                    }
+                    const cpAIsEndpoint = cpA.index === 0 || cpA.index === roadA.controlPoints.length - 1;
+                    const cpBIsEndpoint = cpB.index === 0 || cpB.index === roadB.controlPoints.length - 1;
+                    if (cpAIsEndpoint && cpBIsEndpoint) {
+                        extraEndpointPairs.push(candidate);
                     }
                 }
             }
@@ -351,9 +473,24 @@ function addNearbyControlPointEdges(maxDistanceM) {
         }
     }
 
+    const emitted = new Set();
+    const emitEdgePair = edge => {
+        const key = `${edge.nodeAId}:${edge.nodeBId}`;
+        const revKey = `${edge.nodeBId}:${edge.nodeAId}`;
+        if (emitted.has(key) || emitted.has(revKey)) {
+            return;
+        }
+        emitted.add(key);
+        emitted.add(revKey);
+        addEdge(edge.nodeAId, edge.nodeBId, `x-${edge.roadAId}-${edge.roadBId}`, +1, edge.distanceM);
+        addEdge(edge.nodeBId, edge.nodeAId, `x-${edge.roadAId}-${edge.roadBId}`, -1, edge.distanceM);
+    };
+
     for (const best of bestByRoadPair.values()) {
-        addEdge(best.nodeAId, best.nodeBId, `x-${best.roadAId}-${best.roadBId}`, +1, best.distanceM);
-        addEdge(best.nodeBId, best.nodeAId, `x-${best.roadAId}-${best.roadBId}`, -1, best.distanceM);
+        emitEdgePair(best);
+    }
+    for (const edge of extraEndpointPairs) {
+        emitEdgePair(edge);
     }
 }
 
@@ -412,6 +549,236 @@ function addEdge(from, to, roadId, direction, lengthM) {
 }
 
 
+function addPathEdge(from, to, lengthM) {
+    if (!game.pathAdjacency.has(from)) {
+        game.pathAdjacency.set(from, []);
+    }
+    game.pathAdjacency.get(from).push({to, lengthM});
+}
+
+
+function mergeZeroLengthNodes() {
+    // Union-Find to track node merging
+    const parent = new Array(game.nodes.length);
+    for (let i = 0; i < parent.length; i++) {
+        parent[i] = i;
+    }
+    
+    function find(x) {
+        if (parent[x] !== x) {
+            parent[x] = find(parent[x]);
+        }
+        return parent[x];
+    }
+    
+    function union(x, y) {
+        const px = find(x);
+        const py = find(y);
+        if (px !== py) {
+            parent[py] = px;
+        }
+    }
+    
+    // Find all zero-length edges and union their endpoints
+    for (const [fromNodeId, edges] of game.adjacency) {
+        for (const edge of edges) {
+            if (edge.lengthM <= 1e-6) {
+                union(fromNodeId, edge.to);
+            }
+        }
+    }
+    
+    // Build mapping from old node id to canonical node id
+    const nodeMap = new Array(game.nodes.length);
+    for (let i = 0; i < nodeMap.length; i++) {
+        nodeMap[i] = find(i);
+    }
+    
+    // Rebuild adjacency with remapped node ids, removing self-loops and duplicate edges
+    const newAdjacency = new Map();
+    for (const [fromNodeId, edges] of game.adjacency) {
+        const canonicalFrom = nodeMap[fromNodeId];
+        if (!newAdjacency.has(canonicalFrom)) {
+            newAdjacency.set(canonicalFrom, []);
+        }
+        for (const edge of edges) {
+            const canonicalTo = nodeMap[edge.to];
+            if (canonicalFrom === canonicalTo) {
+                continue; // Skip self-loops
+            }
+            // Check if this edge already exists
+            const existing = newAdjacency.get(canonicalFrom).find(e => e.to === canonicalTo && e.roadId === edge.roadId);
+            if (!existing) {
+                newAdjacency.get(canonicalFrom).push({...edge, to: canonicalTo});
+            }
+        }
+    }
+    
+    // Rebuild nodes array with merged nodes
+    const nodeToIndex = new Map();
+    const newNodes = [];
+    for (let i = 0; i < game.nodes.length; i++) {
+        const canonical = nodeMap[i];
+        if (!nodeToIndex.has(canonical)) {
+            nodeToIndex.set(canonical, newNodes.length);
+            newNodes.push(game.nodes[canonical]);
+        }
+    }
+    
+    // Update node ids to match new indices and rebuild maps
+    const oldToNewNodeId = new Array(game.nodes.length);
+    for (let oldId = 0; oldId < game.nodes.length; oldId++) {
+        const canonical = nodeMap[oldId];
+        oldToNewNodeId[oldId] = nodeToIndex.get(canonical);
+    }
+    
+    // Update adjacency with new node ids
+    const finalAdjacency = new Map();
+    for (const [oldFromId, edges] of newAdjacency) {
+        const newFromId = nodeToIndex.get(oldFromId);
+        finalAdjacency.set(newFromId, edges.map(e => ({
+            ...e,
+            to: nodeToIndex.get(nodeMap[e.to])
+        })));
+    }
+    
+    // Update game state
+    game.nodes = newNodes;
+    game.adjacency = finalAdjacency;
+    game.nodeKeyMap.clear();
+    for (let i = 0; i < game.nodes.length; i++) {
+        const node = game.nodes[i];
+        game.nodeKeyMap.set(`${node.roadId}:${node.offsetM}`, i);
+    }
+    
+    // Update road control points and start/end node ids
+    for (const roadInfo of game.roads.values()) {
+        for (const cp of roadInfo.controlPoints) {
+            cp.nodeId = nodeToIndex.get(nodeMap[cp.nodeId]);
+        }
+        roadInfo.startNodeId = nodeToIndex.get(nodeMap[roadInfo.startNodeId]);
+        roadInfo.endNodeId = nodeToIndex.get(nodeMap[roadInfo.endNodeId]);
+    }
+}
+
+
+function buildReverseAdjacency() {
+    game.reverseAdjacency = new Map();
+    for (const [from, edges] of game.adjacency) {
+        for (const e of edges) {
+            if (!game.reverseAdjacency.has(e.to)) {
+                game.reverseAdjacency.set(e.to, []);
+            }
+            game.reverseAdjacency.get(e.to).push({
+                from,
+                lengthM: e.lengthM,
+            });
+        }
+    }
+}
+
+
+function buildCompressedPathGraph() {
+    game.pathNodes = [];
+    game.pathAdjacency = new Map();
+    const pathNodeByGraphNode = new Map();
+    const junctionGraphNodeIds = new Set();
+
+    for (const [from, edges] of game.adjacency) {
+        for (const e of edges) {
+            if (typeof e.roadId === 'string' && e.roadId.startsWith('x-')) {
+                junctionGraphNodeIds.add(from);
+                junctionGraphNodeIds.add(e.to);
+            }
+        }
+    }
+
+    const getOrCreatePathNode = cp => {
+        const existing = pathNodeByGraphNode.get(cp.nodeId);
+        if (existing != null) {
+            return existing;
+        }
+        const id = game.pathNodes.length;
+        game.pathNodes.push({
+            id,
+            graphNodeId: cp.nodeId,
+            roadId: cp.roadId,
+            offsetM: cp.offsetM,
+        });
+        pathNodeByGraphNode.set(cp.nodeId, id);
+        return id;
+    };
+
+    for (const roadInfo of game.roads.values()) {
+        const cps = roadInfo.controlPoints;
+        if (!cps || cps.length < 2) {
+            roadInfo.pathAnchors = [];
+            continue;
+        }
+        const anchors = [];
+        for (let i = 0; i < cps.length; i++) {
+            const cp = cps[i];
+            if (i === 0 || i === cps.length - 1 || junctionGraphNodeIds.has(cp.nodeId)) {
+                anchors.push(cp);
+            }
+        }
+
+        if (anchors.length < 2) {
+            anchors.push(cps[0], cps[cps.length - 1]);
+        }
+
+        const seen = new Set();
+        const uniqueAnchors = [];
+        for (const cp of anchors) {
+            if (seen.has(cp.nodeId)) {
+                continue;
+            }
+            seen.add(cp.nodeId);
+            uniqueAnchors.push(cp);
+        }
+
+        roadInfo.pathAnchors = uniqueAnchors.map(cp => ({
+            nodeId: cp.nodeId,
+            pathNodeId: getOrCreatePathNode({
+                ...cp,
+                roadId: roadInfo.id,
+            }),
+            offsetM: cp.offsetM,
+        }));
+
+        for (let i = 1; i < roadInfo.pathAnchors.length; i++) {
+            const a = roadInfo.pathAnchors[i - 1];
+            const b = roadInfo.pathAnchors[i];
+            const segM = Math.max(0.001, b.offsetM - a.offsetM);
+            addPathEdge(a.pathNodeId, b.pathNodeId, segM);
+            addPathEdge(b.pathNodeId, a.pathNodeId, segM);
+        }
+    }
+
+    const seenCross = new Set();
+    for (const [from, edges] of game.adjacency) {
+        for (const e of edges) {
+            if (!(typeof e.roadId === 'string' && e.roadId.startsWith('x-'))) {
+                continue;
+            }
+            const fromPath = pathNodeByGraphNode.get(from);
+            const toPath = pathNodeByGraphNode.get(e.to);
+            if (fromPath == null || toPath == null) {
+                continue;
+            }
+            const key = `${fromPath}>${toPath}`;
+            if (seenCross.has(key)) {
+                continue;
+            }
+            seenCross.add(key);
+            addPathEdge(fromPath, toPath, e.lengthM);
+        }
+    }
+
+    game.pathEdgeCount = Array.from(game.pathAdjacency.values()).reduce((sum, edges) => sum + edges.length, 0);
+}
+
+
 function pelletRoadKey(roadInfo) {
     const a = roadInfo.startNodeId;
     const b = roadInfo.endNodeId;
@@ -451,13 +818,15 @@ function placePelletsOnRoad(roadId, lengthM) {
 
 function initGhosts() {
     const personalities = [
-        {chaseBias: 0.92, randomnessM: 18, spreadPenaltyM: 36},
-        {chaseBias: 0.82, randomnessM: 34, spreadPenaltyM: 52},
-        {chaseBias: 0.74, randomnessM: 48, spreadPenaltyM: 64},
-        {chaseBias: 0.86, randomnessM: 26, spreadPenaltyM: 44},
+        {name: 'Drifter', behavior: 'wander', chaseBias: 0.92, randomnessM: 18, spreadPenaltyM: 36},
+        {name: 'Looper', behavior: 'wander', chaseBias: 0.82, randomnessM: 34, spreadPenaltyM: 52},
+        {name: 'Ambush', behavior: 'intercept', chaseBias: 1.00, randomnessM: 8, spreadPenaltyM: 24},
+        {name: 'Hunter', behavior: 'pursue', chaseBias: 1.00, randomnessM: 0, spreadPenaltyM: 0},
     ];
     game.ghosts = new Array(GHOST_COUNT).fill(0).map((_, i) => ({
         id: `ghost-${i + 1}`,
+        name: personalities[i].name,
+        behavior: personalities[i].behavior,
         color: ['#ff5d61', '#5db8ff', '#ff92cb', '#ffb554'][i % 4],
         roadId: null,
         offsetM: 0,
@@ -467,10 +836,39 @@ function initGhosts() {
         randomnessM: personalities[i].randomnessM,
         spreadPenaltyM: personalities[i].spreadPenaltyM,
         targetNodeId: null,
+        graphNodeId: null,
+        edgeFromNodeId: null,
+        edgeToNodeId: null,
+        edgeLengthM: 0,
+        edgeProgressM: 0,
+        edgeRoadId: null,
+        renderPoint: null,
         lastPathDistanceToPlayer: null,
         lastAdjustedDistanceToPlayer: null,
         lastNodeId: null,
+        lastDirectionChangeTs: 0,
+        recentNodeIds: [],
+        animFromPos: null,
+        animToPos: null,
+        animStartTs: 0,
+        animDurationMs: 0,
     }));
+}
+
+
+function snapGhostAnimation(ghost) {
+    if (!ghost.roadId) {
+        ghost.animFromPos = null;
+        ghost.animToPos = null;
+        ghost.animStartTs = 0;
+        ghost.animDurationMs = 0;
+        return;
+    }
+    const pos = {roadId: ghost.roadId, offsetM: ghost.offsetM};
+    ghost.animFromPos = pos;
+    ghost.animToPos = {...pos};
+    ghost.animStartTs = Date.now();
+    ghost.animDurationMs = 1;
 }
 
 
@@ -483,6 +881,11 @@ function respawnGhostsNearHome() {
         g.roadId = game.player.home.roadId;
         g.offsetM = clamp(game.player.home.offsetM + (i - 1.5) * 30, 1, game.roads.get(g.roadId).lengthM - 1);
         g.direction = i % 2 === 0 ? 1 : -1;
+        g.lastNodeId = null;
+        g.lastDirectionChangeTs = Date.now();
+        g.recentNodeIds = [];
+        initGhostGraphState(g);
+        snapGhostAnimation(g);
     }
 }
 
@@ -498,6 +901,116 @@ function respawnGhostsSafely() {
         g.roadId = spawn.roadId;
         g.offsetM = spawn.offsetM;
         g.direction = spawn.direction;
+        g.lastNodeId = null;
+        g.lastDirectionChangeTs = Date.now();
+        g.recentNodeIds = [];
+        initGhostGraphState(g);
+        snapGhostAnimation(g);
+    }
+}
+
+
+function initGhostGraphState(ghost) {
+    ghost.graphNodeId = null;
+    ghost.edgeFromNodeId = null;
+    ghost.edgeToNodeId = null;
+    ghost.edgeLengthM = 0;
+    ghost.edgeProgressM = 0;
+    ghost.edgeRoadId = null;
+    ghost.renderPoint = null;
+    if (!ghost?.roadId || (ghost.behavior !== 'pursue' && ghost.behavior !== 'intercept')) {
+        if (isHunterGhost(ghost)) {
+            pushHunterDecisionLog('init-skip-not-pursue', {
+                hasRoadId: !!ghost?.roadId,
+                behavior: ghost?.behavior,
+            });
+        }
+        return;
+    }
+    const endpoints = graphPosToEndpoints({roadId: ghost.roadId, offsetM: ghost.offsetM});
+    if (!endpoints?.candidates?.length) {
+        if (isHunterGhost(ghost)) {
+            pushHunterDecisionLog('init-no-endpoints', {
+                roadId: ghost.roadId,
+                offsetM: ghost.offsetM,
+                hasEndpoints: !!endpoints,
+                candidateCount: endpoints?.candidates?.length,
+            });
+        }
+        return;
+    }
+    let best = endpoints.candidates[0];
+    for (const c of endpoints.candidates) {
+        if (c.attachDist < best.attachDist || (c.attachDist === best.attachDist && c.nodeId < best.nodeId)) {
+            best = c;
+        }
+    }
+    ghost.graphNodeId = best.nodeId;
+    const node = game.nodes[best.nodeId];
+    if (node) {
+        ghost.roadId = node.roadId;
+        ghost.offsetM = node.offsetM;
+    }
+    if (isHunterGhost(ghost)) {
+        pushHunterDecisionLog('init-success', {
+            nodeId: ghost.graphNodeId,
+            attachDist: best.attachDist,
+            roadId: ghost.roadId,
+            offsetM: ghost.offsetM,
+        });
+    }
+}
+
+
+function syncGhostPoseFromGraphState(ghost) {
+    ghost.renderPoint = null;
+    if (ghost.edgeToNodeId != null && ghost.edgeFromNodeId != null && ghost.edgeLengthM > 0) {
+        const fromNode = game.nodes[ghost.edgeFromNodeId];
+        const toNode = game.nodes[ghost.edgeToNodeId];
+        if (!fromNode || !toNode) {
+            return;
+        }
+        const t = clamp(ghost.edgeProgressM / ghost.edgeLengthM, 0, 1);
+        const sameRoad = fromNode.roadId === toNode.roadId && !(typeof ghost.edgeRoadId === 'string' && ghost.edgeRoadId.startsWith('x-'));
+        if (sameRoad) {
+            ghost.roadId = fromNode.roadId;
+            ghost.offsetM = fromNode.offsetM + (toNode.offsetM - fromNode.offsetM) * t;
+            ghost.direction = toNode.offsetM >= fromNode.offsetM ? +1 : -1;
+        } else {
+            ghost.renderPoint = [
+                fromNode.point[0] + (toNode.point[0] - fromNode.point[0]) * t,
+                fromNode.point[1] + (toNode.point[1] - fromNode.point[1]) * t,
+            ];
+            if (t < 0.5) {
+                ghost.roadId = fromNode.roadId;
+                ghost.offsetM = fromNode.offsetM;
+                ghost.direction = fromNode.offsetM <= toNode.offsetM ? +1 : -1;
+            } else {
+                ghost.roadId = toNode.roadId;
+                ghost.offsetM = toNode.offsetM;
+                ghost.direction = fromNode.offsetM <= toNode.offsetM ? +1 : -1;
+            }
+        }
+        return;
+    }
+    if (ghost.graphNodeId != null) {
+        const node = game.nodes[ghost.graphNodeId];
+        if (node) {
+            ghost.roadId = node.roadId;
+            ghost.offsetM = node.offsetM;
+            ghost.renderPoint = [...node.point];
+        }
+    }
+}
+
+
+function rememberGhostNodeVisit(ghost, nodeId) {
+    if (!Array.isArray(ghost.recentNodeIds)) {
+        ghost.recentNodeIds = [];
+    }
+    ghost.recentNodeIds.push(nodeId);
+    if (ghost.recentNodeIds.length > GHOST_RECENT_NODE_MEMORY) {
+        ghost.recentNodeIds.shift();
     }
 }
 
@@ -559,32 +1072,33 @@ function graphPosToPoint(pos) {
 
 function graphPosToEndpoints(pos) {
     const roadInfo = game.roads.get(pos.roadId);
-    if (!roadInfo || !roadInfo.controlPoints || !roadInfo.controlPoints.length) {
+    const controlPoints = roadInfo?.controlPoints;
+    if (!roadInfo || !controlPoints || !controlPoints.length) {
         return null;
     }
 
     const target = clamp(pos.offsetM, 0, roadInfo.lengthM);
-    const cps = roadInfo.controlPoints;
-    let hi = cps.length;
+    let hi = controlPoints.length;
     let lo = 0;
     while (lo < hi) {
         const mid = Math.floor((lo + hi) / 2);
-        if (cps[mid].offsetM < target) {
+        if (controlPoints[mid].offsetM < target) {
             lo = mid + 1;
         } else {
             hi = mid;
         }
     }
-    const left = cps[Math.max(0, lo - 1)];
-    const right = cps[Math.min(cps.length - 1, lo)];
+    const left = controlPoints[Math.max(0, lo - 1)];
+    const right = controlPoints[Math.min(controlPoints.length - 1, lo)];
     const candidates = [];
     const pushCandidate = cp => {
         if (!cp) {
             return;
         }
-        if (!candidates.some(x => x.nodeId === cp.nodeId)) {
+        const nodeId = cp.nodeId;
+        if (!candidates.some(x => x.nodeId === nodeId)) {
             candidates.push({
-                nodeId: cp.nodeId,
+                nodeId,
                 attachDist: Math.abs(cp.offsetM - target),
                 initialDirection: cp.offsetM >= target ? +1 : -1,
             });
@@ -600,9 +1114,14 @@ function graphPosToEndpoints(pos) {
 
 
 function shortestNodePaths(startNodeId) {
+    const startMs = performance.now();
+    let settled = 0;
     const dist = new Array(game.nodes.length).fill(Infinity);
     const prev = new Array(game.nodes.length).fill(-1);
     const visited = new Array(game.nodes.length).fill(false);
+    if (startNodeId == null || startNodeId < 0 || startNodeId >= dist.length) {
+        return {dist, prev};
+    }
     dist[startNodeId] = 0;
 
     for (;;) {
@@ -618,6 +1137,7 @@ function shortestNodePaths(startNodeId) {
             break;
         }
         visited[u] = true;
+        settled++;
         const edges = game.adjacency.get(u) || [];
         for (const e of edges) {
             const alt = dist[u] + e.lengthM;
@@ -628,7 +1148,77 @@ function shortestNodePaths(startNodeId) {
         }
     }
 
+    if (game.currentTickProfile) {
+        game.currentTickProfile.dijkstraCalls += 1;
+        game.currentTickProfile.dijkstraMs += (performance.now() - startMs);
+        game.currentTickProfile.dijkstraSettled += settled;
+    }
+
     return {dist, prev};
+}
+
+
+function buildNodeDistanceFieldToPos(targetPos) {
+    const target = graphPosToEndpoints(targetPos);
+    if (!target?.candidates?.length) {
+        return null;
+    }
+    const sp = shortestNodePathsToTargetCandidates(target.candidates);
+    return {
+        dist: sp.dist,
+        nextHop: sp.nextHop,
+        targetNodeId: target.candidates[0]?.nodeId ?? null,
+    };
+}
+
+
+function shortestNodePathsToTargetCandidates(candidates) {
+    const dist = new Array(game.nodes.length).fill(Infinity);
+    const nextHop = new Array(game.nodes.length).fill(-1);
+    const visited = new Array(game.nodes.length).fill(false);
+    if (!Array.isArray(candidates) || !candidates.length) {
+        return {dist, nextHop};
+    }
+    for (const tc of candidates) {
+        const nodeId = tc?.nodeId;
+        const attach = tc?.attachDist;
+        if (nodeId == null || nodeId < 0 || nodeId >= dist.length || !Number.isFinite(attach)) {
+            continue;
+        }
+        if (attach < dist[nodeId]) {
+            dist[nodeId] = attach;
+            nextHop[nodeId] = nodeId;
+        }
+    }
+
+    for (;;) {
+        let u = -1;
+        let best = Infinity;
+        for (let i = 0; i < dist.length; i++) {
+            if (!visited[i] && dist[i] < best) {
+                best = dist[i];
+                u = i;
+            }
+        }
+        if (u === -1) {
+            break;
+        }
+        visited[u] = true;
+        const incoming = game.reverseAdjacency.get(u) || [];
+        for (const e of incoming) {
+            const alt = dist[u] + e.lengthM;
+            if (alt + 1e-6 < dist[e.from]) {
+                dist[e.from] = alt;
+                nextHop[e.from] = u;
+            } else if (Math.abs(alt - dist[e.from]) <= 1e-6) {
+                if (nextHop[e.from] === -1 || u < nextHop[e.from]) {
+                    nextHop[e.from] = u;
+                }
+            }
+        }
+    }
+
+    return {dist, nextHop};
 }
 
 
@@ -661,20 +1251,58 @@ function shortestPathInfo(fromPos, toPos) {
         }
     }
 
-    if (fromPos.roadId === toPos.roadId) {
-        const d = Math.abs(fromPos.offsetM - toPos.offsetM);
-        if (d < best.distanceM) {
-            best = {
-                distanceM: d,
-                initialDirection: toPos.offsetM >= fromPos.offsetM ? +1 : -1,
-            };
+    return best;
+}
+
+
+function buildPathCache(fromPos) {
+    const from = graphPosToEndpoints(fromPos);
+    if (!from) {
+        return null;
+    }
+    const paths = from.candidates.map(fc => ({
+        fc,
+        sp: shortestNodePaths(fc.nodeId),
+    }));
+    return {fromPos, from, paths};
+}
+
+
+function shortestPathInfoFromCache(pathCache, toPos) {
+    if (game.currentTickProfile) {
+        game.currentTickProfile.pathQueries += 1;
+    }
+    if (!pathCache) {
+        return {distanceM: Infinity, initialDirection: null};
+    }
+    const b = graphPosToEndpoints(toPos);
+    if (!b) {
+        return {distanceM: Infinity, initialDirection: null};
+    }
+
+    let best = {
+        distanceM: Infinity,
+        initialDirection: null,
+    };
+
+    for (const {fc, sp} of pathCache.paths) {
+        for (const tc of b.candidates) {
+            const middle = sp.dist[tc.nodeId];
+            if (!Number.isFinite(middle)) {
+                continue;
+            }
+            const total = fc.attachDist + middle + tc.attachDist;
+            if (total < best.distanceM) {
+                best = {
+                    distanceM: total,
+                    initialDirection: fc.initialDirection,
+                };
+            }
         }
     }
 
     return best;
 }
-
-
 function tangentAt(pos, directionSign) {
     const roadInfo = game.roads.get(pos.roadId);
     if (!roadInfo) {
@@ -706,47 +1334,78 @@ function stepSimulation() {
     }
 
     const now = Date.now();
+    let dt = 1 / SIM_HZ;
+    if (game.lastSimStepTs != null) {
+        // Use wall-clock delta so movement stays true even if the sim loop lags.
+        dt = clamp((now - game.lastSimStepTs) / 1000, 0.02, 0.35);
+    }
+    game.lastSimStepTs = now;
+    game.lastSimDtMs = dt * 1000;
+
+    const profile = {
+        tick: ++game.tickCounter,
+        dtMs: dt * 1000,
+        startMs: performance.now(),
+        cacheMs: 0,
+        ghostsMs: 0,
+        pelletMs: 0,
+        hudMs: 0,
+        totalMs: 0,
+        dijkstraMs: 0,
+        dijkstraCalls: 0,
+        dijkstraSettled: 0,
+        pathQueries: 0,
+        phase: game.phase,
+    };
+    game.currentTickProfile = profile;
+
+    const playerPointNow = game.player.point;
+    const playerPointPrev = game.player.lastSimPoint || playerPointNow;
+
+    const cacheStartMs = performance.now();
+    const playerPathCache = buildPathCache(game.player.graphPos);
+    const playerNodeField = buildNodeDistanceFieldToPos(game.player.graphPos);
+    profile.cacheMs = performance.now() - cacheStartMs;
+    game.playerPathCache = playerPathCache;
+    game.playerNodeField = playerNodeField;
 
     if (game.phase === 'respawning') {
         const sec = Math.max(0, Math.ceil((game.respawnDeadlineTs - now) / 1000));
-        if (!game.respawnTeleportPending) {
-            showMessage(`Caught by ghost. Teleporting home in ${sec}s...`, true);
+        showMessage(`Caught by ghost. Safe respawn in ${sec}s...`, true);
+        if (now >= game.respawnDeadlineTs) {
+            finishRespawn(now);
+            showMessage('Safe respawn applied', false);
         }
-        if (now >= game.respawnDeadlineTs && !game.respawnTeleportPending) {
-            game.respawnTeleportPending = true;
-            showMessage('Teleporting home...', true);
-            attemptTeleportHome().then(result => {
-                const usedGraceMs = result.ok ? CATCH_GRACE_PERIOD_MS : CATCH_GRACE_PERIOD_MS * 2;
-                finishRespawn(Date.now(), usedGraceMs);
-                if (result.ok) {
-                    showMessage('Teleported home', false);
-                } else {
-                    holdMessage('Teleport unsupported in this Sauce build. Safe respawn applied (extra grace).',
-                        7000);
-                }
-            }).catch(err => {
-                const errMsg = err?.message || String(err);
-                holdMessage(`Teleport failed: ${errMsg}`, TELEPORT_MSG_HOLD_MS);
-                console.error('teleportHome failed', err);
-                finishRespawn(Date.now());
-            });
-        }
+        const hudStartMs = performance.now();
         updateHud();
+        profile.hudMs = performance.now() - hudStartMs;
         requestDraw();
+        finishTickProfile(profile);
         return;
     }
 
     if (game.phase === 'gameover') {
         showMessage('Game Over', true);
+        const hudStartMs = performance.now();
         updateHud();
+        profile.hudMs = performance.now() - hudStartMs;
         requestDraw();
+        finishTickProfile(profile);
         return;
     }
 
+    const ghostsStartMs = performance.now();
     for (const ghost of game.ghosts) {
-        stepGhost(ghost, 1 / SIM_HZ);
+        const beforePos = ghost.roadId ? {roadId: ghost.roadId, offsetM: ghost.offsetM} : null;
+        stepGhost(ghost, dt, playerPathCache, playerNodeField);
+        if (beforePos && ghost.roadId) {
+            ghost.animFromPos = beforePos;
+            ghost.animToPos = {roadId: ghost.roadId, offsetM: ghost.offsetM};
+            ghost.animStartTs = now;
+            ghost.animDurationMs = Math.max(1, dt * 1000);
+        }
         const gPos = {roadId: ghost.roadId, offsetM: ghost.offsetM};
-        const p = shortestPathInfo(game.player.graphPos, gPos);
+        const p = shortestPathInfoFromCache(playerPathCache, gPos);
         ghost.lastPathDistanceToPlayer = p.distanceM;
         let adjustedDistanceM;
         if (Number.isFinite(p.distanceM)) {
@@ -760,29 +1419,45 @@ function stepSimulation() {
                 adjustedDistanceM = Infinity;
             }
         }
-        ghost.lastAdjustedDistanceToPlayer = adjustedDistanceM;
-        if (now >= game.catchGraceUntilTs && Number.isFinite(p.distanceM) && adjustedDistanceM <= 0) {
+        const ghostPointPrev = beforePos ? graphPosToPoint(beforePos) : graphPosToPoint(gPos);
+        const ghostPointNow = ghost.renderPoint || graphPosToPoint(gPos);
+        const sweptEuclidM = minMovingPointDistanceM(playerPointPrev, playerPointNow, ghostPointPrev, ghostPointNow);
+        const sweptAdjustedDistanceM = sweptEuclidM - game.collisionThresholdMeters;
+        const collisionAdjustedDistanceM = Math.min(adjustedDistanceM, sweptAdjustedDistanceM);
+        ghost.lastAdjustedDistanceToPlayer = collisionAdjustedDistanceM;
+        if (now >= game.catchGraceUntilTs && Number.isFinite(collisionAdjustedDistanceM) && collisionAdjustedDistanceM <= 0) {
             game.lives -= 1;
             game.phase = 'respawning';
             game.respawnDeadlineTs = now + 10000;
-            game.respawnTeleportPending = false;
-            showMessage('Caught by ghost. Teleporting home in 10s...', true);
+            showMessage('Caught by ghost. Safe respawn in 10s...', true);
             break;
         }
     }
+    profile.ghostsMs = performance.now() - ghostsStartMs;
+    game.player.lastSimPoint = game.player.point ? [...game.player.point] : null;
 
     if (now - game.lastPelletHintTs > 1000) {
+        const pelletStartMs = performance.now();
         game.lastPelletHintTs = now;
-        game.closestPelletHint = computeClosestPelletHint();
+        game.closestPelletHint = computeClosestPelletHint(playerPathCache);
+        profile.pelletMs = performance.now() - pelletStartMs;
     }
 
+    const hudStartMs = performance.now();
     updateHud();
+    profile.hudMs = performance.now() - hudStartMs;
     requestDraw();
+    finishTickProfile(profile);
+}
+
+
+function finishTickProfile(profile) {
+    profile.totalMs = performance.now() - profile.startMs;
+    game.currentTickProfile = null;
 }
 
 
 function finishRespawn(nowTs, graceMs=CATCH_GRACE_PERIOD_MS) {
-    game.respawnTeleportPending = false;
     game.respawnDeadlineTs = null;
     if (game.lives <= 0) {
         game.phase = 'gameover';
@@ -795,75 +1470,280 @@ function finishRespawn(nowTs, graceMs=CATCH_GRACE_PERIOD_MS) {
 }
 
 
-async function attemptTeleportHome() {
-    const errors = [];
-    try {
-        await Common.rpc.teleportHome();
-        return {ok: true, via: 'rpc.teleportHome'};
-    } catch (err) {
-        errors.push(`teleportHome: ${err?.message || String(err)}`);
+function stepGhost(ghost, dt, playerPathCache=null, playerNodeField=null) {
+    if (ghost.behavior === 'pursue' || ghost.behavior === 'intercept') {
+        stepGraphGhost(ghost, dt, playerPathCache, playerNodeField);
+        return;
     }
+    if (!ghost.roadId) {
+            return; // Early exit if ghost has no roadId
+    }
+    const nowTs = Date.now();
+    let remainingM = Math.max(0, ghostEffectiveSpeedMps(ghost) * dt);
+    let hops = 0;
+    const visitedNodeIds = new Set();
+    while (remainingM > 1e-6 && hops < 24) {
+        hops++;
+        const road = game.roads.get(ghost.roadId);
+        if (!road) {
+            return;
+        }
 
-    try {
-        await Common.rpc.sendCommands({type: 'TELEPORT_TO_START'});
-        return {ok: true, via: 'rpc.sendCommands'};
-    } catch (err) {
-        errors.push(`sendCommands: ${err?.message || String(err)}`);
-    }
+        const stopNode = findNextStopNodeOnRoad(road, ghost.offsetM, ghost.direction);
+        if (!stopNode) {
+            return;
+        }
+        const distToStop = Math.max(0, Math.abs(stopNode.offsetM - ghost.offsetM));
+        if (remainingM < distToStop) {
+            ghost.offsetM = clamp(ghost.offsetM + ghost.direction * remainingM, 0, road.lengthM);
+            return;
+        }
 
-    const allMissing = errors.every(x => /Invalid handler name/i.test(x));
-    if (allMissing) {
-        return {ok: false, unavailable: true, reason: errors.join(' | ')};
+        // Reach the next decision/terminal node and keep leftover distance for the next road/hop.
+        ghost.offsetM = stopNode.offsetM;
+        remainingM -= distToStop;
+        if (distToStop <= GHOST_NODE_EPS_M) {
+            remainingM = Math.max(0, remainingM - GHOST_MIN_HOP_CONSUME_M);
+        }
+
+        const nodeId = stopNode.nodeId;
+        visitedNodeIds.add(nodeId);
+        const edges = game.adjacency.get(nodeId) || [];
+        if (!edges.length) {
+            if (isHunterGhost(ghost)) {
+                pushHunterDecisionLog('no-edges', {
+                    ghostId: ghost.id,
+                    nodeId,
+                    roadId: ghost.roadId,
+                    offsetM: ghost.offsetM,
+                    direction: ghost.direction,
+                });
+            }
+            ghost.direction *= -1;
+            ghost.lastDirectionChangeTs = nowTs;
+            continue;
+        }
+
+        const choice = chooseGhostEdge(ghost, nodeId, edges, playerPathCache, visitedNodeIds, playerNodeField);
+        if (!choice) {
+            if (isHunterGhost(ghost)) {
+                pushHunterDecisionLog('no-choice', {
+                    ghostId: ghost.id,
+                    nodeId,
+                    roadId: ghost.roadId,
+                    offsetM: ghost.offsetM,
+                    direction: ghost.direction,
+                });
+            }
+            ghost.direction *= -1;
+            ghost.lastDirectionChangeTs = nowTs;
+            continue;
+        }
+        const destNode = game.nodes[choice.to];
+        if (!destNode || !game.roads.get(destNode.roadId)) {
+            ghost.direction *= -1;
+            ghost.lastDirectionChangeTs = nowTs;
+            continue;
+        }
+        ghost.lastNodeId = nodeId;
+        rememberGhostNodeVisit(ghost, nodeId);
+        const enteredViaCrossRoad = destNode.roadId !== road.id;
+        if (enteredViaCrossRoad) {
+            ghost.roadId = destNode.roadId;
+            ghost.offsetM = destNode.offsetM;
+        } else {
+            ghost.roadId = road.id;
+            ghost.offsetM = stopNode.offsetM;
+        }
+        const newRoad = game.roads.get(ghost.roadId);
+        let newDirection = choice.direction;
+        if (ghost.direction !== newDirection) {
+            ghost.lastDirectionChangeTs = nowTs;
+        }
+        const preClampDirection = newDirection;
+        ghost.direction = newDirection;
+        if (newRoad) {
+            ghost.offsetM = clamp(ghost.offsetM, 0, newRoad.lengthM);
+        }
+        if (isHunterGhost(ghost)) {
+            pushHunterDecisionLog('committed', {
+                ghostId: ghost.id,
+                fromNodeId: nodeId,
+                toNodeId: choice.to,
+                choiceRoadId: choice.roadId,
+                enteredViaCrossRoad,
+                choiceDirection: choice.direction,
+                preClampDirection,
+                finalDirection: ghost.direction,
+                roadId: ghost.roadId,
+                offsetM: ghost.offsetM,
+                playerRoadId: game.player.graphPos?.roadId,
+                playerOffsetM: game.player.graphPos?.offsetM,
+            });
+        }
     }
-    throw new Error(errors.join(' | '));
 }
 
 
-function stepGhost(ghost, dt) {
-    if (!ghost.roadId) {
+function stepGraphGhost(ghost, dt, playerPathCache=null, playerNodeField=null) {
+    if (ghost.graphNodeId == null) {
+        initGhostGraphState(ghost);
+        if (isHunterGhost(ghost)) {
+            pushHunterDecisionLog('init-graph-state', {
+                graphNodeId: ghost.graphNodeId,
+                roadId: ghost.roadId,
+                offsetM: ghost.offsetM,
+            });
+        }
+    }
+    if (ghost.graphNodeId == null && ghost.edgeToNodeId == null) {
+        if (isHunterGhost(ghost)) {
+            pushHunterDecisionLog('early-return-no-state', {
+                graphNodeId: ghost.graphNodeId,
+                edgeToNodeId: ghost.edgeToNodeId,
+            });
+        }
         return;
     }
-    const road = game.roads.get(ghost.roadId);
-    if (!road) {
-        return;
+    const nowTs = Date.now();
+    let remainingM = Math.max(0, ghostEffectiveSpeedMps(ghost) * dt);
+    if (isHunterGhost(ghost)) {
+        pushHunterDecisionLog('step-start', {
+            dt,
+            remainingM,
+            graphNodeId: ghost.graphNodeId,
+            edgeToNodeId: ghost.edgeToNodeId,
+            edgeProgressM: ghost.edgeProgressM,
+            edgeLengthM: ghost.edgeLengthM,
+        });
+    }
+    let hops = 0;
+    while (remainingM > 1e-6 && hops < 48) {
+        hops++;
+        if (ghost.edgeToNodeId == null) {
+            const nodeId = ghost.graphNodeId;
+            const edges = game.adjacency.get(nodeId) || [];
+            if (!edges.length) {
+                if (isHunterGhost(ghost)) {
+                    pushHunterDecisionLog('no-edges-available', {
+                        nodeId,
+                        graphNodeId: ghost.graphNodeId,
+                    });
+                }
+                break;
+            }
+            const choice = chooseGhostEdge(ghost, nodeId, edges, playerPathCache, null, playerNodeField);
+            if (!choice) {
+                if (isHunterGhost(ghost)) {
+                    pushHunterDecisionLog('choose-edge-failed', {
+                        nodeId,
+                        edgeCount: edges.length,
+                    });
+                }
+                break;
+            }
+            if (isHunterGhost(ghost)) {
+                pushHunterDecisionLog('edge-chosen', {
+                    fromNodeId: nodeId,
+                    toNodeId: choice.to,
+                    edgeLengthM: choice.lengthM,
+                });
+            }
+            ghost.lastNodeId = nodeId;
+            rememberGhostNodeVisit(ghost, nodeId);
+            ghost.edgeFromNodeId = nodeId;
+            ghost.edgeToNodeId = choice.to;
+            ghost.edgeLengthM = Math.max(0.001, choice.lengthM);
+            ghost.edgeProgressM = 0;
+            ghost.edgeRoadId = choice.roadId;
+            ghost.direction = choice.direction;
+            if (isHunterGhost(ghost)) {
+                pushHunterDecisionLog('committed', {
+                    ghostId: ghost.id,
+                    fromNodeId: nodeId,
+                    toNodeId: choice.to,
+                    choiceRoadId: choice.roadId,
+                    enteredViaCrossRoad: typeof choice.roadId === 'string' && choice.roadId.startsWith('x-'),
+                    choiceDirection: choice.direction,
+                    preClampDirection: choice.direction,
+                    finalDirection: choice.direction,
+                    roadId: ghost.roadId,
+                    offsetM: ghost.offsetM,
+                    playerRoadId: game.player.graphPos?.roadId,
+                    playerOffsetM: game.player.graphPos?.offsetM,
+                });
+            }
+        }
+
+        const remainingOnEdge = Math.max(0, ghost.edgeLengthM - ghost.edgeProgressM);
+        const stepM = Math.min(remainingM, remainingOnEdge);
+        ghost.edgeProgressM += stepM;
+        remainingM -= stepM;
+        syncGhostPoseFromGraphState(ghost);
+        if (isHunterGhost(ghost)) {
+            pushHunterDecisionLog('edge-progress', {
+                edgeProgressM: ghost.edgeProgressM,
+                edgeLengthM: ghost.edgeLengthM,
+                stepM,
+                remainingM,
+                roadId: ghost.roadId,
+                offsetM: ghost.offsetM,
+            });
+        }
+
+        if (ghost.edgeProgressM + 1e-6 >= ghost.edgeLengthM) {
+            ghost.graphNodeId = ghost.edgeToNodeId;
+            ghost.edgeFromNodeId = null;
+            ghost.edgeToNodeId = null;
+            ghost.edgeLengthM = 0;
+            ghost.edgeProgressM = 0;
+            ghost.edgeRoadId = null;
+            syncGhostPoseFromGraphState(ghost);
+        } else {
+            break;
+        }
+        if (stepM <= 1e-6) {
+            break;
+        }
+        ghost.lastDirectionChangeTs = nowTs;
+    }
+}
+
+
+function findNextStopNodeOnRoad(roadInfo, offsetM, direction) {
+    const cps = roadInfo?.controlPoints;
+    if (!cps || !cps.length) {
+        return null;
+    }
+    const eps = GHOST_NODE_EPS_M;
+    if (direction >= 0) {
+        for (let i = 0; i < cps.length; i++) {
+            const cp = cps[i];
+            if (cp.offsetM <= offsetM + eps) {
+                continue;
+            }
+            return {nodeId: cp.nodeId, offsetM: cp.offsetM};
+        }
+        const last = cps[cps.length - 1];
+        return {nodeId: last.nodeId, offsetM: last.offsetM};
     }
 
-    const effectiveSpeed = ghostEffectiveSpeedMps(ghost);
-    let nextOffset = ghost.offsetM + ghost.direction * effectiveSpeed * dt;
-    if (nextOffset > road.lengthM || nextOffset < 0) {
-        const hitEnd = nextOffset > road.lengthM;
-        const nodeId = hitEnd ? road.endNodeId : road.startNodeId;
-        const edges = game.adjacency.get(nodeId) || [];
-
-        if (!edges.length) {
-            ghost.direction *= -1;
-            ghost.offsetM = clamp(ghost.offsetM, 0, road.lengthM);
-            return;
+    for (let i = cps.length - 1; i >= 0; i--) {
+        const cp = cps[i];
+        if (cp.offsetM >= offsetM - eps) {
+            continue;
         }
-
-        const choice = chooseGhostEdge(ghost, nodeId, edges);
-        const destNode = game.nodes[choice.to];
-        if (!destNode) {
-            ghost.direction *= -1;
-            return;
-        }
-        const destRoad = game.roads.get(destNode.roadId);
-        if (!destRoad) {
-            ghost.direction *= -1;
-            return;
-        }
-        ghost.lastNodeId = nodeId;
-        ghost.roadId = destNode.roadId;
-        ghost.offsetM = destNode.offsetM;
-        ghost.direction = choice.direction;
-        return;
+        return {nodeId: cp.nodeId, offsetM: cp.offsetM};
     }
-
-    ghost.offsetM = clamp(nextOffset, 0, road.lengthM);
+    const first = cps[0];
+    return {nodeId: first.nodeId, offsetM: first.offsetM};
 }
 
 
 function ghostEffectiveSpeedMps(ghost) {
+    if (game.difficulty === 'max') {
+        return 100 / 3.6;
+    }
     const preset = DIFFICULTY_PRESETS[game.difficulty] || DIFFICULTY_PRESETS.normal;
     const grade = roadGradeAtOffset(ghost.roadId, ghost.offsetM);
     // grade from road data is forward-direction slope; invert when ghost is moving backward
@@ -924,21 +1804,50 @@ function roadGradeAtOffset(roadId, offsetM) {
 }
 
 
-function chooseGhostEdge(ghost, nodeId, edges) {
+function chooseGhostEdge(ghost, nodeId, edges, playerPathCache=null, avoidNodeIds=null, playerNodeField=null) {
     let options = edges.slice();
     if (!options.length) {
+        if (isHunterGhost(ghost)) {
+            pushHunterDecisionLog('empty-options', {ghostId: ghost.id, nodeId});
+        }
         return null;
     }
-    if (ghost.lastNodeId != null && options.length > 1) {
+    if (ghost.behavior === 'wander' && ghost.lastNodeId != null && options.length > 1) {
         const nonBacktrack = options.filter(e => e.to !== ghost.lastNodeId);
         if (nonBacktrack.length) {
             options = nonBacktrack;
         }
     }
+    if (avoidNodeIds && ghost.behavior === 'wander' && options.length > 1) {
+        const nonVisited = options.filter(e => !avoidNodeIds.has(e.to));
+        if (nonVisited.length) {
+            options = nonVisited;
+        }
+    }
 
     if (!game.player.graphPos) {
+        if (isHunterGhost(ghost)) {
+            pushHunterDecisionLog('no-player-pos-random', {
+                ghostId: ghost.id,
+                nodeId,
+                optionCount: options.length,
+            });
+        }
         return options[Math.floor(Math.random() * options.length)];
     }
+
+    const interceptTarget = ghost.behavior === 'intercept' ? getPlayerInterceptTarget() : null;
+    const interceptTargetPos = ghost.behavior === 'intercept' ? (interceptTarget || game.player.graphPos) : null;
+    const interceptNodeField = ghost.behavior === 'intercept' && interceptTargetPos ?
+        buildNodeDistanceFieldToPos(interceptTargetPos) : null;
+    const currentNodeDistToPlayer = ghost.behavior === 'pursue' && playerNodeField?.dist ?
+        playerNodeField.dist[nodeId] : Infinity;
+    const currentNodeDistToIntercept = ghost.behavior === 'intercept' && interceptNodeField?.dist ?
+        interceptNodeField.dist[nodeId] : Infinity;
+    const pursueNextHop = ghost.behavior === 'pursue' && playerNodeField?.nextHop ?
+        playerNodeField.nextHop[nodeId] : -1;
+    const interceptNextHop = ghost.behavior === 'intercept' && interceptNodeField?.nextHop ?
+        interceptNodeField.nextHop[nodeId] : -1;
 
     const candidates = [];
     for (const edge of options) {
@@ -950,23 +1859,88 @@ function chooseGhostEdge(ghost, nodeId, edges) {
             roadId: dest.roadId,
             offsetM: dest.offsetM,
         };
-        const d = shortestPathInfo(candidate, game.player.graphPos).distanceM;
+        const dToPlayerCached = shortestPathInfoFromCache(playerPathCache, candidate).distanceM;
         const congestion = game.ghosts.filter(g => g !== ghost && g.roadId === dest.roadId).length;
-        const randomJitter = Math.random() * ghost.randomnessM;
-        const score = d + congestion * ghost.spreadPenaltyM + randomJitter;
-        candidates.push({edge, score});
+        let score;
+        let pursueFallbackScore = dToPlayerCached;
+        if (ghost.behavior === 'pursue') {
+            const dFromNextNode = playerNodeField?.dist ? playerNodeField.dist[edge.to] : Infinity;
+            score = edge.lengthM + dFromNextNode;
+            pursueFallbackScore = score;
+        } else if (ghost.behavior === 'intercept') {
+            const dFromNextNode = interceptNodeField?.dist ? interceptNodeField.dist[edge.to] : Infinity;
+            score = edge.lengthM + dFromNextNode;
+            pursueFallbackScore = score;
+        } else {
+            const randomJitter = Math.random() * ghost.randomnessM;
+            score = dToPlayerCached + congestion * ghost.spreadPenaltyM + randomJitter;
+        }
+        candidates.push({edge, score, pursueFallbackScore});
     }
 
     if (!candidates.length) {
+        if (isHunterGhost(ghost)) {
+            pushHunterDecisionLog('no-candidates', {
+                ghostId: ghost.id,
+                nodeId,
+                optionCount: options.length,
+            });
+        }
         return options[0];
     }
 
-    candidates.sort((a, b) => a.score - b.score);
-    if (Math.random() < ghost.chaseBias) {
-        return candidates[0].edge;
+    let sortedCandidates = candidates;
+    if (ghost.behavior === 'pursue' && Number.isFinite(currentNodeDistToPlayer)) {
+        const nonIncreasing = candidates.filter(c => c.score <= currentNodeDistToPlayer + 1e-6);
+        if (nonIncreasing.length) {
+            sortedCandidates = nonIncreasing;
+        }
+    } else if (ghost.behavior === 'intercept' && Number.isFinite(currentNodeDistToIntercept)) {
+        const nonIncreasing = candidates.filter(c => c.score <= currentNodeDistToIntercept + 1e-6);
+        if (nonIncreasing.length) {
+            sortedCandidates = nonIncreasing;
+        }
     }
 
-    const top = candidates.slice(0, Math.min(3, candidates.length));
+    sortedCandidates = sortedCandidates.slice().sort((a, b) => (a.score - b.score) || (a.edge.to - b.edge.to));
+    if (ghost.behavior === 'pursue') {
+        const selected = sortedCandidates.find(c => c.edge.to === pursueNextHop) || sortedCandidates[0];
+        if (isHunterGhost(ghost)) {
+            pushHunterDecisionLog('choose-edge', {
+                ghostId: ghost.id,
+                nodeId,
+                ghostRoadId: ghost.roadId,
+                ghostOffsetM: fmtDecisionNum(ghost.offsetM),
+                playerRoadId: game.player.graphPos?.roadId,
+                playerOffsetM: fmtDecisionNum(game.player.graphPos?.offsetM),
+                currentNodeDist: fmtDecisionNum(currentNodeDistToPlayer),
+                nextHopNodeId: pursueNextHop,
+                candidates: candidates.map(c => ({
+                    toNodeId: c.edge.to,
+                    edgeRoadId: c.edge.roadId,
+                    edgeDirection: c.edge.direction,
+                    edgeLengthM: fmtDecisionNum(c.edge.lengthM),
+                    score: fmtDecisionNum(c.score),
+                })),
+                chosen: {
+                    toNodeId: selected.edge.to,
+                    edgeRoadId: selected.edge.roadId,
+                    edgeDirection: selected.edge.direction,
+                    score: fmtDecisionNum(selected.score),
+                },
+            });
+        }
+        return selected.edge;
+    }
+    if (ghost.behavior === 'intercept') {
+        const selected = sortedCandidates.find(c => c.edge.to === interceptNextHop) || sortedCandidates[0];
+        return selected.edge;
+    }
+    if (Math.random() < ghost.chaseBias) {
+        return sortedCandidates[0].edge;
+    }
+
+    const top = sortedCandidates.slice(0, Math.min(3, sortedCandidates.length));
     const invWeights = top.map(x => 1 / Math.max(1, x.score));
     const sum = invWeights.reduce((a, b) => a + b, 0);
     let r = Math.random() * sum;
@@ -977,6 +1951,31 @@ function chooseGhostEdge(ghost, nodeId, edges) {
         }
     }
     return top[top.length - 1].edge;
+}
+
+
+function getPlayerInterceptTarget() {
+    const playerPos = game.player.graphPos;
+    if (!playerPos) {
+        return null;
+    }
+    const roadInfo = game.roads.get(playerPos.roadId);
+    const anchors = roadInfo?.pathAnchors;
+    if (!anchors || !anchors.length) {
+        return null;
+    }
+    const dir = game.player.travelDir || +1;
+    const eps = 0.5;
+    if (dir >= 0) {
+        const next = anchors.find(a => a.offsetM > playerPos.offsetM + eps);
+        return next ? {roadId: playerPos.roadId, offsetM: next.offsetM} : null;
+    }
+    for (let i = anchors.length - 1; i >= 0; i--) {
+        if (anchors[i].offsetM < playerPos.offsetM - eps) {
+            return {roadId: playerPos.roadId, offsetM: anchors[i].offsetM};
+        }
+    }
+    return null;
 }
 
 
@@ -1009,17 +2008,18 @@ function checkPelletCollection(prevPoint, curPoint) {
 }
 
 
-function computeClosestPelletHint() {
+function computeClosestPelletHint(playerPathCache=null) {
     if (!game.player.graphPos) {
         return null;
     }
+    const cache = playerPathCache || buildPathCache(game.player.graphPos);
     let best = null;
     for (const pellet of game.pellets) {
         if (pellet.collected) {
             continue;
         }
         const target = {roadId: pellet.roadId, offsetM: pellet.offsetM};
-        const p = shortestPathInfo(game.player.graphPos, target);
+        const p = shortestPathInfoFromCache(cache, target);
         if (!best || p.distanceM < best.distanceM) {
             best = {
                 distanceM: p.distanceM,
@@ -1050,6 +2050,12 @@ function updateHud() {
         if (ghostSpeedEls[i]) {
             const speedKmh = ghost.roadId ? ghostEffectiveSpeedMps(ghost) * 3.6 : null;
             ghostSpeedEls[i].textContent = speedKmh != null ? `${speedKmh.toFixed(1)}` : '-';
+        }
+        if (ghostChipEls[i]) {
+            ghostChipEls[i].style.backgroundColor = ghost.color;
+        }
+        if (ghostNameEls[i]) {
+            ghostNameEls[i].textContent = ghost.name || `${i + 1}`;
         }
     }
     if (game.phase === 'running' && Date.now() < game.catchGraceUntilTs) {
@@ -1119,18 +2125,43 @@ function render() {
         return;
     }
     updateMapViewport();
-    renderGhostEntities();
+    const animating = renderGhostEntities();
     renderPelletEntities();
+    if (animating) {
+        requestDraw();
+    }
 }
 
 
 function renderGhostEntities() {
+    let animating = false;
+    const now = Date.now();
     for (const ghost of game.ghosts) {
         if (!ghost.roadId) {
             continue;
         }
-        const gPos = {roadId: ghost.roadId, offsetM: ghost.offsetM};
-        const p = graphPosToPoint(gPos);
+        let p = null;
+        const fromPos = ghost.animFromPos;
+        const toPos = ghost.animToPos;
+        if (fromPos && toPos && ghost.animDurationMs > 0) {
+            const t = clamp((now - ghost.animStartTs) / ghost.animDurationMs, 0, 1);
+            if (t < 1) {
+                animating = true;
+            }
+            if (fromPos.roadId === toPos.roadId) {
+                const offsetM = fromPos.offsetM + (toPos.offsetM - fromPos.offsetM) * t;
+                p = graphPosToPoint({roadId: toPos.roadId, offsetM});
+            } else {
+                const a = graphPosToPoint(fromPos);
+                const b = graphPosToPoint(toPos);
+                if (a && b) {
+                    p = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+                }
+            }
+        }
+        if (!p) {
+            p = ghost.renderPoint || graphPosToPoint({roadId: ghost.roadId, offsetM: ghost.offsetM});
+        }
         if (!p) {
             continue;
         }
@@ -1143,6 +2174,7 @@ function renderGhostEntities() {
         ent.el.style.setProperty('--fill', ghost.color);
         ent.el.style.setProperty('--border-color', 'rgba(0,0,0,0.7)');
     }
+    return animating;
 }
 
 

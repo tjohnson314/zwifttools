@@ -43,6 +43,7 @@
                         <option value="normal" selected>Normal</option>
                         <option value="hard">Hard</option>
                         <option value="pro">Pro</option>
+                        <option value="max">Max</option>
                     </select>
                 </div>
             </div>
@@ -54,12 +55,19 @@
                     <table class="ghost-table">
                         <thead><tr><th>Ghost</th><th>Dist</th><th>Grade</th><th>Speed</th></tr></thead>
                         <tbody>
-                            <tr><td>1</td><td id="ghost-dist-1">-</td><td id="ghost-grade-1">-</td><td id="ghost-speed-1">-</td></tr>
-                            <tr><td>2</td><td id="ghost-dist-2">-</td><td id="ghost-grade-2">-</td><td id="ghost-speed-2">-</td></tr>
-                            <tr><td>3</td><td id="ghost-dist-3">-</td><td id="ghost-grade-3">-</td><td id="ghost-speed-3">-</td></tr>
-                            <tr><td>4</td><td id="ghost-dist-4">-</td><td id="ghost-grade-4">-</td><td id="ghost-speed-4">-</td></tr>
+                            <tr><td><span class="ghost-label"><span class="ghost-chip" id="ghost-chip-1"></span><span id="ghost-name-1">1</span></span></td><td id="ghost-dist-1">-</td><td id="ghost-grade-1">-</td><td id="ghost-speed-1">-</td></tr>
+                            <tr><td><span class="ghost-label"><span class="ghost-chip" id="ghost-chip-2"></span><span id="ghost-name-2">2</span></span></td><td id="ghost-dist-2">-</td><td id="ghost-grade-2">-</td><td id="ghost-speed-2">-</td></tr>
+                            <tr><td><span class="ghost-label"><span class="ghost-chip" id="ghost-chip-3"></span><span id="ghost-name-3">3</span></span></td><td id="ghost-dist-3">-</td><td id="ghost-grade-3">-</td><td id="ghost-speed-3">-</td></tr>
+                            <tr><td><span class="ghost-label"><span class="ghost-chip" id="ghost-chip-4"></span><span id="ghost-name-4">4</span></span></td><td id="ghost-dist-4">-</td><td id="ghost-grade-4">-</td><td id="ghost-speed-4">-</td></tr>
                         </tbody>
                     </table>
+                    <div class="hunter-debug">
+                        <div class="hunter-debug-title">
+                            Hunter Debug
+                            <button id="hunter-debug-copy-btn" class="hunter-debug-copy-btn">Copy</button>
+                        </div>
+                        <pre id="hunter-debug-log" class="hunter-debug-log">Waiting for Hunter decisions...</pre>
+                    </div>
                 </aside>
             </div>
         </div>

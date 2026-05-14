@@ -66,7 +66,42 @@ body {
 }
 
 #map .entity.point.pacman-ghost {
-    font-size: 0.55em;
+    font-size: 3.15em;
+    --clip-path: none;
+    --ghost-rotation: 90deg;
+    --ghost-shape: polygon(10% 23%, 18% 10%, 32% 3%, 50% 0%, 68% 3%, 82% 10%, 90% 23%, 90% 76%, 78% 90%, 64% 76%, 50% 90%, 36% 76%, 22% 90%, 10% 76%);
+    --ghost-eye: #f3f8ff;
+    --ghost-pupil: #132035;
+    --ghost-edge: var(--border-color, rgba(0, 0, 0, 0.7));
+}
+
+#map .entity.point.pacman-ghost::before,
+#map .entity.point.pacman-ghost::after {
+    clip-path: none;
+    scale: 1;
+    transform: rotate(var(--ghost-rotation));
+    transform-origin: 50% 50%;
+}
+
+#map .entity.point.pacman-ghost::before {
+    inset: -0.06em;
+    width: auto;
+    height: auto;
+    background: var(--ghost-edge);
+    clip-path: var(--ghost-shape);
+}
+
+#map .entity.point.pacman-ghost::after {
+    inset: 0.05em;
+    width: auto;
+    height: auto;
+    background:
+        radial-gradient(circle at 38% 44%, var(--ghost-pupil) 0 5.6%, transparent 6.6%) no-repeat,
+        radial-gradient(circle at 62% 44%, var(--ghost-pupil) 0 5.6%, transparent 6.6%) no-repeat,
+        radial-gradient(circle at 38% 44%, var(--ghost-eye) 0 11%, transparent 12%) no-repeat,
+        radial-gradient(circle at 62% 44%, var(--ghost-eye) 0 11%, transparent 12%) no-repeat,
+        linear-gradient(var(--fill) 0 0) no-repeat;
+    clip-path: var(--ghost-shape);
 }
 
 #map .entity.point.pacman-pellet {
@@ -91,8 +126,8 @@ body {
 }
 
 .ghost-panel {
-    min-width: 240px;
-    max-width: 300px;
+    min-width: 360px;
+    max-width: 460px;
     background: rgba(14, 19, 26, 0.92);
     border: 1px solid rgba(143, 169, 196, 0.25);
     border-radius: 12px;
@@ -118,6 +153,20 @@ body {
     text-align: left;
 }
 
+.ghost-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.ghost-chip {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    background: #7c8ea6;
+    border: 1px solid rgba(0, 0, 0, 0.45);
+}
+
 .ghost-table td {
     color: var(--ink);
     text-align: right;
@@ -127,6 +176,57 @@ body {
 
 .ghost-table tbody tr:last-child td {
     border-bottom: none;
+}
+
+.hunter-debug {
+    margin-top: 10px;
+    border-top: 1px solid rgba(143, 169, 196, 0.22);
+    padding-top: 8px;
+}
+
+.hunter-debug-title {
+    color: var(--muted);
+    font-size: 11px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.hunter-debug-copy-btn {
+    background: rgba(143, 169, 196, 0.2);
+    border: 1px solid rgba(143, 169, 196, 0.4);
+    color: var(--muted);
+    padding: 3px 8px;
+    font-size: 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.hunter-debug-copy-btn:hover {
+    background: rgba(143, 169, 196, 0.35);
+    border-color: rgba(143, 169, 196, 0.6);
+}
+
+.hunter-debug-copy-btn:active {
+    background: rgba(143, 169, 196, 0.5);
+}
+
+.hunter-debug-log {
+    margin: 0;
+    max-height: 280px;
+    overflow: auto;
+    padding: 8px;
+    border: 1px solid rgba(143, 169, 196, 0.2);
+    border-radius: 8px;
+    background: rgba(9, 13, 18, 0.9);
+    color: #d7eaff;
+    font: 11px/1.35 Consolas, Monaco, 'Courier New', monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
 @media (max-width: 1180px) {
