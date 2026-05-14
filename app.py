@@ -61,6 +61,21 @@ def get_db():
     return _db
 
 
+def _safe_int(value, default=0):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_text(value, default=''):
+    if value is None:
+        return default
+    if isinstance(value, str):
+        return value.strip()
+    return str(value).strip()
+
+
 def get_redirect_uri():
     """Get the OAuth redirect URI based on request host."""
     # Use the host from the request, defaulting to localhost
@@ -411,16 +426,23 @@ def get_frames():
     """Get all frames for dropdown."""
     db = get_db()
     frames = []
-    for frame in sorted(db.frames.values(), key=lambda f: f'{f["framemake"]} {f["framemodel"]}'):
+    frame_values = [f for f in db.frames.values() if isinstance(f, dict)]
+    for frame in sorted(frame_values, key=lambda f: f'{f.get("framemake", "")} {f.get("framemodel", "")}'):
+        frame_id = frame.get('frameid') or frame.get('frameId')
+        if not frame_id:
+            continue
+        frame_make = _safe_text(frame.get('framemake'))
+        frame_model = _safe_text(frame.get('framemodel'))
+        frame_name = f"{frame_make} {frame_model}".strip() or str(frame_id)
         frames.append({
-            'id': frame['frameid'],
-            'name': f"{frame['framemake']} {frame['framemodel']}",
-            'aero': frame['frameaero'],
-            'weight': frame['frameweight'],
+            'id': frame_id,
+            'name': frame_name,
+            'aero': frame.get('frameaero', '-'),
+            'weight': frame.get('frameweight', '-'),
             'hasBuiltInWheels': frame.get('framewheeltype') == 'fixed',
             'isTT': frame.get('frametype') == 'TT',
             'frameType': frame.get('frametype', 'Standard'),
-            'level': int(frame.get('framelevel') or 0)
+            'level': _safe_int(frame.get('framelevel'), 0)
         })
     return jsonify(frames)
 
@@ -430,14 +452,21 @@ def get_wheels():
     """Get all wheels for dropdown."""
     db = get_db()
     wheels = [{'id': '', 'name': '(Built-in wheels)', 'aero': '-', 'weight': '-', 'fitsFrame': ''}]
-    for wheel in sorted(db.wheels.values(), key=lambda w: f'{w["wheelmake"]} {w["wheelmodel"]}'):
+    wheel_values = [w for w in db.wheels.values() if isinstance(w, dict)]
+    for wheel in sorted(wheel_values, key=lambda w: f'{w.get("wheelmake", "")} {w.get("wheelmodel", "")}'):
+        wheel_id = wheel.get('wheelid') or wheel.get('wheelId')
+        if wheel_id is None:
+            continue
+        wheel_make = _safe_text(wheel.get('wheelmake'))
+        wheel_model = _safe_text(wheel.get('wheelmodel'))
+        wheel_name = f"{wheel_make} {wheel_model}".strip() or str(wheel_id)
         wheels.append({
-            'id': wheel['wheelid'],
-            'name': f"{wheel['wheelmake']} {wheel['wheelmodel']}",
-            'aero': wheel['wheelaero'],
-            'weight': wheel['wheelweight'],
+            'id': wheel_id,
+            'name': wheel_name,
+            'aero': wheel.get('wheelaero', '-'),
+            'weight': wheel.get('wheelweight', '-'),
             'fitsFrame': wheel.get('wheelfitsframe', 'Standard,TT'),
-            'level': int(wheel.get('wheellevel') or 0)
+            'level': _safe_int(wheel.get('wheellevel'), 0)
         })
     return jsonify(wheels)
 

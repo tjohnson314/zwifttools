@@ -53,20 +53,60 @@ class BikeDatabase:
                 self._download_data()
                 break
         
-        # Load frames
-        with open(self.DATA_DIR / 'frames.json') as f:
-            frames_list = json.load(f)
-            self.frames = {fr['frameid']: fr for fr in frames_list}
-        
-        # Load wheels
-        with open(self.DATA_DIR / 'wheels.json') as f:
-            wheels_list = json.load(f)
-            self.wheels = {wh['wheelid']: wh for wh in wheels_list}
-        
-        # Load bike combos
-        with open(self.DATA_DIR / 'bikes.json') as f:
-            bikes_list = json.load(f)
-            self.bikes = {(b['frameid'], b['wheelid']): b for b in bikes_list}
+        # Accept both legacy list payloads and wrapped payloads from newer zwiftdata exports.
+        frames_list = self._read_records('frames')
+        wheels_list = self._read_records('wheels')
+        bikes_list = self._read_records('bikes')
+
+        self.frames = {}
+        for fr in frames_list:
+            if not isinstance(fr, dict):
+                continue
+            frame_id = fr.get('frameid') or fr.get('frameId')
+            if not frame_id:
+                continue
+            fr['frameid'] = frame_id
+            self.frames[frame_id] = fr
+
+        self.wheels = {}
+        for wh in wheels_list:
+            if not isinstance(wh, dict):
+                continue
+            wheel_id = wh.get('wheelid') or wh.get('wheelId')
+            if wheel_id is None:
+                continue
+            wh['wheelid'] = wheel_id
+            self.wheels[wheel_id] = wh
+
+        self.bikes = {}
+        for b in bikes_list:
+            if not isinstance(b, dict):
+                continue
+            frame_id = b.get('frameid') or b.get('frameId')
+            if frame_id is None:
+                continue
+            wheel_id = b.get('wheelid') or b.get('wheelId')
+            if wheel_id is None:
+                wheel_id = ''
+            b['frameid'] = frame_id
+            b['wheelid'] = wheel_id
+            self.bikes[(frame_id, wheel_id)] = b
+
+    def _read_records(self, name: str) -> List[dict]:
+        """Read a zwiftdata file and normalize it to a record list."""
+        with open(self.DATA_DIR / f'{name}.json', encoding='utf-8-sig') as f:
+            payload = json.load(f)
+
+        if isinstance(payload, list):
+            return payload
+
+        if isinstance(payload, dict):
+            for key in ('data', 'items', 'records', name):
+                value = payload.get(key)
+                if isinstance(value, list):
+                    return value
+
+        raise ValueError(f'Unsupported {name}.json schema: expected list or wrapped list object')
     
     def _download_data(self):
         """Download fresh data from ZwifterBikes."""
