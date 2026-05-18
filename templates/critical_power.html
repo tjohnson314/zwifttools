@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Critical Power Calculator - Zwift Tools</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="/static/css/critical_power.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="/" class="back-link">&larr; Back to Tools</a>
+            <h1>Critical Power Calculator</h1>
+            <p class="subtitle">Linear regression on work-duration data with CP, W&#8242;, and fit quality.</p>
+        </div>
+
+        <div class="equation-card">
+            <p class="equation-label">Model equation</p>
+            <p class="equation">Critical Power &times; Duration + W&#8242; = Actual Power &times; Duration</p>
+            <p class="equation-note">Regression form: Work = CP &times; Duration + W&#8242;</p>
+        </div>
+
+        <div class="input-card">
+            <h2>Data Points (up to 4)</h2>
+            <p class="help-text">Duration accepts seconds (e.g. 300) or mm:ss (e.g. 5:00).</p>
+
+            <div class="grid header-row">
+                <div>Point</div>
+                <div>Duration</div>
+                <div>Power (W)</div>
+            </div>
+
+            <div id="dataRows"></div>
+
+            <div class="actions">
+                <button id="calculateBtn" class="btn primary" type="button">Calculate</button>
+                <button id="resetBtn" class="btn" type="button">Reset</button>
+            </div>
+
+            <p id="message" class="message"></p>
+        </div>
+
+        <div id="results" class="results hidden">
+            <div class="metrics">
+                <div class="metric-card">
+                    <div class="metric-label">Critical Power</div>
+                    <div id="cpValue" class="metric-value">-</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">W&#8242;</div>
+                    <div id="wPrimeValue" class="metric-value">-</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Correlation Coefficient (r)</div>
+                    <div id="rValue" class="metric-value">-</div>
+                </div>
+            </div>
+
+            <div class="chart-card">
+                <h3>Work vs Duration Regression</h3>
+                <p class="chart-subtitle">Points are measured efforts. Line is the regression model.</p>
+                <div class="chart-wrap">
+                    <canvas id="regressionChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-card">
+                <h3>Expected Power Curve</h3>
+                <p class="chart-subtitle">Curve follows P(t) = CP + W&#8242;/t. Points are your entered efforts.</p>
+                <div class="chart-wrap">
+                    <canvas id="expectedPowerChart"></canvas>
+                </div>
+            </div>
+
+            <div class="table-card">
+                <h3>Actual vs Expected Power</h3>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Point</th>
+                                <th>Duration</th>
+                                <th>Actual Power</th>
+                                <th>Expected Power</th>
+                                <th>Difference</th>
+                            </tr>
+                        </thead>
+                        <tbody id="residualTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/critical_power.js"></script>
+</body>
+</html>

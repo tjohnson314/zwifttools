@@ -1,0 +1,268 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+:root {
+    --bg: #101728;
+    --bg-soft: #19233a;
+    --card: rgba(255, 255, 255, 0.05);
+    --text: #f4f7ff;
+    --muted: #9cb0d3;
+    --accent: #f5a623;
+    --accent-2: #58d3ff;
+    --good: #43d587;
+    --bad: #ff7d7d;
+    --border: rgba(255, 255, 255, 0.12);
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: radial-gradient(circle at 10% 10%, #213154 0%, var(--bg) 45%), linear-gradient(160deg, #111a2c 0%, #0b111f 100%);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 22px;
+}
+
+.container {
+    max-width: 1080px;
+    margin: 0 auto;
+}
+
+.header {
+    margin-bottom: 16px;
+}
+
+.back-link {
+    color: var(--accent-2);
+    text-decoration: none;
+    font-size: 0.9rem;
+    display: inline-block;
+    margin-bottom: 8px;
+}
+
+.back-link:hover {
+    text-decoration: underline;
+}
+
+h1 {
+    font-size: 2rem;
+    background: linear-gradient(90deg, #ffd15f, #f7931e);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 4px;
+}
+
+.subtitle {
+    color: var(--muted);
+}
+
+.equation-card,
+.input-card,
+.chart-card,
+.table-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px;
+    margin-bottom: 18px;
+    backdrop-filter: blur(4px);
+}
+
+.equation-label {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin-bottom: 8px;
+}
+
+.equation {
+    color: var(--accent);
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.equation-note {
+    color: var(--muted);
+    font-size: 0.95rem;
+}
+
+.input-card h2,
+.chart-card h3,
+.table-card h3 {
+    margin-bottom: 8px;
+}
+
+.help-text,
+.chart-subtitle {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin-bottom: 12px;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: 70px 1fr 1fr;
+    gap: 10px;
+    align-items: center;
+}
+
+.header-row {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-bottom: 8px;
+}
+
+.data-row {
+    margin-bottom: 10px;
+}
+
+.data-row input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg-soft);
+    color: var(--text);
+    font-size: 0.96rem;
+}
+
+.data-row input:focus {
+    outline: 2px solid rgba(88, 211, 255, 0.35);
+    border-color: transparent;
+}
+
+.index-pill {
+    width: 36px;
+    text-align: center;
+    background: rgba(245, 166, 35, 0.2);
+    border: 1px solid rgba(245, 166, 35, 0.45);
+    border-radius: 999px;
+    padding: 5px 0;
+    font-size: 0.85rem;
+}
+
+.actions {
+    margin-top: 14px;
+    display: flex;
+    gap: 10px;
+}
+
+.btn {
+    padding: 10px 16px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: #22304b;
+    color: var(--text);
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.btn.primary {
+    background: linear-gradient(90deg, #f99b19, #e65c00);
+    border: none;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+}
+
+.message {
+    min-height: 20px;
+    margin-top: 10px;
+    color: var(--muted);
+}
+
+.message.error {
+    color: var(--bad);
+}
+
+.message.success {
+    color: var(--good);
+}
+
+.hidden {
+    display: none;
+}
+
+.metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.metric-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+}
+
+.metric-label {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-bottom: 6px;
+}
+
+.metric-value {
+    font-size: 1.4rem;
+    font-weight: 700;
+}
+
+.chart-wrap {
+    height: 320px;
+}
+
+.table-wrap {
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th,
+td {
+    padding: 10px 8px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    white-space: nowrap;
+}
+
+th {
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.diff-positive {
+    color: var(--bad);
+}
+
+.diff-negative {
+    color: var(--good);
+}
+
+@media (max-width: 780px) {
+    body {
+        padding: 14px;
+    }
+
+    .metrics {
+        grid-template-columns: 1fr;
+    }
+
+    .grid {
+        grid-template-columns: 54px 1fr 1fr;
+        gap: 8px;
+    }
+
+    .chart-wrap {
+        height: 280px;
+    }
+}

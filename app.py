@@ -205,6 +205,12 @@ def bike_comparison():
     return render_template('bike_comparison.html')
 
 
+@app.route('/critical-power')
+def critical_power():
+    """Critical power calculator with regression plot."""
+    return render_template('critical_power.html')
+
+
 @app.route('/race-replay')
 def race_replay():
     """Race replay tool."""
