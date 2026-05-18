@@ -1,5 +1,46 @@
 let regressionChart = null;
 let expectedPowerChart = null;
+const STORAGE_KEY = "criticalPowerCalculatorInputsV1";
+
+function loadStoredInputs() {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) {
+            return null;
+        }
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object") {
+            return null;
+        }
+        return parsed;
+    } catch {
+        return null;
+    }
+}
+
+function saveInputs() {
+    const rows = [];
+    for (let i = 0; i < 4; i += 1) {
+        const durationEl = document.getElementById(`duration-${i}`);
+        const powerEl = document.getElementById(`power-${i}`);
+        rows.push({
+            duration: durationEl ? durationEl.value : "",
+            power: powerEl ? powerEl.value : ""
+        });
+    }
+
+    const payload = {
+        rows,
+        whatIfDuration: (document.getElementById("whatIfDuration") || {}).value || "",
+        whatIfPower: (document.getElementById("whatIfPower") || {}).value || ""
+    };
+
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+        // Ignore storage failures (private mode or blocked storage).
+    }
+}
 
 function parseDurationSeconds(input) {
     const raw = (input || "").trim();
@@ -39,7 +80,18 @@ function formatSigned(value, digits = 1) {
     return (value > 0 ? "+" : "") + rounded;
 }
 
-function createRows() {
+function bindRecalcOnCommit(inputEl) {
+    inputEl.addEventListener("input", saveInputs);
+    inputEl.addEventListener("change", calculate);
+    inputEl.addEventListener("keydown", event => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            calculate();
+        }
+    });
+}
+
+function createRows(storedRows = null) {
     const dataRows = document.getElementById("dataRows");
     const defaults = [
         { duration: "300", power: "370" },
@@ -52,12 +104,18 @@ function createRows() {
     for (let i = 0; i < 4; i += 1) {
         const row = document.createElement("div");
         row.className = "grid data-row";
+        const rowValues = (storedRows && storedRows[i]) || defaults[i];
         row.innerHTML = `
             <div class="index-pill">${i + 1}</div>
-            <input id="duration-${i}" type="text" inputmode="numeric" placeholder="e.g. 300 or 5:00" value="${defaults[i].duration}">
-            <input id="power-${i}" type="number" min="1" step="1" placeholder="Watts" value="${defaults[i].power}">
+            <input id="duration-${i}" type="text" inputmode="numeric" placeholder="e.g. 300 or 5:00" value="${rowValues.duration || ""}">
+            <input id="power-${i}" type="number" min="1" step="1" placeholder="Watts" value="${rowValues.power || ""}">
         `;
         dataRows.appendChild(row);
+
+        const durationEl = row.querySelector(`#duration-${i}`);
+        const powerEl = row.querySelector(`#power-${i}`);
+        bindRecalcOnCommit(durationEl);
+        bindRecalcOnCommit(powerEl);
     }
 }
 
@@ -95,6 +153,61 @@ function collectDataPoints() {
     }
 
     return { points };
+}
+
+function collectWhatIfPoint() {
+    const rawDuration = document.getElementById("whatIfDuration").value.trim();
+    const rawPower = document.getElementById("whatIfPower").value.trim();
+
+    if (!rawDuration && !rawPower) {
+        return { hasWhatIf: false };
+    }
+
+    if (!rawDuration || !rawPower) {
+        return { error: "To run What-if, enter both duration and power." };
+    }
+
+    const duration = parseDurationSeconds(rawDuration);
+    const power = Number(rawPower);
+
+    if (!duration || !Number.isFinite(power) || power <= 0) {
+        return { error: "What-if values are invalid. Duration must be seconds or mm:ss, and power must be > 0." };
+    }
+
+    return {
+        hasWhatIf: true,
+        point: {
+            index: "W",
+            duration,
+            power,
+            work: duration * power,
+            isWhatIfPoint: true
+        }
+    };
+}
+
+function buildWhatIfPoints(basePoints, whatIfPoint) {
+    const merged = basePoints.map(p => ({ ...p }));
+    const existingIndex = merged.findIndex(p => p.duration === whatIfPoint.duration);
+
+    if (existingIndex >= 0) {
+        merged[existingIndex] = {
+            ...merged[existingIndex],
+            power: whatIfPoint.power,
+            work: whatIfPoint.duration * whatIfPoint.power,
+            isWhatIfPoint: true
+        };
+        return {
+            points: merged,
+            summary: `What-if point replaced duration ${formatDuration(whatIfPoint.duration)} with ${whatIfPoint.power.toFixed(1)} W.`
+        };
+    }
+
+    merged.push(whatIfPoint);
+    return {
+        points: merged,
+        summary: `What-if point added at ${formatDuration(whatIfPoint.duration)} and ${whatIfPoint.power.toFixed(1)} W.`
+    };
 }
 
 function runRegression(points) {
@@ -138,9 +251,13 @@ function runRegression(points) {
     return { cp, wPrime, r, modeled };
 }
 
-function renderChart(points, cp, wPrime) {
+function renderChart(points, cp, wPrime, whatIfRegression = null) {
     const sortedPoints = [...points].sort((a, b) => a.duration - b.duration);
-    const maxX = sortedPoints[sortedPoints.length - 1].duration;
+    const baseMaxX = sortedPoints[sortedPoints.length - 1].duration;
+    const whatIfMaxX = whatIfRegression
+        ? Math.max(...whatIfRegression.points.map(p => p.duration))
+        : baseMaxX;
+    const maxX = Math.max(baseMaxX, whatIfMaxX);
 
     const lineData = [
         { x: 0, y: wPrime },
@@ -148,6 +265,59 @@ function renderChart(points, cp, wPrime) {
     ];
 
     const scatterData = sortedPoints.map(p => ({ x: p.duration, y: p.work }));
+
+    const datasets = [
+        {
+            label: "Actual Work",
+            data: scatterData,
+            pointRadius: 6,
+            pointHoverRadius: 7,
+            backgroundColor: "#58d3ff"
+        },
+        {
+            label: "Regression Line",
+            type: "line",
+            data: lineData,
+            borderColor: "#f5a623",
+            borderWidth: 3,
+            pointRadius: 0,
+            tension: 0
+        }
+    ];
+
+    if (whatIfRegression) {
+        const whatIfScatter = whatIfRegression.points
+            .slice()
+            .sort((a, b) => a.duration - b.duration)
+            .map(p => ({ x: p.duration, y: p.work }));
+        const whatIfLine = [
+            { x: 0, y: whatIfRegression.wPrime },
+            { x: maxX, y: whatIfRegression.cp * maxX + whatIfRegression.wPrime }
+        ];
+
+        datasets.push(
+            {
+                label: "What-if Work",
+                data: whatIfScatter,
+                pointRadius: 5,
+                pointHoverRadius: 7,
+                pointBackgroundColor: "#101728",
+                pointBorderColor: "#43d587",
+                pointBorderWidth: 2,
+                showLine: false
+            },
+            {
+                label: "What-if Regression Line",
+                type: "line",
+                data: whatIfLine,
+                borderColor: "#43d587",
+                borderWidth: 2,
+                borderDash: [8, 6],
+                pointRadius: 0,
+                tension: 0
+            }
+        );
+    }
 
     if (regressionChart) {
         regressionChart.destroy();
@@ -157,24 +327,7 @@ function renderChart(points, cp, wPrime) {
     regressionChart = new Chart(ctx, {
         type: "scatter",
         data: {
-            datasets: [
-                {
-                    label: "Actual Work",
-                    data: scatterData,
-                    pointRadius: 6,
-                    pointHoverRadius: 7,
-                    backgroundColor: "#58d3ff"
-                },
-                {
-                    label: "Regression Line",
-                    type: "line",
-                    data: lineData,
-                    borderColor: "#f5a623",
-                    borderWidth: 3,
-                    pointRadius: 0,
-                    tension: 0
-                }
-            ]
+            datasets
         },
         options: {
             responsive: true,
@@ -228,10 +381,18 @@ function renderChart(points, cp, wPrime) {
     });
 }
 
-function renderExpectedPowerChart(points, cp, wPrime) {
+function renderExpectedPowerChart(points, cp, wPrime, whatIfRegression = null) {
     const sortedPoints = [...points].sort((a, b) => a.duration - b.duration);
-    const minX = sortedPoints[0].duration;
-    const maxX = sortedPoints[sortedPoints.length - 1].duration;
+    const baseMinX = sortedPoints[0].duration;
+    const baseMaxX = sortedPoints[sortedPoints.length - 1].duration;
+    const whatIfMinX = whatIfRegression
+        ? Math.min(...whatIfRegression.points.map(p => p.duration))
+        : baseMinX;
+    const whatIfMaxX = whatIfRegression
+        ? Math.max(...whatIfRegression.points.map(p => p.duration))
+        : baseMaxX;
+    const minX = Math.min(baseMinX, whatIfMinX);
+    const maxX = Math.max(baseMaxX, whatIfMaxX);
 
     const padding = Math.max(1, (maxX - minX) * 0.05);
     const start = Math.max(1, minX - padding);
@@ -246,6 +407,61 @@ function renderExpectedPowerChart(points, cp, wPrime) {
 
     const actualData = sortedPoints.map(p => ({ x: p.duration, y: p.power }));
 
+    const datasets = [
+        {
+            label: "Actual Power",
+            data: actualData,
+            pointRadius: 6,
+            pointHoverRadius: 7,
+            backgroundColor: "#58d3ff"
+        },
+        {
+            label: "Expected Power Curve",
+            type: "line",
+            data: curveData,
+            borderColor: "#43d587",
+            borderWidth: 3,
+            pointRadius: 0,
+            tension: 0.2
+        }
+    ];
+
+    if (whatIfRegression) {
+        const whatIfActual = whatIfRegression.points
+            .slice()
+            .sort((a, b) => a.duration - b.duration)
+            .map(p => ({ x: p.duration, y: p.power }));
+
+        const whatIfCurve = [];
+        for (let i = 0; i <= steps; i += 1) {
+            const t = start + ((end - start) * (i / steps));
+            whatIfCurve.push({ x: t, y: whatIfRegression.cp + (whatIfRegression.wPrime / t) });
+        }
+
+        datasets.push(
+            {
+                label: "What-if Power",
+                data: whatIfActual,
+                pointRadius: 5,
+                pointHoverRadius: 7,
+                pointBackgroundColor: "#101728",
+                pointBorderColor: "#f5a623",
+                pointBorderWidth: 2,
+                showLine: false
+            },
+            {
+                label: "What-if Expected Curve",
+                type: "line",
+                data: whatIfCurve,
+                borderColor: "#f5a623",
+                borderWidth: 2,
+                borderDash: [8, 6],
+                pointRadius: 0,
+                tension: 0.2
+            }
+        );
+    }
+
     if (expectedPowerChart) {
         expectedPowerChart.destroy();
     }
@@ -254,24 +470,7 @@ function renderExpectedPowerChart(points, cp, wPrime) {
     expectedPowerChart = new Chart(ctx, {
         type: "scatter",
         data: {
-            datasets: [
-                {
-                    label: "Actual Power",
-                    data: actualData,
-                    pointRadius: 6,
-                    pointHoverRadius: 7,
-                    backgroundColor: "#58d3ff"
-                },
-                {
-                    label: "Expected Power Curve",
-                    type: "line",
-                    data: curveData,
-                    borderColor: "#43d587",
-                    borderWidth: 3,
-                    pointRadius: 0,
-                    tension: 0.2
-                }
-            ]
+            datasets
         },
         options: {
             responsive: true,
@@ -324,8 +523,8 @@ function renderExpectedPowerChart(points, cp, wPrime) {
     });
 }
 
-function renderTable(modeled) {
-    const tbody = document.getElementById("residualTableBody");
+function renderTable(modeled, tbodyId = "residualTableBody") {
+    const tbody = document.getElementById(tbodyId);
     tbody.innerHTML = "";
 
     modeled
@@ -352,6 +551,7 @@ function setMessage(text, type = "") {
 }
 
 function calculate() {
+    saveInputs();
     const { points, error } = collectDataPoints();
     if (error) {
         setMessage(error, "error");
@@ -370,18 +570,78 @@ function calculate() {
     document.getElementById("wPrimeValue").textContent = `${(regression.wPrime / 1000).toFixed(2)} kJ (${regression.wPrime.toFixed(0)} J)`;
     document.getElementById("rValue").textContent = regression.r.toFixed(4);
 
-    renderChart(points, regression.cp, regression.wPrime);
-    renderExpectedPowerChart(points, regression.cp, regression.wPrime);
+    const whatIfInput = collectWhatIfPoint();
+    const whatIfInputError = whatIfInput.error || "";
+
+    let whatIfRegression = null;
+    let whatIfSummary = "";
+
+    if (whatIfInput.hasWhatIf && !whatIfInputError) {
+        const whatIfBuild = buildWhatIfPoints(points, whatIfInput.point);
+        whatIfSummary = whatIfBuild.summary;
+        const recalculated = runRegression(whatIfBuild.points);
+        if (recalculated.error) {
+            // Keep base regression visible; only disable what-if overlays.
+            whatIfSummary = "";
+            whatIfRegression = null;
+        } else {
+            whatIfRegression = {
+                ...recalculated,
+                points: whatIfBuild.points
+            };
+        }
+    }
+
+    renderChart(points, regression.cp, regression.wPrime, whatIfRegression);
+    renderExpectedPowerChart(points, regression.cp, regression.wPrime, whatIfRegression);
     renderTable(regression.modeled);
 
+    const whatIfMetrics = document.getElementById("whatIfMetrics");
+    const whatIfSummaryEl = document.getElementById("whatIfSummary");
+    const whatIfTableCard = document.getElementById("whatIfTableCard");
+
+    if (whatIfRegression) {
+        document.getElementById("whatIfCpValue").textContent = `${whatIfRegression.cp.toFixed(1)} W`;
+        document.getElementById("whatIfWPrimeValue").textContent = `${(whatIfRegression.wPrime / 1000).toFixed(2)} kJ (${whatIfRegression.wPrime.toFixed(0)} J)`;
+        document.getElementById("whatIfRValue").textContent = whatIfRegression.r.toFixed(4);
+        whatIfSummaryEl.textContent = `${whatIfSummary} Dashed lines show the What-if model.`;
+        whatIfSummaryEl.classList.remove("hidden");
+        whatIfMetrics.classList.remove("hidden");
+        whatIfTableCard.classList.remove("hidden");
+        renderTable(whatIfRegression.modeled, "whatIfResidualTableBody");
+    } else {
+        whatIfSummaryEl.textContent = "";
+        whatIfSummaryEl.classList.add("hidden");
+        whatIfMetrics.classList.add("hidden");
+        whatIfTableCard.classList.add("hidden");
+    }
+
     document.getElementById("results").classList.remove("hidden");
-    setMessage(`Regression calculated from ${points.length} data point(s).`, "success");
+
+    if (whatIfInputError) {
+        setMessage(`Regression calculated from ${points.length} data point(s). What-if ignored: ${whatIfInputError}`, "success");
+        return;
+    }
+
+    setMessage(
+        whatIfRegression
+            ? `Regression calculated from ${points.length} base point(s) plus What-if scenario.`
+            : `Regression calculated from ${points.length} data point(s).`,
+        "success"
+    );
 }
 
 function resetForm() {
     createRows();
+    document.getElementById("whatIfDuration").value = "";
+    document.getElementById("whatIfPower").value = "";
+    saveInputs();
     setMessage("");
     document.getElementById("results").classList.add("hidden");
+    document.getElementById("whatIfSummary").textContent = "";
+    document.getElementById("whatIfSummary").classList.add("hidden");
+    document.getElementById("whatIfMetrics").classList.add("hidden");
+    document.getElementById("whatIfTableCard").classList.add("hidden");
     if (regressionChart) {
         regressionChart.destroy();
         regressionChart = null;
@@ -393,8 +653,18 @@ function resetForm() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-    createRows();
+    const stored = loadStoredInputs();
+    createRows(stored && Array.isArray(stored.rows) ? stored.rows : null);
     document.getElementById("calculateBtn").addEventListener("click", calculate);
     document.getElementById("resetBtn").addEventListener("click", resetForm);
+
+    bindRecalcOnCommit(document.getElementById("whatIfDuration"));
+    bindRecalcOnCommit(document.getElementById("whatIfPower"));
+
+    if (stored) {
+        document.getElementById("whatIfDuration").value = stored.whatIfDuration || "";
+        document.getElementById("whatIfPower").value = stored.whatIfPower || "";
+    }
+
     calculate();
 });

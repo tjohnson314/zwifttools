@@ -116,11 +116,25 @@ h1 {
     margin-bottom: 8px;
 }
 
+.what-if-card {
+    border-color: rgba(67, 213, 135, 0.45);
+}
+
+.what-if-grid {
+    margin-top: 8px;
+}
+
+.what-if-grid > div {
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
 .data-row {
     margin-bottom: 10px;
 }
 
-.data-row input {
+.data-row input,
+.what-if-grid input {
     width: 100%;
     padding: 10px 12px;
     border-radius: 10px;
@@ -130,7 +144,8 @@ h1 {
     font-size: 0.96rem;
 }
 
-.data-row input:focus {
+.data-row input:focus,
+.what-if-grid input:focus {
     outline: 2px solid rgba(88, 211, 255, 0.35);
     border-color: transparent;
 }
