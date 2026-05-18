@@ -104,9 +104,74 @@ body {
     clip-path: var(--ghost-shape);
 }
 
+#map .entity.point.pacman-ghost.frightened::after {
+    inset: 0.05em;
+    width: auto;
+    height: auto;
+    background:
+        radial-gradient(circle at 38% 44%, #fff 0 5.6%, transparent 6.6%) no-repeat,
+        radial-gradient(circle at 62% 44%, #fff 0 5.6%, transparent 6.6%) no-repeat,
+        radial-gradient(circle at 38% 44%, #fff 0 11%, transparent 12%) no-repeat,
+        radial-gradient(circle at 62% 44%, #fff 0 11%, transparent 12%) no-repeat,
+        linear-gradient(#1a3a8a 0 0) no-repeat;
+    clip-path: var(--ghost-shape);
+}
+
+#map .entity.point.pacman-ghost.eaten {
+    display: none;
+}
+
 #map .entity.point.pacman-pellet {
     font-size: 0.28em;
     --border-color: rgba(0,0,0,0.5);
+}
+
+.power-bar-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding: 6px 10px;
+    background: rgba(14, 19, 26, 0.92);
+    border: 1px solid rgba(143, 169, 196, 0.25);
+    border-radius: 9px;
+}
+
+.power-bar-track {
+    flex: 1;
+    height: 14px;
+    background: rgba(30, 50, 80, 0.6);
+    border-radius: 7px;
+    overflow: hidden;
+    border: 1px solid rgba(93, 184, 255, 0.3);
+}
+
+.power-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #1a6dd4 0%, #5db8ff 100%);
+    border-radius: 7px;
+    transition: width 0.3s ease;
+}
+
+.power-bar-fill.active {
+    background: linear-gradient(90deg, #2196f3 0%, #64b5f6 50%, #2196f3 100%);
+    background-size: 200% 100%;
+    animation: power-bar-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes power-bar-pulse {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+}
+
+.power-bar-label {
+    color: #5db8ff;
+    font-size: 11px;
+    font-weight: 600;
+    min-width: 90px;
+    text-align: right;
+    white-space: nowrap;
 }
 
 .message {

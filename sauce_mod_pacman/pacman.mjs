@@ -23,6 +23,13 @@ const GHOST_MIN_HOP_CONSUME_M = 0.35;
 const GHOST_SPAWN_MIN_DIST_M = 500;
 const CATCH_GRACE_PERIOD_MS = 12000;
 const HUNTER_DEBUG_MAX_LINES = 18;
+const POWER_WINDOW_SECONDS = 30;
+const FRIGHTENED_DURATION_MS = 30000;
+const GHOST_RESPAWN_DELAY_MS = 30000;
+const POWER_THRESHOLD_BASE = 500;
+const POWER_THRESHOLD_DIFFICULTY_STEP = 100;
+const POWER_THRESHOLD_ESCALATION = 100;
+const GHOST_EAT_BASE_SCORE = 100;
 
 const DIFFICULTY_PRESETS = {
     easy: {downhillRel: 0.90, flatRel: 0.95, uphillRel: 0.98},
@@ -102,6 +109,13 @@ const game = {
     difficulty: 'normal',
     catchGraceUntilTs: 0,
     componentCount: 0,
+    // Power pellet / frightened mode state
+    powerSamples: [],            // [{ts, watts}] rolling window
+    frightenedUntilTs: 0,        // timestamp when frightened mode ends
+    frightenedActive: false,
+    frightenedActivationCount: 0, // how many times frightened has been triggered
+    ghostsEatenThisSession: 0,   // for escalating ghost-eat score
+    ghostRespawnTimers: [],      // [{ghostId, respawnAtTs}]
 };
 
 const seenPelletRoads = new Set();
@@ -121,6 +135,9 @@ let ghostChipEls = [];
 let ghostNameEls = [];
 let hunterDebugLogEl;
 let hunterDebugLines = [];
+let powerBarContainerEl;
+let powerBarFillEl;
+let powerBarLabelEl;
 let simInterval;
 let drawQueued = false;
 
@@ -180,6 +197,9 @@ export async function main() {
     ghostChipEls = [1, 2, 3, 4].map(i => document.getElementById(`ghost-chip-${i}`));
     ghostNameEls = [1, 2, 3, 4].map(i => document.getElementById(`ghost-name-${i}`));
     hunterDebugLogEl = document.getElementById('hunter-debug-log');
+    powerBarContainerEl = document.getElementById('power-bar-container');
+    powerBarFillEl = document.getElementById('power-bar-fill');
+    powerBarLabelEl = document.getElementById('power-bar-label');
     const hunterDebugCopyBtn = document.getElementById('hunter-debug-copy-btn');
     if (hunterDebugCopyBtn) {
         hunterDebugCopyBtn.addEventListener('click', () => {
@@ -297,6 +317,15 @@ function onSelfState(data) {
     const prevPlayerPos = game.player.graphPos;
     game.player.state = state;
     game.player.graphPos = pos;
+
+    // Track power samples for frightened mode activation
+    const watts = Number.isFinite(state.power) ? state.power : 0;
+    game.powerSamples.push({ts: now, watts});
+    const cutoff = now - POWER_WINDOW_SECONDS * 1000;
+    while (game.powerSamples.length && game.powerSamples[0].ts < cutoff) {
+        game.powerSamples.shift();
+    }
+
     if (prevPlayerPos && prevPlayerPos.roadId === pos.roadId) {
         const delta = pos.offsetM - prevPlayerPos.offsetM;
         if (Math.abs(delta) > 0.5) {
@@ -852,6 +881,9 @@ function initGhosts() {
         animToPos: null,
         animStartTs: 0,
         animDurationMs: 0,
+        eaten: false,
+        eatenAtTs: null,
+        respawnAtTs: null,
     }));
 }
 
@@ -1395,7 +1427,12 @@ function stepSimulation() {
     }
 
     const ghostsStartMs = performance.now();
+    checkFrightenedActivation(now);
+    checkGhostRespawns(now);
     for (const ghost of game.ghosts) {
+        if (ghost.eaten) {
+            continue;
+        }
         const beforePos = ghost.roadId ? {roadId: ghost.roadId, offsetM: ghost.offsetM} : null;
         stepGhost(ghost, dt, playerPathCache, playerNodeField);
         if (beforePos && ghost.roadId) {
@@ -1426,11 +1463,27 @@ function stepSimulation() {
         const collisionAdjustedDistanceM = Math.min(adjustedDistanceM, sweptAdjustedDistanceM);
         ghost.lastAdjustedDistanceToPlayer = collisionAdjustedDistanceM;
         if (now >= game.catchGraceUntilTs && Number.isFinite(collisionAdjustedDistanceM) && collisionAdjustedDistanceM <= 0) {
-            game.lives -= 1;
-            game.phase = 'respawning';
-            game.respawnDeadlineTs = now + 10000;
-            showMessage('Caught by ghost. Safe respawn in 10s...', true);
-            break;
+            if (game.frightenedActive) {
+                // Eat the ghost instead of being caught
+                ghost.eaten = true;
+                ghost.eatenAtTs = now;
+                ghost.respawnAtTs = now + GHOST_RESPAWN_DELAY_MS;
+                const points = GHOST_EAT_BASE_SCORE * Math.pow(2, game.ghostsEatenThisSession);
+                game.score += points;
+                game.ghostsEatenThisSession++;
+                const ent = ghostEnts.get(ghost.id);
+                if (ent) {
+                    ent.el.classList.add('eaten');
+                    ent.el.classList.remove('frightened');
+                }
+                showMessage(`👻 Ghost eaten! +${points} points!`, false);
+            } else {
+                game.lives -= 1;
+                game.phase = 'respawning';
+                game.respawnDeadlineTs = now + 10000;
+                showMessage('Caught by ghost. Safe respawn in 10s...', true);
+                break;
+            }
         }
     }
     profile.ghostsMs = performance.now() - ghostsStartMs;
@@ -1860,10 +1913,16 @@ function chooseGhostEdge(ghost, nodeId, edges, playerPathCache=null, avoidNodeId
             offsetM: dest.offsetM,
         };
         const dToPlayerCached = shortestPathInfoFromCache(playerPathCache, candidate).distanceM;
-        const congestion = game.ghosts.filter(g => g !== ghost && g.roadId === dest.roadId).length;
+        const congestion = game.ghosts.filter(g => g !== ghost && !g.eaten && g.roadId === dest.roadId).length;
         let score;
         let pursueFallbackScore = dToPlayerCached;
-        if (ghost.behavior === 'pursue') {
+
+        if (game.frightenedActive) {
+            // Frightened mode: prefer edges that maximize distance from player
+            const dFromNextNode = playerNodeField?.dist ? playerNodeField.dist[edge.to] : 0;
+            score = -(edge.lengthM + dFromNextNode);
+            pursueFallbackScore = score;
+        } else if (ghost.behavior === 'pursue') {
             const dFromNextNode = playerNodeField?.dist ? playerNodeField.dist[edge.to] : Infinity;
             score = edge.lengthM + dFromNextNode;
             pursueFallbackScore = score;
@@ -1890,6 +1949,13 @@ function chooseGhostEdge(ghost, nodeId, edges, playerPathCache=null, avoidNodeId
     }
 
     let sortedCandidates = candidates;
+
+    // In frightened mode, all ghosts flee - just pick the lowest score (most negative = farthest)
+    if (game.frightenedActive) {
+        sortedCandidates = candidates.slice().sort((a, b) => (a.score - b.score) || (a.edge.to - b.edge.to));
+        return sortedCandidates[0].edge;
+    }
+
     if (ghost.behavior === 'pursue' && Number.isFinite(currentNodeDistToPlayer)) {
         const nonIncreasing = candidates.filter(c => c.score <= currentNodeDistToPlayer + 1e-6);
         if (nonIncreasing.length) {
@@ -2031,6 +2097,121 @@ function computeClosestPelletHint(playerPathCache=null) {
 }
 
 
+function getDifficultyIndex() {
+    const order = ['easy', 'normal', 'hard', 'pro', 'max'];
+    const idx = order.indexOf(game.difficulty);
+    return idx >= 0 ? idx : 1;
+}
+
+
+function getCurrentPowerThreshold() {
+    const diffIdx = getDifficultyIndex();
+    return POWER_THRESHOLD_BASE
+        + diffIdx * POWER_THRESHOLD_DIFFICULTY_STEP
+        + game.frightenedActivationCount * POWER_THRESHOLD_ESCALATION;
+}
+
+
+function getAveragePower30s() {
+    if (!game.powerSamples.length) {
+        return 0;
+    }
+    const sum = game.powerSamples.reduce((acc, s) => acc + s.watts, 0);
+    return sum / game.powerSamples.length;
+}
+
+
+function checkFrightenedActivation(now) {
+    if (game.frightenedActive) {
+        if (now >= game.frightenedUntilTs) {
+            game.frightenedActive = false;
+            // Restore ghosts to normal appearance
+            for (const ghost of game.ghosts) {
+                const ent = ghostEnts.get(ghost.id);
+                if (ent) {
+                    ent.el.classList.remove('frightened');
+                }
+            }
+        }
+        return;
+    }
+    const avgPower = getAveragePower30s();
+    const threshold = getCurrentPowerThreshold();
+    if (avgPower >= threshold && game.powerSamples.length >= 3) {
+        game.frightenedActive = true;
+        game.frightenedUntilTs = now + FRIGHTENED_DURATION_MS;
+        game.frightenedActivationCount++;
+        game.ghostsEatenThisSession = 0;
+        // Mark ghosts as frightened visually
+        for (const ghost of game.ghosts) {
+            if (ghost.eaten) {
+                continue;
+            }
+            const ent = ghostEnts.get(ghost.id);
+            if (ent) {
+                ent.el.classList.add('frightened');
+            }
+        }
+        showMessage('⚡ POWER SURGE! Ghosts are frightened!', false);
+    }
+}
+
+
+function checkGhostRespawns(now) {
+    for (const ghost of game.ghosts) {
+        if (!ghost.eaten) {
+            continue;
+        }
+        if (now >= ghost.respawnAtTs) {
+            ghost.eaten = false;
+            ghost.eatenAtTs = null;
+            ghost.respawnAtTs = null;
+            // Respawn at a safe distance from player
+            const spawn = findSpawnForGhost(game.ghosts.indexOf(ghost));
+            ghost.roadId = spawn.roadId;
+            ghost.offsetM = spawn.offsetM;
+            ghost.direction = spawn.direction;
+            ghost.lastNodeId = null;
+            ghost.lastDirectionChangeTs = now;
+            ghost.recentNodeIds = [];
+            initGhostGraphState(ghost);
+            snapGhostAnimation(ghost);
+            // Restore visual
+            const ent = ghostEnts.get(ghost.id);
+            if (ent) {
+                ent.el.classList.remove('eaten');
+                if (game.frightenedActive) {
+                    ent.el.classList.add('frightened');
+                }
+            }
+        }
+    }
+}
+
+
+function updatePowerBar(now) {
+    if (!powerBarFillEl || !powerBarLabelEl) {
+        return;
+    }
+    const threshold = getCurrentPowerThreshold();
+
+    if (game.frightenedActive) {
+        const remainMs = Math.max(0, game.frightenedUntilTs - now);
+        const remainSec = Math.ceil(remainMs / 1000);
+        const pct = (remainMs / FRIGHTENED_DURATION_MS) * 100;
+        powerBarFillEl.style.width = `${pct}%`;
+        powerBarFillEl.classList.add('active');
+        powerBarLabelEl.textContent = `⚡ ${remainSec}s`;
+    } else {
+        const avgPower = getAveragePower30s();
+        const pct = Math.min(100, (avgPower / threshold) * 100);
+        powerBarFillEl.style.width = `${pct}%`;
+        powerBarFillEl.classList.remove('active');
+        powerBarLabelEl.textContent = `${Math.round(avgPower)} / ${threshold}W`;
+    }
+}
+
+
 function updateHud() {
     livesEl.textContent = String(Math.max(0, game.lives));
     scoreEl.textContent = String(game.score);
@@ -2041,18 +2222,23 @@ function updateHud() {
             continue;
         }
         const ghost = game.ghosts[i];
-        const d = ghost.lastAdjustedDistanceToPlayer;
-        el.textContent = Number.isFinite(d) ? `${Math.max(0, Math.round(d))}m` : '-';
+        if (ghost.eaten) {
+            const respawnSec = Math.max(0, Math.ceil((ghost.respawnAtTs - Date.now()) / 1000));
+            el.textContent = `💀 ${respawnSec}s`;
+        } else {
+            const d = ghost.lastAdjustedDistanceToPlayer;
+            el.textContent = Number.isFinite(d) ? `${Math.max(0, Math.round(d))}m` : '-';
+        }
         if (ghostGradeEls[i]) {
-            const grade = ghost.roadId ? roadGradeAtOffset(ghost.roadId, ghost.offsetM) : null;
+            const grade = ghost.roadId && !ghost.eaten ? roadGradeAtOffset(ghost.roadId, ghost.offsetM) : null;
             ghostGradeEls[i].textContent = grade != null ? `${(grade * 100).toFixed(1)}%` : '-';
         }
         if (ghostSpeedEls[i]) {
-            const speedKmh = ghost.roadId ? ghostEffectiveSpeedMps(ghost) * 3.6 : null;
+            const speedKmh = ghost.roadId && !ghost.eaten ? ghostEffectiveSpeedMps(ghost) * 3.6 : null;
             ghostSpeedEls[i].textContent = speedKmh != null ? `${speedKmh.toFixed(1)}` : '-';
         }
         if (ghostChipEls[i]) {
-            ghostChipEls[i].style.backgroundColor = ghost.color;
+            ghostChipEls[i].style.backgroundColor = ghost.eaten ? '#444' : ghost.color;
         }
         if (ghostNameEls[i]) {
             ghostNameEls[i].textContent = ghost.name || `${i + 1}`;
@@ -2062,6 +2248,7 @@ function updateHud() {
         const sec = Math.ceil((game.catchGraceUntilTs - Date.now()) / 1000);
         statusEl.textContent = `Running (grace ${sec}s)`;
     }
+    updatePowerBar(Date.now());
 }
 
 
@@ -2137,7 +2324,7 @@ function renderGhostEntities() {
     let animating = false;
     const now = Date.now();
     for (const ghost of game.ghosts) {
-        if (!ghost.roadId) {
+        if (!ghost.roadId || ghost.eaten) {
             continue;
         }
         let p = null;
@@ -2171,8 +2358,13 @@ function renderGhostEntities() {
             ghostEnts.set(ghost.id, ent);
         }
         ent.setPosition(p);
-        ent.el.style.setProperty('--fill', ghost.color);
-        ent.el.style.setProperty('--border-color', 'rgba(0,0,0,0.7)');
+        if (game.frightenedActive) {
+            ent.el.style.setProperty('--fill', '#1a3a8a');
+            ent.el.style.setProperty('--border-color', '#5db8ff');
+        } else {
+            ent.el.style.setProperty('--fill', ghost.color);
+            ent.el.style.setProperty('--border-color', 'rgba(0,0,0,0.7)');
+        }
     }
     return animating;
 }

@@ -155,6 +155,11 @@ GameState
 - closestPelletHint: {distanceM, direction} | null
 - difficulty: easy | normal | hard | pro
 - respawnDeadlineTs: ms | null
+- powerSamples: [{ts, watts}]
+- frightenedActive: boolean
+- frightenedUntilTs: ms
+- frightenedActivationCount: number
+- ghostsEatenThisSession: number
 ```
 
 ```text
@@ -168,6 +173,9 @@ GhostState
 - spreadPenaltyM: number
 - targetNodeId: number | null
 - lastPathDistanceToPlayer: number
+- eaten: boolean
+- eatenAtTs: ms | null
+- respawnAtTs: ms | null
 ```
 
 ## Performance notes
@@ -176,9 +184,55 @@ GhostState
 - Simulation tick runs at 10 Hz.
 - Run simulation at fixed tick (e.g. 10 Hz), independent of render FPS.
 
+## Power Pellet / Frightened Mode
+
+### Activation
+
+- Track player power (watts) in a rolling 30-second window.
+- Compute 30-second rolling average power each state update.
+- When average power reaches the activation threshold, trigger frightened mode for 30 seconds.
+- Each subsequent activation requires 100W more than the previous one.
+
+### Difficulty scaling
+
+| Difficulty | Base threshold |
+|------------|---------------|
+| Easy       | 500W          |
+| Normal     | 600W          |
+| Hard       | 700W          |
+| Pro        | 800W          |
+| Max        | 900W          |
+
+Formula: `threshold = 500 + difficultyIndex * 100 + activationCount * 100`
+
+### Ghost behavior when frightened
+
+- All ghosts reverse their direction preference at junctions.
+- Scoring logic inverts: ghosts prefer edges that maximize distance from the player.
+- Ghosts turn dark blue and gain a distinct visual appearance.
+
+### Eating ghosts
+
+- During frightened mode, collision with a ghost eats it instead of catching the player.
+- First ghost eaten = 100 points (10× pellet value).
+- Each subsequent ghost eaten during the same frightened activation doubles: 200, 400, 800.
+- The `ghostsEatenThisSession` counter resets on each new frightened activation.
+
+### Ghost respawn after being eaten
+
+- Eaten ghosts disappear for 30 seconds.
+- After 30 seconds they respawn at a safe distance from the player.
+- If frightened mode is still active when they respawn, they re-enter frightened state.
+
+### UI: Power Bar
+
+- Blue progress bar displayed above the message area.
+- During charging: shows `{avgPower} / {threshold}W` and fills proportionally.
+- During frightened: bar shows remaining time as a countdown, pulsing animation.
+- Bar fill uses CSS transition for smooth movement.
+
 ## Remaining work (not blockers for first playtest)
 
-- Power items and frightened/scatter ghost modes.
 - `Level clear` and next-level flow.
 - Restart button/action on game over.
 - Pathfinding optimization (priority queue / cache) for larger worlds and denser pellets.
