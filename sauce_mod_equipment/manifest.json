@@ -1,0 +1,18 @@
+{
+    "manifest_version": 1,
+    "name": "Equipment Peek",
+    "description": "Shows the raw Zwift bike frame and wheel selection values",
+    "version": "0.1.0",
+    "author": "zwifttools",
+    "windows": [{
+        "id": "equipment-peek",
+        "file": "equipment.html",
+        "name": "Equipment Peek",
+        "description": "Raw bike frame and wheel values from Zwift",
+        "overlay": true,
+        "default_bounds": {
+            "width": 320,
+            "height": 160
+        }
+    }]
+}

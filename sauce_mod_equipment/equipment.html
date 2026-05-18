@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html class="transparent-bg" tabindex="0" data-settings-key="equipment-peek-settings-v1">
+    <head>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+        <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';"/>
+
+        <title>Equipment Peek - Sauce for Zwift™</title>
+
+        <script src="/pages/src/preloads.js"></script>
+
+        <link id="favicon" rel="shortcut icon" href="/pages/images/favicon.png"/>
+        <link rel="stylesheet" href="/pages/css/common.css"/>
+        <link rel="stylesheet" href="equipment.css"/>
+
+        <script type="module">
+            import {main} from './equipment.mjs';
+            main();
+        </script>
+    </head>
+    <body>
+        <div id="titlebar" class="always-visible">
+            <header>
+                <div class="title">Equipment Peek</div>
+                <div class="filler"></div>
+                <div class="buttons">
+                    <div title="Minimize" class="button minimize electron-only"><ms>minimize</ms></div>
+                    <div title="Close" class="button close electron-only"><ms>close</ms></div>
+                </div>
+            </header>
+        </div>
+        <div id="content">
+            <div class="panel">
+                <dl class="equipment-list">
+                    <div>
+                        <dt>Frame</dt>
+                        <dd data-field="bikeFrame">—</dd>
+                    </div>
+                    <div>
+                        <dt>Front wheel</dt>
+                        <dd data-field="bikeWheelFront">—</dd>
+                    </div>
+                    <div>
+                        <dt>Rear wheel</dt>
+                        <dd data-field="bikeWheelRear">—</dd>
+                    </div>
+                </dl>
+                <pre id="debug" style="margin-top:10px;font-size:10px;color:#8a95a3;white-space:pre-wrap;word-break:break-word;max-height:200px;overflow:auto;"></pre>
+            </div>
+        </div>
+    </body>
+</html>

@@ -1,0 +1,55 @@
+body {
+    margin: 0;
+    color: #f4f4f4;
+    font-family: 'Noto Sans', sans-serif;
+    background:
+        radial-gradient(circle at top, rgba(96, 125, 139, 0.22), transparent 40%),
+        linear-gradient(180deg, rgba(10, 12, 16, 0.92), rgba(18, 22, 28, 0.98));
+}
+
+#content {
+    padding: 10px 12px 12px;
+}
+
+.panel {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    background: rgba(0, 0, 0, 0.28);
+    backdrop-filter: blur(8px);
+    padding: 14px 14px 12px;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+}
+
+.equipment-list {
+    margin: 0;
+    display: grid;
+    gap: 10px;
+}
+
+.equipment-list > div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+dt {
+    margin: 0;
+    color: #9ca7b4;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+dd {
+    margin: 0;
+    font-family: 'Noto Sans Mono', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    color: #f8fbff;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
