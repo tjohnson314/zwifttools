@@ -140,11 +140,10 @@ function runRegression(points) {
 
 function renderChart(points, cp, wPrime) {
     const sortedPoints = [...points].sort((a, b) => a.duration - b.duration);
-    const minX = sortedPoints[0].duration;
     const maxX = sortedPoints[sortedPoints.length - 1].duration;
 
     const lineData = [
-        { x: minX, y: cp * minX + wPrime },
+        { x: 0, y: wPrime },
         { x: maxX, y: cp * maxX + wPrime }
     ];
 
@@ -198,6 +197,7 @@ function renderChart(points, cp, wPrime) {
             },
             scales: {
                 x: {
+                    min: 0,
                     title: {
                         display: true,
                         text: "Duration (seconds)",
