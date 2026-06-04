@@ -1,0 +1,76 @@
+#content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8em;
+    padding: 0.8em;
+}
+
+.section-title {
+    font-weight: 600;
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgba(255,255,255,0.6);
+    margin-bottom: 0.5em;
+}
+
+.file-row {
+    display: flex;
+    align-items: center;
+    gap: 0.8em;
+}
+
+.file-label {
+    font-size: 0.9em;
+    white-space: nowrap;
+}
+
+input[type="file"] {
+    font-size: 0.85em;
+}
+
+.status {
+    margin-top: 0.5em;
+    padding: 0.35em 0.6em;
+    border-radius: 0.35em;
+    font-size: 0.85em;
+}
+
+.status.idle {
+    background: rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.5);
+}
+
+.status.loading {
+    background: rgba(255,200,0,0.15);
+    color: #ffd060;
+}
+
+.status.ok {
+    background: rgba(0,180,80,0.18);
+    color: #5fefaa;
+}
+
+.status.error {
+    background: rgba(200,30,30,0.2);
+    color: #ff7070;
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 0.3em 1em;
+    font-size: 0.875em;
+}
+
+.info-key {
+    color: rgba(255,255,255,0.55);
+}
+
+.info-val {
+    font-variant-numeric: tabular-nums;
+}
+
+#clear-btn {
+    margin-top: 0.2em;
+}

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html class="transparent-bg" tabindex="0" data-settings-key="sauce-race-pacer-v1">
+    <head>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+        <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';"/>
+        <title>Race Pacer - Sauce for Zwift™</title>
+        <script src="/pages/src/preloads.js"></script>
+        <link rel="stylesheet" href="/pages/css/common.css"/>
+        <link rel="stylesheet" href="display.css"/>
+        <script type="module">
+            import {main} from './display.mjs';
+            main();
+        </script>
+    </head>
+    <body>
+        <div id="titlebar" class="always-visible">
+            <header>
+                <div class="title">Race Pacer</div>
+                <div class="filler"></div>
+                <div class="buttons">
+                    <div title="Minimize" class="button minimize electron-only"><ms>minimize</ms></div>
+                    <div title="Close" class="button close electron-only"><ms>close</ms></div>
+                </div>
+            </header>
+        </div>
+        <div id="content">
+            <!-- File picker — shown when no ride loaded -->
+            <div id="file-panel">
+                <label id="file-label" for="csv-file">
+                    <ms>upload_file</ms> Load reference ride CSV
+                </label>
+                <input type="file" id="csv-file" accept=".csv"/>
+                <div id="file-status"></div>
+            </div>
+            <!-- Gap display — shown when ride is loaded -->
+            <div id="gap-display" style="display:none">
+                <div class="route-name"></div>
+                <div class="gap-time">—</div>
+                <div class="gap-label">waiting…</div>
+                <div class="ref-power"></div>
+                <div class="ref-speed"></div>
+                <div class="ride-name"></div>
+                <div class="bottom-row">
+                    <button id="reset-btn" title="Start timing from your current position">reset</button>
+                    <button id="change-btn" title="Load a different CSV">change</button>
+                </div>
+            </div>
+        </div>
+    </body>
+</html>

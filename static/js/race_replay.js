@@ -998,6 +998,7 @@ function updateRiderTable(positions) {
             <td class="col-hr">${hrStr}</td>
             <td class="col-speed">${spdStr}</td>
             <td class="col-dist">${distStr}</td>
+            <td class="col-export"><button class="btn-export-csv" data-rank="${p.rank}" title="Export Race Pacer CSV" onclick="event.stopPropagation(); exportRiderCSV(${p.rank})">↓</button></td>
         </tr>`;
     }
     tbody.innerHTML = html;
@@ -1287,6 +1288,73 @@ function formatPower(watts, weightKg) {
         return (watts / weightKg).toFixed(1) + ' W/kg';
     }
     return Math.round(watts) + 'W';
+}
+
+// ---------------------------------------------------------------------------
+// Race Pacer CSV Export
+// ---------------------------------------------------------------------------
+
+/**
+ * Export a single rider's cleaned telemetry as a Race Pacer CSV.
+ *
+ * Timestamps are shifted so that t=0 corresponds to the race start
+ * (raceData.min_time), correcting for Zwift's truncation of the first
+ * several seconds of telemetry.
+ */
+function exportRiderCSV(rank) {
+    const rider = riderLookup[rank];
+    if (!rider) return;
+
+    const times = rider.time_sec;
+    const distances = rider.distance_km;
+    const lats = rider.lat;
+    const lngs = rider.lng;
+
+    // Shift timestamps so t=0 is race start
+    const t0 = raceData.min_time;
+
+    // Metadata
+    const courseId = raceData.course_id ?? '';
+    const routeSlug = raceData.route_slug ?? '';
+    const name = `${rider.name} – ${raceData.route_name || raceData.race_id}`;
+    const date = raceData.race_start_time
+        ? raceData.race_start_time.substring(0, 10)
+        : new Date().toISOString().substring(0, 10);
+
+    const lines = [
+        'course_id,route_id,name,date,weight_kg',
+        `${courseId},${routeSlug},${name.replace(/,/g, ' ')},${date},${rider.weight_kg ?? ''}`,
+        'time_sec,distance_m,lat,lng,power_watts,speed_kmh',
+    ];
+
+    for (let i = 0; i < times.length; i++) {
+        const t = (times[i] - t0).toFixed(3);
+        const d = distances[i] != null && !isNaN(distances[i])
+            ? (distances[i] * 1000).toFixed(3)
+            : '';
+        const lat = lats && lats[i] != null && !isNaN(lats[i])
+            ? lats[i].toFixed(6)
+            : '';
+        const lng = lngs && lngs[i] != null && !isNaN(lngs[i])
+            ? lngs[i].toFixed(6)
+            : '';
+        const pwr = rider.power_watts && rider.power_watts[i] != null && !isNaN(rider.power_watts[i])
+            ? Math.round(rider.power_watts[i])
+            : '';
+        const spd = rider.speed_kmh && rider.speed_kmh[i] != null && !isNaN(rider.speed_kmh[i])
+            ? rider.speed_kmh[i].toFixed(2)
+            : '';
+        lines.push(`${t},${d},${lat},${lng},${pwr},${spd}`);
+    }
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const safeName = rider.name.replace(/[^a-z0-9_\-]/gi, '_');
+    a.href = url;
+    a.download = `race_pacer_${safeName}_${date}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
 }
 
 function showStatus(msg, type) {

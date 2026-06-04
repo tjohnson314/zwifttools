@@ -2089,10 +2089,15 @@ def api_race_data(race_id):
     except Exception:
         dev_warnings.append('Could not check YouTube API key')
 
+    from shared.route_lookup import MAP_TO_WORLD_ID
+    course_id = MAP_TO_WORLD_ID.get(world) if world else None
+
     return jsonify({
         'race_id': race_id,
         'route_name': race_data.route_name,
         'route_slug': race_data.route_slug,
+        'world': world,
+        'course_id': course_id,
         'source_activity_id': str(race_data.source_activity_id) if race_data.source_activity_id else None,
         'race_start_time': race_start_time,
         'event_id': event_id,

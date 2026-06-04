@@ -505,6 +505,21 @@ h1 .header-icon {
 .col-hr { width: 50px; font-family: monospace; }
 .col-speed { width: 70px; font-family: monospace; }
 .col-dist { width: 70px; font-family: monospace; }
+.col-export { width: 36px; text-align: center; }
+.btn-export-csv {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 4px;
+    color: #90caf9;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+    padding: 2px 5px;
+}
+.btn-export-csv:hover {
+    background: rgba(144,202,249,0.2);
+    border-color: #90caf9;
+}
 .col-power1m { width: 80px; font-family: monospace; color: #90caf9; }
 .col-np { width: 80px; font-family: monospace; color: #a5d6a7; }
 .col-weight { width: 55px; font-family: monospace; }

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html class="settings-page" tabindex="0" data-settings-key="sauce-race-pacer-v1">
+    <head>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+        <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';"/>
+        <title>Race Pacer Setup - Sauce for Zwift™</title>
+        <script src="/pages/src/preloads.js"></script>
+        <link rel="stylesheet" href="/pages/css/common.css"/>
+        <link rel="stylesheet" href="/pages/css/settings.css"/>
+        <link rel="stylesheet" href="setup.css"/>
+        <script type="module">
+            import {main} from './setup.mjs';
+            main();
+        </script>
+    </head>
+    <body>
+        <div id="titlebar">
+            <header>
+                <div class="title">Race Pacer Setup</div>
+                <div class="filler"></div>
+                <div class="buttons">
+                    <div title="Close" class="button close electron-only"><ms>close</ms></div>
+                </div>
+            </header>
+        </div>
+        <div id="content">
+            <section class="section">
+                <div class="section-title">Reference Ride</div>
+                <div class="file-row">
+                    <label class="file-label" for="csv-file">Select CSV file:</label>
+                    <input type="file" id="csv-file" accept=".csv"/>
+                </div>
+                <div id="status" class="status idle">No file loaded</div>
+            </section>
+
+            <section id="ride-info" class="section" style="display:none">
+                <div class="section-title">Loaded Ride</div>
+                <div class="info-grid">
+                    <span class="info-key">Name</span><span class="info-val" id="info-name">—</span>
+                    <span class="info-key">Date</span><span class="info-val" id="info-date">—</span>
+                    <span class="info-key">Course ID</span><span class="info-val" id="info-course">—</span>
+                    <span class="info-key">Route ID</span><span class="info-val" id="info-route">—</span>
+                    <span class="info-key">Duration</span><span class="info-val" id="info-duration">—</span>
+                    <span class="info-key">Distance</span><span class="info-val" id="info-distance">—</span>
+                    <span class="info-key">Data points</span><span class="info-val" id="info-points">—</span>
+                </div>
+            </section>
+
+            <section class="section">
+                <button id="clear-btn" class="button" disabled>Clear reference ride</button>
+            </section>
+        </div>
+    </body>
+</html>
