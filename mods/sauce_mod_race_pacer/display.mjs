@@ -93,6 +93,11 @@ function onFileSelected(ev) {
     reader.onload = e => {
         try {
             const { meta, times, distances, powers, speeds } = parseCSV(e.target.result);
+            // Shift distances so the first data point is 0
+            const d0 = distances[0] || 0;
+            if (d0 !== 0) {
+                for (let i = 0; i < distances.length; i++) distances[i] -= d0;
+            }
             refTimes = times;
             refDistances = distances;
             refPowers = powers;
