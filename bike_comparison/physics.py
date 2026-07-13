@@ -381,6 +381,114 @@ def compare_bike_setups(
     )
 
 
+def speed_from_power(
+    power_w: float,
+    gradient: float,
+    rider_weight_kg: float,
+    bike_weight_kg: float,
+    cda: float,
+    crr: float = 0.004,
+    air_density: float = AIR_DENSITY,
+) -> float:
+    """
+    Compute equilibrium speed (m/s) for a rider producing constant power.
+
+    Inverts the power equation P = (F_grav + F_roll + F_aero) * v / (1 - η)
+    via binary search on [0, 30] m/s.
+
+    On a steep enough descent the rider freewheels; in that case the returned
+    speed is the terminal (freewheel) speed, i.e., the speed where net force
+    is zero even with P = 0.  If the caller passes power_w > 0 the rider is
+    assumed to still pedal, so the actual speed is the higher-v root where
+    P(v) = power_w.
+
+    Args:
+        power_w: Rider power output in watts (≥ 0).
+        gradient: Road gradient as a decimal (0.05 = 5% uphill, -0.04 = 4% downhill).
+        rider_weight_kg: Rider mass in kg.
+        bike_weight_kg: Bike mass in kg.
+        cda: CdA (drag coefficient × frontal area) in m².
+        crr: Rolling resistance coefficient.
+        air_density: Air density in kg/m³.
+
+    Returns:
+        Speed in m/s (clamped to [0, 30]).
+    """
+    total_mass = rider_weight_kg + bike_weight_kg
+
+    def p_at_v(v: float) -> float:
+        """Power required to ride at speed v (matches calculate_power_for_speed)."""
+        f_gravity = total_mass * GRAVITY * gradient
+        f_rolling = crr * total_mass * GRAVITY * np.cos(np.arctan(gradient))
+        f_aero = 0.5 * air_density * cda * v * v
+        return (f_gravity + f_rolling + f_aero) * v / (1.0 - DRIVETRAIN_LOSS)
+
+    # On a descent the net-force function p_at_v(v) has a local minimum
+    # at v_min > 0 where dP/dv = 0.  Below that minimum P(v) < 0 (gravity
+    # does more work than drag absorbs).  We want the physical root above
+    # v_min where P(v) = power_w.
+    #
+    # Strategy:
+    #   1. Find v_term: the positive speed where p_at_v(v) = 0 (terminal on
+    #      a freewheel).  This exists only when A = m*g*(grad + crr*cos) < 0.
+    #   2. Binary-search in [max(v_term, 0), V_MAX] for p_at_v(v) = power_w.
+
+    V_MAX = 30.0  # m/s ≈ 108 km/h — physically unreachable in Zwift
+
+    # Coefficient of v in the cubic (after factoring out v):
+    # p_at_v(v) = [A + B*v²] * v / (1-η)  where A = F_grav + F_roll, B = 0.5*ρ*CdA
+    A_coeff = (total_mass * GRAVITY * gradient
+               + crr * total_mass * GRAVITY * np.cos(np.arctan(gradient)))
+    B_coeff = 0.5 * air_density * cda
+
+    # Terminal speed (freewheel): A + B*v² = 0  →  v = sqrt(-A/B)
+    v_lower = 0.0
+    if A_coeff < 0.0:
+        v_lower = np.sqrt(-A_coeff / B_coeff)
+
+    if v_lower >= V_MAX:
+        return V_MAX
+
+    # Verify: at V_MAX, power needed should exceed power_w for any realistic case.
+    # If not, cap at V_MAX.
+    if p_at_v(V_MAX) < power_w:
+        return V_MAX
+
+    # Binary search for p_at_v(v) = power_w in [v_lower, V_MAX]
+    lo, hi = v_lower, V_MAX
+    for _ in range(60):
+        mid = (lo + hi) * 0.5
+        if p_at_v(mid) < power_w:
+            lo = mid
+        else:
+            hi = mid
+
+    return (lo + hi) * 0.5
+
+
+def frontal_area_from_rider(height_m: float, weight_kg: float) -> float:
+    """
+    Estimate cyclist frontal area (m²) from height and weight.
+
+    Uses the Faria formula (drops position), matching the methodology used
+    in this codebase's ZwifterBikes-aligned calculations.
+
+    Formula:
+        FA = 0.0293 * H^0.725 * M^0.425 + 0.0604
+    where:
+        H = height in metres
+        M = mass in kg
+
+    Args:
+        height_m: Rider height in metres.
+        weight_kg: Rider mass in kg.
+
+    Returns:
+        Estimated frontal area in m².
+    """
+    return 0.0293 * (height_m ** 0.725) * (weight_kg ** 0.425) + 0.0604
+
+
 if __name__ == "__main__":
     # Demo with synthetic data
     print("=== Bike Comparison Demo ===\n")

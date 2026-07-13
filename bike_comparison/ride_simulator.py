@@ -1,0 +1,399 @@
+"""
+Ride Simulator for Zwift routes.
+
+Given a rider's biometric data, bike setup, and constant power output,
+computes the simulated time to complete a route using the existing physics engine.
+
+Routes use real per-point altitude/distance geometry from ZwiftMap. Any route
+whose slug is present in ``route_strava_segments.json`` can be fetched on demand
+(and is cached to zwiftmap_surfaces/*_route.json), reusing the same fetch/cache
+pipeline as the race-replay tool. Routes without real geometry are excluded
+entirely — the simulator never fabricates an approximate profile.
+"""
+
+from __future__ import annotations
+
+import json
+import numpy as np
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Optional
+
+from bike_comparison.bike_data import BikeSetup
+from bike_comparison.physics import (
+    speed_from_power,
+    frontal_area_from_rider,
+    AIR_DENSITY,
+    GRAVITY,
+    DRIVETRAIN_LOSS,
+)
+from shared.surface_lookup import compute_crr_array, get_bike_type_for_frame
+from race_replay.data_cleaner import fetch_route_from_zwiftmap, ROUTE_STRAVA_SEGMENTS
+
+ROUTE_DIR = Path(__file__).parent.parent / "zwiftmap_surfaces"
+ROUTES_CACHE = Path(__file__).parent.parent / "routes_cache.json"
+
+
+def _route_name_to_slug(name: str) -> str:
+    """Convert a route name to its ZwiftMap slug (matches race-replay convention)."""
+    return name.lower().replace(" ", "-").replace("'", "")
+
+
+def _cached_route_file(slug: str) -> Path:
+    """Path to the locally-cached geometry file for a route slug."""
+    return ROUTE_DIR / f'{slug.replace("-", "_")}_route.json'
+
+
+def route_has_profile(route_name: str) -> bool:
+    """True if real elevation geometry is available (cached or fetchable)."""
+    slug = _route_name_to_slug(route_name)
+    return _cached_route_file(slug).exists() or slug in ROUTE_STRAVA_SEGMENTS
+
+
+def _load_route_geometry(slug: str) -> Optional[dict]:
+    """
+    Return raw route geometry (latlng/distance/altitude) for a slug.
+
+    Loads from the local cache when present, otherwise fetches from ZwiftMap
+    and caches the result. Returns None when no geometry is available.
+    """
+    path = _cached_route_file(slug)
+    if path.exists():
+        try:
+            with open(path) as f:
+                return json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return None
+
+    strava_id = ROUTE_STRAVA_SEGMENTS.get(slug)
+    if not strava_id:
+        return None
+
+    data = fetch_route_from_zwiftmap(strava_id, slug)
+    if data:
+        try:
+            with open(path, "w") as f:
+                json.dump(data, f, indent=2)
+        except OSError:
+            pass  # Caching is best-effort; still return the fetched data
+    return data
+
+
+@dataclass
+class RouteProfile:
+    """Elevation and distance profile for a route (real ZwiftMap geometry)."""
+    name: str
+    distance_m: np.ndarray      # Cumulative distance in metres
+    altitude_m: np.ndarray      # Altitude in metres
+    lats: Optional[np.ndarray] = None
+    lngs: Optional[np.ndarray] = None
+    world: Optional[str] = None
+    # Authoritative totals from routes_cache.json (Zwift's own figures).
+    # Used for display so the reported stats match Zwift Insider exactly,
+    # rather than re-summing the sampled ZwiftMap geometry.
+    source_distance_m: Optional[float] = None
+    source_ascent_m: Optional[float] = None
+
+    @property
+    def total_distance_km(self) -> float:
+        return float(self.distance_m[-1]) / 1000.0
+
+    @property
+    def total_ascent_m(self) -> float:
+        dalt = np.diff(self.altitude_m)
+        return float(np.sum(dalt[dalt > 0]))
+
+    @property
+    def display_distance_km(self) -> float:
+        """Authoritative distance if known, else computed from geometry."""
+        if self.source_distance_m is not None:
+            return self.source_distance_m / 1000.0
+        return self.total_distance_km
+
+    @property
+    def display_ascent_m(self) -> float:
+        """Authoritative ascent if known, else computed from geometry."""
+        if self.source_ascent_m is not None:
+            return self.source_ascent_m
+        return self.total_ascent_m
+
+
+@dataclass
+class SimulationResult:
+    """Results of a simulated ride."""
+    route_name: str
+    total_time_seconds: float
+    total_distance_km: float
+    total_ascent_m: float
+    avg_speed_kph: float
+
+    # Per-segment time series (downsampled for the API response)
+    distance_km: list[float] = field(default_factory=list)
+    altitude_m: list[float] = field(default_factory=list)
+    speed_kph: list[float] = field(default_factory=list)
+    gradient_pct: list[float] = field(default_factory=list)
+
+    @property
+    def total_time_formatted(self) -> str:
+        t = int(round(self.total_time_seconds))
+        h, rem = divmod(t, 3600)
+        m, s = divmod(rem, 60)
+        if h:
+            return f"{h}:{m:02d}:{s:02d}"
+        return f"{m}:{s:02d}"
+
+
+def _load_routes_cache() -> dict:
+    if ROUTES_CACHE.exists():
+        with open(ROUTES_CACHE) as f:
+            return json.load(f)
+    return {}
+
+
+def list_routes() -> list[dict]:
+    """
+    Return rideable routes that have real elevation geometry available.
+
+    Routes without ZwiftMap geometry (no cached file and no known Strava
+    segment) are excluded entirely — the simulator never fabricates a profile.
+    """
+    cache = _load_routes_cache()
+    routes = []
+    for route_id, info in cache.items():
+        name = info.get("name", "")
+        dist_m = info.get("distanceInMeters", 0)
+        ascent_m = info.get("ascentInMeters", 0)
+        world = info.get("map", "")
+
+        # Skip event-only, unnamed, implausibly-huge, or zero-distance routes
+        if info.get("eventOnly", False):
+            continue
+        if not name or not world:
+            continue
+        if dist_m <= 0 or dist_m > 200_000:
+            continue
+
+        # Only include routes with real elevation data available
+        if not route_has_profile(name):
+            continue
+
+        routes.append({
+            "id": route_id,
+            "name": name,
+            "world": world,
+            "distance_km": round(dist_m / 1000, 1),
+            "ascent_m": round(ascent_m),
+        })
+
+    return sorted(routes, key=lambda r: (r["world"], r["name"]))
+
+
+def load_route_profile(route_id: str, route_name: str, world: Optional[str] = None) -> RouteProfile:
+    """
+    Load the real elevation profile for a route from ZwiftMap geometry.
+
+    Uses the local cache when present, otherwise fetches from ZwiftMap and
+    caches the result. Raises ValueError when no real geometry is available —
+    the simulator never synthesises an approximate profile.
+
+    Args:
+        route_id: Route ID (unused for lookup; kept for API symmetry/logging).
+        route_name: Route name, converted to a ZwiftMap slug for lookup.
+        world: World name (e.g. 'WATOPIA') used for surface-aware CRR lookup.
+    """
+    slug = _route_name_to_slug(route_name)
+    data = _load_route_geometry(slug)
+    if data is None:
+        raise ValueError(f"No elevation data available for route '{route_name}'")
+
+    distance_arr = np.array(data["distance"], dtype=float)
+    altitude_arr = np.array(data["altitude"], dtype=float)
+    latlng = data.get("latlng", [])
+    lats = np.array([p[0] for p in latlng]) if latlng else None
+    lngs = np.array([p[1] for p in latlng]) if latlng else None
+
+    # Authoritative distance/ascent from routes_cache.json (Zwift's figures),
+    # looked up by route_id, then by name as a fallback.
+    source_distance_m = None
+    source_ascent_m = None
+    cache = _load_routes_cache()
+    info = cache.get(route_id)
+    if info is None:
+        info = next((v for v in cache.values() if v.get("name") == route_name), None)
+    if info is not None:
+        if info.get("distanceInMeters"):
+            source_distance_m = float(info["distanceInMeters"])
+        if info.get("ascentInMeters"):
+            source_ascent_m = float(info["ascentInMeters"])
+
+    return RouteProfile(
+        name=route_name,
+        distance_m=distance_arr,
+        altitude_m=altitude_arr,
+        lats=lats,
+        lngs=lngs,
+        world=world,
+        source_distance_m=source_distance_m,
+        source_ascent_m=source_ascent_m,
+    )
+
+
+def simulate_ride(
+    route: RouteProfile,
+    rider_weight_kg: float,
+    rider_height_m: float,
+    power_w: float,
+    bike_setup: BikeSetup,
+    default_crr: float = 0.004,
+    downsample_points: int = 500,
+) -> SimulationResult:
+    """
+    Simulate a complete Zwift ride and return timing and speed data.
+
+    Integrates the rider's equation of motion forward in time using small
+    fixed time steps, so the speed at any moment depends on the *previous*
+    speed (momentum) rather than being the instantaneous steady-state speed
+    for the local gradient.  This correctly captures a rider carrying speed
+    over the crest of a hill, accelerating on descents, and bleeding that
+    speed off on the following climb.
+
+    At each time step the net force is
+
+        F_net = F_drive - F_gravity - F_rolling - F_aero
+
+    where ``F_drive = P·(1-η)/v`` is the propulsive force delivered to the
+    wheel.  Acceleration ``a = F_net / m`` updates the speed
+    (``v += a·dt``) and the speed advances the position (``x += v·dt``).
+    The gradient and rolling resistance are looked up from the route at the
+    rider's current position.
+
+    Args:
+        route: RouteProfile with distance and altitude arrays.
+        rider_weight_kg: Rider mass in kg.
+        rider_height_m: Rider height in metres (used for frontal area).
+        power_w: Constant power output in watts.
+        bike_setup: BikeSetup with Cd and weight from the bike database.
+        default_crr: Rolling resistance coefficient (overridden per-point when
+                     surface data is available).
+        downsample_points: Max number of points returned in the profile arrays.
+
+    Returns:
+        SimulationResult with total time and per-segment data.
+    """
+    dist = route.distance_m
+    alt = route.altitude_m
+    n = len(dist)
+
+    if n < 2:
+        raise ValueError("Route profile must have at least 2 points")
+
+    # Rider frontal area and CdA
+    frontal_area = frontal_area_from_rider(rider_height_m, rider_weight_kg)
+    cda = bike_setup.cd * frontal_area
+    total_mass = rider_weight_kg + bike_setup.weight_kg
+
+    # Per-point CRR: use surface lookup when GPS coords are available
+    bike_type = get_bike_type_for_frame(bike_setup.frame_type)
+    if route.lats is not None and route.lngs is not None and route.world:
+        crr_arr = compute_crr_array(route.lats, route.lngs, route.world, bike_type)
+    else:
+        crr_arr = np.full(n, default_crr)
+
+    # Per-segment gradient and CRR (segment i spans node i -> node i+1)
+    seg_dist = np.diff(dist)      # metres
+    seg_alt  = np.diff(alt)       # metres elevation change
+    seg_crr  = crr_arr[:-1]       # CRR at the start of each segment
+
+    # Gradient (clamped to ±40% to avoid physics blow-ups on noisy data)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        gradient = np.where(seg_dist > 0, seg_alt / seg_dist, 0.0)
+    gradient = np.clip(gradient, -0.40, 0.40)
+
+    total_dist_m = float(dist[-1])
+    n_seg = len(gradient)
+
+    # ── Forward time-stepping integration ─────────────────────────────────
+    dt = 0.1                      # seconds per step
+    v_floor = 0.5                 # m/s — floor so the rider never fully stalls
+    drive_const = power_w * (1.0 - DRIVETRAIN_LOSS)
+    max_time = 6 * 3600.0         # 6 h guard against runaway loops
+
+    # Start at the steady-state speed for the first segment so the rider isn't
+    # accelerating unrealistically from a dead stop; momentum evolves from there.
+    v = speed_from_power(
+        power_w, gradient[0], rider_weight_kg, bike_setup.weight_kg, cda, seg_crr[0]
+    )
+    v = max(v, v_floor)
+
+    x = 0.0
+    t = 0.0
+    seg_idx = 0
+
+    # Record speed at each route node (index into dist/alt) as the rider passes it.
+    node_speed = np.empty(n)
+    node_speed[0] = v
+    next_node = 1
+
+    while x < total_dist_m and t < max_time:
+        # Advance the active segment pointer to match the current position.
+        while seg_idx < n_seg - 1 and x >= dist[seg_idx + 1]:
+            seg_idx += 1
+
+        grad = gradient[seg_idx]
+        crr = seg_crr[seg_idx]
+        cos_slope = np.cos(np.arctan(grad))
+
+        f_drive = drive_const / max(v, v_floor)
+        f_gravity = total_mass * GRAVITY * grad
+        f_rolling = crr * total_mass * GRAVITY * cos_slope
+        f_aero = 0.5 * AIR_DENSITY * cda * v * v
+        accel = (f_drive - f_gravity - f_rolling - f_aero) / total_mass
+
+        v = max(v + accel * dt, v_floor)
+        x += v * dt
+        t += dt
+
+        # Capture speed at every route node the rider has just passed.
+        while next_node < n and x >= dist[next_node]:
+            node_speed[next_node] = v
+            next_node += 1
+
+    # Fill any nodes not reached (e.g. hit the time guard) with the last speed.
+    if next_node < n:
+        node_speed[next_node:] = v
+
+    # Back out the exact finish time by removing the final-step overshoot.
+    overshoot = x - total_dist_m
+    if v > 0 and overshoot > 0:
+        t -= overshoot / v
+    total_time = t
+
+    # Report Zwift's authoritative totals for display; fall back to the
+    # geometry-derived values when the route isn't in routes_cache.json.
+    # Average speed is computed from the same displayed distance so the
+    # results card stays internally consistent.
+    display_dist_km = route.display_distance_km
+    avg_speed_kph = (display_dist_km / (total_time / 3600)) if total_time > 0 else 0.0
+
+    # Downsample for the response payload
+    if n > downsample_points:
+        idx = np.round(np.linspace(0, n - 1, downsample_points)).astype(int)
+        idx = np.unique(idx)
+    else:
+        idx = np.arange(n)
+
+    # Gradient is per-segment (length n-1); reuse the last segment value for the
+    # final node so the array lines up with the node-indexed distance/altitude.
+    grad_nodes = np.append(gradient, gradient[-1])
+
+    return SimulationResult(
+        route_name=route.name,
+        total_time_seconds=total_time,
+        total_distance_km=display_dist_km,
+        total_ascent_m=route.display_ascent_m,
+        avg_speed_kph=round(avg_speed_kph, 1),
+        distance_km=[round(float(dist[i]) / 1000, 3) for i in idx],
+        altitude_m=[round(float(alt[i]), 1) for i in idx],
+        speed_kph=[round(float(node_speed[i]) * 3.6, 1) for i in idx],
+        gradient_pct=[round(float(grad_nodes[i]) * 100, 1) for i in idx],
+    )

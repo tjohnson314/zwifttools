@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ride Simulator - Zwift Tools</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="/static/css/ride_simulator.css">
+</head>
+<body>
+<div class="container">
+
+    <!-- Header -->
+    <div class="header-bar">
+        <div>
+            <a href="/" class="back-link">← Back to Tools</a>
+            <h1>⏱ Ride Simulator</h1>
+            <p class="subtitle">Predict your finish time for any Zwift route</p>
+        </div>
+    </div>
+
+    <!-- Input panels -->
+    <div class="panels">
+
+        <!-- Route -->
+        <div class="panel">
+            <h2>🗺 Route</h2>
+
+            <div class="form-group">
+                <label for="worldFilter">World</label>
+                <select id="worldFilter" onchange="filterRoutes()">
+                    <option value="">All Worlds</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="routeSelect">Route</label>
+                <select id="routeSelect" onchange="onRouteChange()">
+                    <option value="">Loading routes…</option>
+                </select>
+            </div>
+
+            <div class="route-stats" id="routeStats" style="display:none;">
+                <div class="stat-pill"><span class="stat-label">Distance</span><span class="stat-value" id="statDist">—</span></div>
+                <div class="stat-pill"><span class="stat-label">Ascent</span><span class="stat-value" id="statAscent">—</span></div>
+            </div>
+        </div>
+
+        <!-- Rider -->
+        <div class="panel">
+            <h2>🧍 Rider</h2>
+
+            <div class="form-group">
+                <label for="riderWeight">Weight (kg)</label>
+                <input type="number" id="riderWeight" value="75" min="30" max="200" step="0.5">
+            </div>
+
+            <div class="form-group">
+                <label for="riderHeight">Height (cm)</label>
+                <input type="number" id="riderHeight" value="175" min="140" max="220" step="1">
+            </div>
+
+            <div class="form-group">
+                <label for="powerWatts">Power Output (W)</label>
+                <input type="number" id="powerWatts" value="250" min="50" max="2000" step="5"
+                       oninput="updateWperKg()">
+            </div>
+
+            <div class="wpkg-display" id="wpkgDisplay">— W/kg</div>
+        </div>
+
+        <!-- Bike -->
+        <div class="panel">
+            <h2>🚲 Bike</h2>
+
+            <div class="form-group">
+                <label for="frameSelect">Frame</label>
+                <select id="frameSelect" onchange="onFrameChange()">
+                    <option value="">Loading…</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="wheelSelect">Wheels</label>
+                <select id="wheelSelect" onchange="updateBikeStats()">
+                    <option value="">Loading…</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="upgradeLevel">Upgrade Level</label>
+                <select id="upgradeLevel" onchange="updateBikeStats()">
+                    <option value="0">0 — Stock</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5 — Max</option>
+                </select>
+            </div>
+
+            <div class="bike-stats" id="bikeStats">
+                <div class="stat-pill"><span class="stat-label">Cd</span><span class="stat-value" id="bikeCd">—</span></div>
+                <div class="stat-pill"><span class="stat-label">Weight</span><span class="stat-value" id="bikeWeight">—</span></div>
+                <div class="stat-pill"><span class="stat-label">Type</span><span class="stat-value" id="bikeType">—</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Simulate button -->
+    <div class="simulate-bar">
+        <button class="btn-simulate" id="simulateBtn" onclick="runSimulation()" disabled>
+            ▶ Simulate Ride
+        </button>
+        <span class="simulate-hint" id="simulateHint">Select a route and bike to continue</span>
+    </div>
+
+    <!-- Results -->
+    <div class="results-section" id="resultsSection" style="display:none;">
+        <div class="results-header">
+            <h2>Results — <span id="resultsRouteName"></span></h2>
+        </div>
+
+        <div class="summary-cards">
+            <div class="summary-card highlight">
+                <div class="card-icon">⏱</div>
+                <div class="card-value" id="totalTime">—</div>
+                <div class="card-label">Finish Time</div>
+            </div>
+            <div class="summary-card">
+                <div class="card-icon">📏</div>
+                <div class="card-value" id="totalDist">—</div>
+                <div class="card-label">Distance</div>
+            </div>
+            <div class="summary-card">
+                <div class="card-icon">⛰</div>
+                <div class="card-value" id="totalAscent">—</div>
+                <div class="card-label">Ascent</div>
+            </div>
+            <div class="summary-card">
+                <div class="card-icon">💨</div>
+                <div class="card-value" id="avgSpeed">—</div>
+                <div class="card-label">Avg Speed</div>
+            </div>
+        </div>
+
+        <!-- Chart -->
+        <div class="chart-container">
+            <canvas id="profileChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Error toast -->
+    <div class="error-toast" id="errorToast" style="display:none;"></div>
+
+</div>
+
+<script src="/static/js/ride_simulator.js"></script>
+</body>
+</html>

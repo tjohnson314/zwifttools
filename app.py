@@ -28,7 +28,8 @@ from scipy.ndimage import uniform_filter1d
 logger = logging.getLogger(__name__)
 
 from bike_comparison.bike_data import get_bike_database, get_bike_stats
-from bike_comparison.physics import compare_bike_setups
+from bike_comparison.physics import compare_bike_setups, frontal_area_from_rider
+from bike_comparison.ride_simulator import list_routes, load_route_profile, simulate_ride as _simulate_ride
 from shared.utils import calculate_normalized_power
 from shared.data_fetcher import (
     fetch_rider_telemetry, convert_telemetry_to_dataframe,
@@ -540,6 +541,52 @@ def get_bike_stats_api():
     })
 
 
+@app.route('/api/bike_database')
+def get_bike_database_api():
+    """
+    Return all frames, wheels, and bike combos in a single payload.
+
+    Used by the ride simulator to populate all dropdowns and look up Cd/weight
+    without making multiple round-trips.
+    """
+    db = get_db()
+    frames = []
+    for frame in sorted(db.frames.values(), key=lambda f: f'{f.get("framemake", "")} {f.get("framemodel", "")}'):
+        fid = frame.get('frameid')
+        if not fid:
+            continue
+        frames.append({
+            'frameid':    fid,
+            'framemake':  _safe_text(frame.get('framemake')),
+            'framemodel': _safe_text(frame.get('framemodel')),
+            'frametype':  frame.get('frametype', 'Standard'),
+        })
+
+    wheels = []
+    for wheel in sorted(db.wheels.values(), key=lambda w: f'{w.get("wheelmake", "")} {w.get("wheelmodel", "")}'):
+        wid = wheel.get('wheelid')
+        if wid is None:
+            continue
+        wheels.append({
+            'wheelid':    wid,
+            'wheelmake':  _safe_text(wheel.get('wheelmake')),
+            'wheelmodel': _safe_text(wheel.get('wheelmodel')),
+        })
+
+    bikes = []
+    for (fid, wid), combo in db.bikes.items():
+        if not isinstance(combo.get('cd'), list) or not isinstance(combo.get('weight'), list):
+            continue
+        bikes.append({
+            'frameid': fid,
+            'wheelid': wid,
+            'cd':      combo['cd'],
+            'weight':  combo['weight'],
+        })
+
+    return jsonify({'frames': frames, 'wheels': wheels, 'bikes': bikes})
+
+
 @app.route('/api/fetch_activity', methods=['POST'])
 def fetch_activity():
     """Fetch activity data by ID."""
@@ -858,35 +905,6 @@ def upload_fit():
         return jsonify({'error': str(e)}), 500
 
 
-def estimate_frontal_area(height_cm: float, weight_kg: float, position: str = 'drops') -> float:
-    """
-    Estimate cyclist frontal area based on height and weight.
-    
-    Uses the Faria formula (drops position), which is the same formula
-    ZwifterBikes uses when deriving their Cd values. Using a consistent
-    frontal area formula ensures CdA = Cd × FA matches the original
-    wind-tunnel / velodrome calibration data.
-    
-    Formula: FA = 0.0293 × H^0.725 × M^0.425 + 0.0604
-    where H = height in metres, M = mass in kg
-    
-    Args:
-        height_cm: Rider height in cm
-        weight_kg: Rider weight in kg
-        position: Riding position (currently unused; Faria formula is for drops)
-        
-    Returns:
-        Frontal area in m²
-    """
-    height_m = height_cm / 100
-    
-    # Faria frontal area formula (drops position)
-    # Consistent with ZwifterBikes Cd derivation methodology
-    frontal_area = 0.0293 * (height_m ** 0.725) * (weight_kg ** 0.425) + 0.0604
-    
-    return frontal_area
-
-
 @app.route('/api/compare', methods=['POST'])
 def compare_bikes():
     """Compare two bike setups using telemetry data."""
@@ -919,9 +937,9 @@ def compare_bikes():
     alt_rider_weight = float(data.get('alt_rider_weight', rider_weight))
     alt_rider_height = float(data.get('alt_rider_height', rider_height))
     
-    # Calculate frontal areas from height and weight using Du Bois formula
-    frontal_area = estimate_frontal_area(rider_height, rider_weight, 'drops')
-    alt_frontal_area = estimate_frontal_area(alt_rider_height, alt_rider_weight, 'drops')
+    # Calculate frontal areas from height and weight using the Faria formula
+    frontal_area = frontal_area_from_rider(rider_height / 100, rider_weight)
+    alt_frontal_area = frontal_area_from_rider(alt_rider_height / 100, alt_rider_weight)
     
     # Use per-point CRR if available from surface data, adjusted by bike type
     crr = 0.004
@@ -1151,7 +1169,7 @@ def find_best_bikes():
         return jsonify({'error': 'Need at least 30 data points'}), 400
     
     # Calculate frontal area
-    frontal_area = estimate_frontal_area(rider_height, rider_weight, 'drops')
+    frontal_area = frontal_area_from_rider(rider_height / 100, rider_weight)
     
     # Get database
     db = get_db()
@@ -1289,6 +1307,97 @@ def find_best_bikes():
         'actual_np': round(actual_np, 1),
         'actual_bike_name': actual_bike_name,
         'best_bikes': top_bikes
+    })
+
+
+# ---------------------------------------------------------------------------
+# Ride Simulator — predict finish time given rider, bike, power, and route
+# ---------------------------------------------------------------------------
+
+@app.route('/ride-simulator')
+def ride_simulator():
+    """Ride simulator tool."""
+    return render_template('ride_simulator.html')
+
+
+@app.route('/api/ride_simulator/routes')
+def api_ride_simulator_routes():
+    """Return all rideable routes for the simulator route selector."""
+    try:
+        routes = list_routes()
+        return jsonify({'routes': routes})
+    except Exception as e:
+        logger.exception("Error listing simulator routes")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/simulate_ride', methods=['POST'])
+def api_simulate_ride():
+    """
+    Run a ride simulation.
+
+    Expected JSON body:
+        route_id      (str)   — route ID from routes_cache.json
+        route_name    (str)   — route name (used for ZwiftMap geometry lookup)
+        world         (str)   — world name (for surface-aware CRR)
+        rider_weight_kg (float)
+        rider_height_cm (float)
+        power_watts   (float)
+        frame_id      (str)
+        wheel_id      (str or null)
+        upgrade_level (int, 0-5)
+    """
+    body = request.get_json(force=True, silent=True) or {}
+
+    try:
+        route_name = str(body['route_name'])
+        weight_kg  = float(body['rider_weight_kg'])
+        height_cm  = float(body['rider_height_cm'])
+        power_w    = float(body['power_watts'])
+        frame_id   = str(body['frame_id'])
+        wheel_id   = body.get('wheel_id') or None
+        level      = int(body.get('upgrade_level', 0))
+    except (KeyError, TypeError, ValueError) as exc:
+        return jsonify({'error': f'Invalid request: {exc}'}), 400
+
+    if power_w <= 0:
+        return jsonify({'error': 'power_watts must be positive'}), 400
+    if weight_kg <= 0 or height_cm <= 0:
+        return jsonify({'error': 'rider_weight_kg and rider_height_cm must be positive'}), 400
+
+    db = get_db()
+    bike_setup = db.get_bike_stats(frame_id, wheel_id, level)
+    if bike_setup is None:
+        return jsonify({'error': f'Unknown frame/wheel combination: {frame_id}/{wheel_id}'}), 400
+
+    try:
+        route = load_route_profile(body.get('route_id', ''), route_name, world=body.get('world'))
+        result = _simulate_ride(
+            route=route,
+            rider_weight_kg=weight_kg,
+            rider_height_m=height_cm / 100.0,
+            power_w=power_w,
+            bike_setup=bike_setup,
+        )
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception as exc:
+        logger.exception("Simulation error")
+        return jsonify({'error': str(exc)}), 500
+
+    return jsonify({
+        'route_name': result.route_name,
+        'total_time_seconds': round(result.total_time_seconds),
+        'total_time_formatted': result.total_time_formatted,
+        'total_distance_km': round(result.total_distance_km, 2),
+        'total_ascent_m': round(result.total_ascent_m),
+        'avg_speed_kph': result.avg_speed_kph,
+        'profile': {
+            'distance_km': result.distance_km,
+            'altitude_m': result.altitude_m,
+            'speed_kph': result.speed_kph,
+            'gradient_pct': result.gradient_pct,
+        },
     })
 
 
@@ -2680,7 +2789,7 @@ def api_ttt_fetch():
 
         weight_kg = r.get('weight_kg', 75.0)
         height_cm = r.get('height_cm', 175)
-        frontal_area = estimate_frontal_area(height_cm, weight_kg, 'drops')
+        frontal_area = frontal_area_from_rider(height_cm / 100, weight_kg)
         cda = ttt_setup.cd * frontal_area
 
         time_sec = df['time_sec'].values.astype(float)

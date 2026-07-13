@@ -205,7 +205,7 @@ Renders `bike_comparison.html`.
 **Pipeline:**
 
 1. **Resolve bike setups** — `get_bike_stats()` for both actual and alternative
-2. **Frontal area** — `estimate_frontal_area(height_cm, weight_kg)` using Faria formula: `FA = 0.0293 × H^0.725 × M^0.425 + 0.0604`
+2. **Frontal area** — `frontal_area_from_rider(height_m, weight_kg)` using Faria formula: `FA = 0.0293 × H^0.725 × M^0.425 + 0.0604`
 3. **Surface-aware CRR** — if `surface_type` column present, compute per-bike-type CRR arrays (road bike vs MTB vs gravel have different rolling resistance on the same surface)
 4. **Physics comparison** — `compare_bike_setups()`:
    - For each timestep, compute the power needed on the **alternative** bike to maintain the **same speed** as recorded
@@ -573,7 +573,7 @@ Renders `ttt_analysis.html`.
 3. **Fetch all rider telemetry** — concurrent with 5 workers, each producing: time_sec, speed_kmh, distance_km, altitude_m, power_watts, lat/lng
 4. **Compute draft estimates** per rider:
    - Uses a fixed reference bike (Cadex Tri frame + DT Swiss ARC 1100 DICUT 85 wheels, upgrade level 5)
-   - `estimate_frontal_area(height_cm, weight_kg)` → CDA
+   - `frontal_area_from_rider(height_m, weight_kg)` → CDA
    - Solo power = `(F_rolling + F_aero) × v / (1 - drivetrain_loss)`
    - Draft watts = solo power − actual power, smoothed over 5-point window
 5. **Route alignment** (if route data available) — projects all riders onto shared route via `align_riders_to_route()`, corrects post-finish drift using raw Zwift odometer
