@@ -22,7 +22,9 @@ import json
 import time
 import queue
 import threading
-from datetime import datetime
+import re
+from datetime import datetime, timedelta, timezone
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from scipy.ndimage import uniform_filter1d
 
 logger = logging.getLogger(__name__)
@@ -55,6 +57,10 @@ app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 # Global bike database
 _db = None
 
+# In-memory progress tracker for power dashboard loading.
+_power_dashboard_progress = {}
+_power_dashboard_progress_lock = threading.Lock()
+
 def get_db():
     global _db
     if _db is None:
@@ -75,6 +81,41 @@ def _safe_text(value, default=''):
     if isinstance(value, str):
         return value.strip()
     return str(value).strip()
+
+
+def _set_power_dashboard_progress(progress_id: str | None, **fields):
+    """Update in-memory progress fields for a power dashboard build."""
+    if not progress_id:
+        return
+
+    with _power_dashboard_progress_lock:
+        state = _power_dashboard_progress.get(progress_id, {
+            'status': 'starting',
+            'updated_at': time.time(),
+        })
+        state.update(fields)
+        state['updated_at'] = time.time()
+        _power_dashboard_progress[progress_id] = state
+
+
+@app.route('/api/power_dashboard_progress')
+def api_power_dashboard_progress():
+    """Return the latest server-side progress for a power dashboard load."""
+    # Keep this endpoint lightweight; avoid token refresh/network calls while polling.
+    if 'tokens' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    progress_id = request.args.get('progress_id')
+    if not progress_id:
+        return jsonify({'error': 'progress_id required'}), 400
+
+    with _power_dashboard_progress_lock:
+        state = _power_dashboard_progress.get(progress_id)
+
+    if not state:
+        return jsonify({'status': 'not_found'})
+
+    return jsonify(state)
 
 
 def get_redirect_uri():
@@ -224,6 +265,14 @@ def my_activities():
     if 'tokens' not in session:
         return redirect(url_for('auth_login', next=url_for('my_activities')))
     return render_template('my_activities.html')
+
+
+@app.route('/power')
+def power_dashboard():
+    """ZwiftPower-style power profile dashboard for the logged-in user."""
+    if 'tokens' not in session:
+        return redirect(url_for('auth_login', next=url_for('power_dashboard')))
+    return render_template('power_dashboard.html')
 
 
 @app.route('/api/my_activities')
@@ -380,6 +429,482 @@ def api_activity_enrichment(activity_id):
         return jsonify(result)
     except Exception as e:
         logger.exception("Error enriching activity")
+        return jsonify({'error': str(e)}), 500
+
+
+def _parse_zwift_datetime(value):
+    """Parse Zwift date strings into UTC datetimes."""
+    if not value:
+        return None
+
+    # Epoch timestamps are occasionally returned by some endpoints.
+    if isinstance(value, (int, float)):
+        try:
+            ts = float(value)
+            if ts > 1e12:
+                ts = ts / 1000.0
+            return datetime.fromtimestamp(ts, tz=timezone.utc)
+        except Exception:
+            return None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    # Strip trailing zone labels like "[UTC]".
+    text = re.sub(r'\[[^\]]+\]$', '', text).strip()
+
+    if text.endswith('Z'):
+        text = text[:-1] + '+00:00'
+
+    # Convert +0000/-0700 to +00:00/-07:00 for fromisoformat.
+    text = re.sub(r'([+\-]\d{2})(\d{2})$', r'\1:\2', text)
+
+    try:
+        dt = datetime.fromisoformat(text)
+    except ValueError:
+        dt = None
+
+    if dt is None:
+        fmts = [
+            '%Y-%m-%dT%H:%M:%S.%f%z',
+            '%Y-%m-%dT%H:%M:%S%z',
+            '%Y-%m-%d %H:%M:%S%z',
+            '%Y-%m-%dT%H:%M:%S.%f',
+            '%Y-%m-%dT%H:%M:%S',
+            '%Y-%m-%d %H:%M:%S',
+        ]
+        for fmt in fmts:
+            try:
+                dt = datetime.strptime(text, fmt)
+                break
+            except ValueError:
+                continue
+
+    if dt is None:
+        return None
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _validate_power_dashboard_range(range_start_raw, range_end_raw, lookback_days):
+    """Validate an optional custom time range for the dashboard."""
+    if not range_start_raw and not range_end_raw:
+        return None, None, None
+
+    if not range_start_raw or not range_end_raw:
+        return None, None, 'Both range start and range end are required.'
+
+    range_start = _parse_zwift_datetime(range_start_raw)
+    range_end = _parse_zwift_datetime(range_end_raw)
+    if range_start is None or range_end is None:
+        return None, None, 'Invalid range start or range end.'
+
+    now_utc = datetime.now(timezone.utc)
+    cutoff_dt = now_utc - timedelta(days=lookback_days)
+    if range_start < cutoff_dt or range_end < cutoff_dt:
+        return None, None, f'Range must be within the past {lookback_days} days.'
+    if range_start > now_utc or range_end > now_utc:
+        return None, None, f'Range must be within the past {lookback_days} days.'
+    if range_start >= range_end:
+        return None, None, 'Range start must be before range end.'
+
+    return range_start, range_end, None
+
+
+def _build_power_intervals_seconds():
+    """Build the duration list requested for the power profile chart."""
+    intervals = []
+
+    def add_range(start_sec, end_sec, step_sec):
+        for sec in range(start_sec, end_sec + 1, step_sec):
+            intervals.append(sec)
+
+    add_range(1, 30, 1)
+    add_range(30, 60, 5)
+    add_range(60, 120, 10)
+    add_range(120, 600, 30)
+    add_range(600, 1200, 60)
+    add_range(1200, 3600, 120)
+    add_range(3600, 7200, 300)
+
+    # Preserve order while removing boundary duplicates between ranges.
+    deduped = []
+    seen = set()
+    for sec in intervals:
+        if sec not in seen:
+            deduped.append(sec)
+            seen.add(sec)
+    return deduped
+
+
+def _format_interval_label(seconds):
+    """Format interval durations for chart labels."""
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds % 60 == 0:
+        return f"{seconds // 60}m"
+    mins = seconds // 60
+    secs = seconds % 60
+    return f"{mins}m{secs:02d}s"
+
+
+def _compute_peak_power_curve(power_values, intervals_seconds):
+    """Compute best average power for each interval via a prefix-sum window scan."""
+    power = np.asarray(power_values, dtype=np.float64)
+    if power.size == 0:
+        return {sec: None for sec in intervals_seconds}
+
+    power = np.nan_to_num(power, nan=0.0, posinf=0.0, neginf=0.0)
+    prefix = np.concatenate(([0.0], np.cumsum(power)))
+
+    peaks = {}
+    n = power.size
+    for sec in intervals_seconds:
+        if sec <= 0 or n < sec:
+            peaks[sec] = None
+            continue
+
+        window_sums = prefix[sec:] - prefix[:-sec]
+        peaks[sec] = float(np.max(window_sums) / sec)
+
+    return peaks
+
+
+def _fetch_recent_activities_for_profile(headers, profile_id, days=90, page_size=50):
+    """Fetch all activities in the requested recent window."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    start = 0
+    recent = []
+
+    while True:
+        resp = _request_with_retry(
+            'GET',
+            f'{BASE_URL}/profiles/{profile_id}/activities',
+            headers=headers,
+            params={'start': start, 'limit': page_size},
+            timeout=30,
+        )
+        if resp.status_code != 200:
+            body = (resp.text or '')[:200]
+            raise RuntimeError(f"Failed to fetch activities: {resp.status_code} {body}")
+
+        page = resp.json()
+        if not isinstance(page, list) or len(page) == 0:
+            break
+
+        reached_older_activities = False
+        for act in page:
+            activity_id = act.get('id') or act.get('id_str')
+            start_date_raw = act.get('startDate') or act.get('startDateTime') or act.get('date')
+            start_dt = _parse_zwift_datetime(start_date_raw)
+            duration_ms = act.get('movingTimeInMs') or act.get('durationInMilliseconds') or act.get('elapsedTimeInMilliseconds') or 0
+            duration_sec = int(duration_ms / 1000) if duration_ms else 0
+
+            # Require a parseable timestamp so we can enforce the date window.
+            if not activity_id or not start_dt:
+                continue
+
+            if start_dt < cutoff:
+                reached_older_activities = True
+                continue
+
+            recent.append({
+                'id': str(activity_id),
+                'name': act.get('name') or 'Zwift Activity',
+                'start_date': start_date_raw,
+                'start_dt': start_dt,
+                'duration_sec': duration_sec,
+                'end_dt': start_dt + timedelta(seconds=duration_sec) if duration_sec else start_dt,
+            })
+
+        if reached_older_activities or len(page) < page_size:
+            break
+        start += page_size
+
+    return recent
+
+
+@app.route('/api/power_dashboard')
+def api_power_dashboard():
+    """Return peak-power dashboard data for the last 90 days and latest activity."""
+    progress_id = request.args.get('progress_id')
+    _set_power_dashboard_progress(progress_id, status='authenticating', message='Checking authentication...')
+
+    headers = get_headers()
+    if not headers:
+        _set_power_dashboard_progress(progress_id, status='error', message='Not authenticated')
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    _set_power_dashboard_progress(progress_id, status='starting', message='Starting dashboard build...')
+
+    try:
+        _set_power_dashboard_progress(progress_id, status='fetching_profile', message='Fetching rider profile...')
+        profile_resp = _request_with_retry(
+            'GET',
+            f'{BASE_URL}/profiles/me',
+            headers=headers,
+            timeout=15,
+        )
+        if profile_resp.status_code != 200:
+            return jsonify({'error': 'Failed to fetch profile'}), profile_resp.status_code
+
+        profile = profile_resp.json()
+        profile_id = profile.get('id')
+        if not profile_id:
+            return jsonify({'error': 'Could not determine profile ID'}), 500
+
+        intervals = _build_power_intervals_seconds()
+        weekly_intervals = [1200, 600, 300, 60, 30, 15, 5]
+
+        lookback_days = 90
+
+        _set_power_dashboard_progress(progress_id, status='fetching_activities', message='Fetching recent activities...')
+        recent_activities = _fetch_recent_activities_for_profile(
+            headers,
+            profile_id,
+            days=lookback_days,
+            page_size=50,
+        )
+        if not recent_activities:
+            _set_power_dashboard_progress(
+                progress_id,
+                status='completed',
+                message='No recent activities found.',
+                discovered_activity_count=0,
+                selected_activity_count=0,
+                completed_activity_count=0,
+                successful_activity_count=0,
+            )
+            return jsonify({
+                'durations_sec': intervals,
+                'durations_label': [_format_interval_label(s) for s in intervals],
+                'all_90_day_curve_watts': [None for _ in intervals],
+                'latest_curve_watts': [None for _ in intervals],
+                'range_curve_watts': [None for _ in intervals],
+                'best_activity_by_duration': {},
+                'latest_activity': None,
+                'activities': [],
+                'weekly': {
+                    'labels': [],
+                    'series': {str(d): [] for d in weekly_intervals},
+                },
+                'activity_count': 0,
+                'processed_activity_count': 0,
+                'total_activity_count': 0,
+                'range_activity_count': 0,
+            })
+
+        recent_activities = sorted(recent_activities, key=lambda a: a['start_dt'], reverse=True)
+        selected_activities = recent_activities
+
+        _set_power_dashboard_progress(
+            progress_id,
+            status='telemetry_processing',
+            message='Processing telemetry files...',
+            discovered_activity_count=len(recent_activities),
+            selected_activity_count=len(selected_activities),
+            completed_activity_count=0,
+            successful_activity_count=0,
+        )
+
+        def process_activity(activity):
+            telem_data, activity_data, error = fetch_rider_telemetry(activity['id'], headers)
+            if error or not telem_data:
+                return None
+
+            power_values = telem_data.get('powerInWatts') or []
+            if not power_values:
+                return None
+
+            peaks = _compute_peak_power_curve(power_values, intervals)
+            event_info = (activity_data or {}).get('eventInfo') or {}
+            event_subgroup_id = event_info.get('eventSubGroupId') or event_info.get('eventSubgroupId')
+            event_id = event_info.get('id') or event_info.get('eventId')
+
+            return {
+                **activity,
+                'peaks': peaks,
+                'is_race': bool(event_subgroup_id),
+                'event_id': event_id,
+                'peak_watts': [round(peaks.get(sec), 1) if peaks.get(sec) is not None else None for sec in intervals],
+                'end_date': activity['end_dt'].isoformat() if activity.get('end_dt') else activity['start_dt'].isoformat(),
+            }
+
+        latest_activity_meta = selected_activities[0]
+
+        processed = []
+        processed_by_id = {}
+        completed_count = 0
+        successful_count = 0
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            futures = [pool.submit(process_activity, act) for act in selected_activities]
+            for fut in as_completed(futures):
+                completed_count += 1
+                result = fut.result()
+                if result is not None:
+                    processed.append(result)
+                    processed_by_id[result['id']] = result
+                    successful_count += 1
+
+                _set_power_dashboard_progress(
+                    progress_id,
+                    status='telemetry_processing',
+                    discovered_activity_count=len(recent_activities),
+                    selected_activity_count=len(selected_activities),
+                    completed_activity_count=completed_count,
+                    successful_activity_count=successful_count,
+                    message='Processing telemetry files...',
+                )
+
+        if not processed:
+            _set_power_dashboard_progress(
+                progress_id,
+                status='completed',
+                message='No telemetry data available for selected activities.',
+                discovered_activity_count=len(recent_activities),
+                selected_activity_count=len(selected_activities),
+                completed_activity_count=completed_count,
+                successful_activity_count=successful_count,
+            )
+            return jsonify({
+                'durations_sec': intervals,
+                'durations_label': [_format_interval_label(s) for s in intervals],
+                'all_90_day_curve_watts': [None for _ in intervals],
+                'latest_curve_watts': [None for _ in intervals],
+                'range_curve_watts': [None for _ in intervals],
+                'best_activity_by_duration': {},
+                'latest_activity': {
+                    'activity_id': latest_activity_meta['id'],
+                    'name': latest_activity_meta['name'],
+                    'start_date': latest_activity_meta['start_date'],
+                },
+                'activities': [],
+                'weekly': {
+                    'labels': [],
+                    'series': {str(d): [] for d in weekly_intervals},
+                },
+                'activity_count': 0,
+                'processed_activity_count': len(selected_activities),
+                'total_activity_count': len(recent_activities),
+                'range_activity_count': 0,
+                'warning': f'No telemetry data was available for activities in the last {lookback_days} days.',
+            })
+
+        latest_activity = processed_by_id.get(latest_activity_meta['id'])
+
+        best_activity_by_duration = {}
+        all_curve_watts = []
+        latest_curve_watts = []
+        range_curve_watts = []
+
+        for sec in intervals:
+            best_val = None
+            best_activity = None
+            for activity in processed:
+                val = activity['peaks'].get(sec)
+                if val is None:
+                    continue
+                if best_val is None or val > best_val:
+                    best_val = val
+                    best_activity = activity
+
+            all_curve_watts.append(round(best_val, 1) if best_val is not None else None)
+            range_curve_watts.append(None)
+
+            latest_val = latest_activity['peaks'].get(sec) if latest_activity is not None else None
+            latest_curve_watts.append(round(latest_val, 1) if latest_val is not None else None)
+
+            if best_activity is not None and best_val is not None:
+                best_activity_by_duration[str(sec)] = {
+                    'activity_id': best_activity['id'],
+                    'name': best_activity['name'],
+                    'start_date': best_activity['start_date'],
+                    'power_watts': round(best_val, 1),
+                    'is_race': bool(best_activity.get('is_race')),
+                    'event_id': best_activity.get('event_id'),
+                }
+
+        now_utc = datetime.now(timezone.utc)
+        cutoff_dt = now_utc - timedelta(days=lookback_days)
+        first_week = cutoff_dt.date() - timedelta(days=cutoff_dt.weekday())
+        last_week = now_utc.date() - timedelta(days=now_utc.weekday())
+
+        week_starts = []
+        week_cursor = first_week
+        while week_cursor <= last_week:
+            week_starts.append(week_cursor)
+            week_cursor += timedelta(days=7)
+
+        week_index = {day: idx for idx, day in enumerate(week_starts)}
+        weekly_series = {str(d): [None] * len(week_starts) for d in weekly_intervals}
+
+        for activity in processed:
+            day = activity['start_dt'].date()
+            week_start = day - timedelta(days=day.weekday())
+            idx = week_index.get(week_start)
+            if idx is None:
+                continue
+
+            for d in weekly_intervals:
+                val = activity['peaks'].get(d)
+                if val is None:
+                    continue
+
+                current = weekly_series[str(d)][idx]
+                if current is None or val > current:
+                    weekly_series[str(d)][idx] = round(val, 1)
+
+        _set_power_dashboard_progress(
+            progress_id,
+            status='completed',
+            message='Dashboard data built.',
+            discovered_activity_count=len(recent_activities),
+            selected_activity_count=len(selected_activities),
+            completed_activity_count=completed_count,
+            successful_activity_count=successful_count,
+        )
+
+        return jsonify({
+            'durations_sec': intervals,
+            'durations_label': [_format_interval_label(s) for s in intervals],
+            'all_90_day_curve_watts': all_curve_watts,
+            'latest_curve_watts': latest_curve_watts,
+            'range_curve_watts': None,
+            'best_activity_by_duration': best_activity_by_duration,
+            'latest_activity': {
+                'activity_id': latest_activity_meta['id'],
+                'name': latest_activity_meta['name'],
+                'start_date': latest_activity_meta['start_date'],
+                'is_race': bool(latest_activity.get('is_race')) if latest_activity is not None else False,
+                'event_id': latest_activity.get('event_id') if latest_activity is not None else None,
+            },
+            'activities': [
+                {
+                    'activity_id': activity['id'],
+                    'name': activity['name'],
+                    'start_date': activity['start_dt'].isoformat(),
+                    'end_date': activity['end_dt'].isoformat() if activity.get('end_dt') else activity['start_dt'].isoformat(),
+                    'is_race': bool(activity.get('is_race')),
+                    'event_id': activity.get('event_id'),
+                    'peak_watts': activity['peak_watts'],
+                }
+                for activity in processed
+            ],
+            'weekly': {
+                'labels': [d.strftime('%d %b') for d in week_starts],
+                'series': weekly_series,
+            },
+            'activity_count': len(processed),
+            'processed_activity_count': len(selected_activities),
+            'total_activity_count': len(recent_activities),
+            'range_activity_count': 0,
+        })
+    except Exception as e:
+        logger.exception("Error building power dashboard")
+        _set_power_dashboard_progress(progress_id, status='error', message=str(e))
         return jsonify({'error': str(e)}), 500
 
 
