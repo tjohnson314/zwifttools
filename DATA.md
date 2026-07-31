@@ -205,7 +205,7 @@ Renders `bike_comparison.html`.
 **Pipeline:**
 
 1. **Resolve bike setups** — `get_bike_stats()` for both actual and alternative
-2. **Frontal area** — `frontal_area_from_rider(height_m, weight_kg)` using Faria formula: `FA = 0.0293 × H^0.725 × M^0.425 + 0.0604`
+2. **Frontal area** — `frontal_area_from_rider(height_m, weight_kg)`, matched to Zwift's speed-test data: `FA = 0.3449 × (H/1.83)^0.66 × (M/75)^0.44` (anchored at the 183 cm / 75 kg reference rider)
 3. **Surface-aware CRR** — if `surface_type` column present, compute per-bike-type CRR arrays (road bike vs MTB vs gravel have different rolling resistance on the same surface)
 4. **Physics comparison** — `compare_bike_setups()`:
    - For each timestep, compute the power needed on the **alternative** bike to maintain the **same speed** as recorded

@@ -595,15 +595,15 @@
         }
         
         function calculateFrontalAreaFor(prefix) {
-            // Faria frontal area formula (drops position)
-            // Matches the formula used by ZwifterBikes when deriving Cd values
+            // Frontal-area model matched to Zwift's own speed-test data.
+            // CdA scales as (H/1.83)^0.66 * (M/75)^0.44, anchored to 0.3449 m²
+            // at the 183cm/75kg reference rider (keeps ZwifterBikes Cd calibration).
             const height = parseFloat(document.getElementById(prefix + 'RiderHeight').value) || 175;
             const weight = parseFloat(document.getElementById(prefix + 'RiderWeight').value) || 75;
-            
-            // FA = 0.0293 × H^0.725 × M^0.425 + 0.0604 (H in metres)
+
             const heightM = height / 100;
-            const frontalArea = 0.0293 * Math.pow(heightM, 0.725) * Math.pow(weight, 0.425) + 0.0604;
-            
+            const frontalArea = 0.3449 * Math.pow(heightM / 1.83, 0.66) * Math.pow(weight / 75, 0.44);
+
             document.getElementById(prefix + 'FrontalAreaValue').textContent = frontalArea.toFixed(3);
             return frontalArea;
         }

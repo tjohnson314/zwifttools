@@ -1462,7 +1462,7 @@ def compare_bikes():
     alt_rider_weight = float(data.get('alt_rider_weight', rider_weight))
     alt_rider_height = float(data.get('alt_rider_height', rider_height))
     
-    # Calculate frontal areas from height and weight using the Faria formula
+    # Calculate frontal areas from height and weight (Zwift-matched model)
     frontal_area = frontal_area_from_rider(rider_height / 100, rider_weight)
     alt_frontal_area = frontal_area_from_rider(alt_rider_height / 100, alt_rider_weight)
     
