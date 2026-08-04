@@ -9,7 +9,7 @@ Run with: python app.py
 Then open: http://localhost:5000
 """
 
-from flask import Flask, render_template, jsonify, request, redirect, url_for, session, Response
+from flask import Flask, render_template, jsonify, request, redirect, url_for, session, Response, send_file
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -257,6 +257,12 @@ def critical_power():
 def race_replay():
     """Race replay tool."""
     return render_template('race_replay.html')
+
+
+@app.route('/top-performers')
+def top_performers():
+    """Top-performers scatter: CdA reduction vs weight reduction per frame+wheel."""
+    return render_template('top_performers.html')
 
 
 @app.route('/my-activities')
@@ -969,12 +975,15 @@ def get_frames():
         frames.append({
             'id': frame_id,
             'name': frame_name,
-            'aero': frame.get('frameaero', '-'),
-            'weight': frame.get('frameweight', '-'),
+            'aero': frame.get('framecda_bias'),
+            'weight': frame.get('frameweight_g'),
+            'weightG': frame.get('frameweight_g'),
+            'cdaBias': frame.get('framecda_bias'),
             'hasBuiltInWheels': frame.get('framewheeltype') == 'fixed',
             'isTT': frame.get('frametype') == 'TT',
             'frameType': frame.get('frametype', 'Standard'),
-            'level': _safe_int(frame.get('framelevel'), 0)
+            'level': _safe_int(frame.get('framelevel'), 0),
+            'price': frame.get('frameprice')
         })
     return jsonify(frames)
 
@@ -983,7 +992,8 @@ def get_frames():
 def get_wheels():
     """Get all wheels for dropdown."""
     db = get_db()
-    wheels = [{'id': '', 'name': '(Built-in wheels)', 'aero': '-', 'weight': '-', 'fitsFrame': ''}]
+    wheels = [{'id': '', 'name': '(Built-in wheels)', 'aero': None, 'weight': None,
+               'weightG': 0, 'cdaBias': 0, 'fitsFrame': ''}]
     wheel_values = [w for w in db.wheels.values() if isinstance(w, dict)]
     for wheel in sorted(wheel_values, key=lambda w: f'{w.get("wheelmake", "")} {w.get("wheelmodel", "")}'):
         wheel_id = wheel.get('wheelid') or wheel.get('wheelId')
@@ -995,12 +1005,235 @@ def get_wheels():
         wheels.append({
             'id': wheel_id,
             'name': wheel_name,
-            'aero': wheel.get('wheelaero', '-'),
-            'weight': wheel.get('wheelweight', '-'),
+            'aero': wheel.get('wheelcda_bias'),
+            'weight': wheel.get('wheelweight_g'),
+            'weightG': wheel.get('wheelweight_g'),
+            'cdaBias': wheel.get('wheelcda_bias'),
             'fitsFrame': wheel.get('wheelfitsframe', 'Standard,TT'),
-            'level': _safe_int(wheel.get('wheellevel'), 0)
+            'level': _safe_int(wheel.get('wheellevel'), 0),
+            'price': wheel.get('wheelprice')
         })
     return jsonify(wheels)
+
+
+# ---------------------------------------------------------------------------
+# Top Performers scatter (CdA reduction vs weight reduction)
+# ---------------------------------------------------------------------------
+# Frames/wheels that come with permanently attached ("built-in") wheels — the
+# Halo bikes. Each maps its game-frame folder to the (brand, model) of its
+# integrated wheelset, so they render as a single point instead of one-per-wheel.
+_HALO_BUILTIN_WHEELS = {
+    'Zwift_Concept': ('Zwift', 'Zwift_Concept'),            # Tron
+    'Zwift_Concept_Gold': ('Zwift', 'Zwift_Concept_Gold'),  # Tron (gold)
+    'CannondalePong': ('Cannondale', 'CannondalePong'),     # R4000 Roller Blade
+    'SpecializedProject74': ('Roval', 'RovalProject74'),    # Project 74
+    'PinarelloEspada': ('Pinarello', 'PinarelloEspada'),    # Espada
+}
+
+_REFERENCE_FRAME_FOLDER = 'Zwift_Carbon'
+_REFERENCE_WHEEL_NAME = 'LOC_WHEELNAME_ZWIFT_32MM_CARBON'  # "Zwift 32mm Carbon"
+
+# The exact frames Eric (ZwiftInsider) includes in his Top Performers chart.
+# game-frame folder -> display label (insertion order = his chart order).
+_ERIC_FRAMES = {
+    'CannondalePong': 'Cannondale R4000 Roller Blade',
+    'CannondaleSuperSixEVOLAB712024': 'Cannondale SuperSix Evo LAB71',
+    'CannondaleSuperSixEvo2026': 'Cannondale SuperSix EVO LAB71 Team',
+    'CanyonAeroad2024': 'Canyon Aeroad 2024',
+    'CanyonAeroadAlpecinPremierTech2026': 'Canyon Aeroad CFR Alpecin Premier-Tech',
+    'CerveloS52021': 'Cervelo S5 2020',
+    'CerveloS52026': 'Cervelo S5',
+    'FeltAR2018': 'Felt AR',
+    'GiantTCRAdvancedSL2023': 'Giant TCR Advanced SL 2025',
+    'PinarelloDogmaF2024': 'Pinarello Dogma F 2024',
+    'ScottAddict2021': 'Scott Addict RC',
+    'SpecializedAethos2021': 'Specialized Aethos S-Works',
+    'SpecializedProject74': 'Specialized Project 74',
+    'SpecializedTarmacSL82024': 'Specialized S-Works Tarmac SL8',
+    'SpecializedTarmacSL92026': 'Specialized Tarmac SL9',
+    'SpecializedVenge2019': 'Specialized Venge S-Works 2019',
+    'VanRyselRCRPro2023': 'Van Rysel RCR Pro',
+    'WilierFilanteSLRID22026': 'Wilier Filante SLR ID2',
+    'Zwift_Concept': 'Zwift Concept 1 (Tron)',
+}
+# Frames checked by default in Eric's chart.
+_ERIC_FRAME_DEFAULTS = {
+    'CannondalePong', 'CannondaleSuperSixEvo2026', 'CanyonAeroad2024',
+    'CanyonAeroadAlpecinPremierTech2026', 'CerveloS52026', 'SpecializedAethos2021',
+    'SpecializedProject74', 'SpecializedTarmacSL92026', 'Zwift_Concept',
+}
+# The exact wheels Eric includes: (brand, model) -> display label (chart order).
+_ERIC_WHEELS = {
+    ('Cadex', 'CadexMax50'): 'CADEX Max 50',
+    ('DTSwiss', 'ARC1100DICUT65'): 'DT Swiss ARC 1100 DICUT 65',
+    ('DTSwiss', 'ARC1100DICUT85DISC'): 'DT Swiss ARC 1100 DICUT 85/Disc',
+    ('Enve', 'ENVESES4.5Pro'): 'ENVE SES 4.5 PRO',
+    ('Enve', 'EnveSES7.8'): 'ENVE SES 7.8',
+    ('Enve', 'EnveSES_8.9'): 'ENVE SES 8.9',
+    ('Lightweight', 'Meilenstein_Lightweight'): 'Lightweight Meilenstein',
+    ('Miche', 'DevaRD62'): 'Miche Deva RD 62',
+    ('PrincetonCarbonWorks', 'Alta3532'): 'Princeton CarbonWorks Alta 3532',
+    ('PrincetonCarbonWorks', 'MachTSV2Blur'): 'Princeton CarbonWorks Mach TSV2/Blur Disc',
+    ('PrincetonCarbonWorks', 'Wake6560'): 'Princeton CarbonWorks Wake 6560',
+    ('Reserve', 'Reserve34'): 'Reserve 34/37',
+    ('Roval', 'RovalAlpinistCLX'): 'Roval Alpinist CLX',
+    ('SwissSide', 'SwissSideHADRONUltimate650'): 'Swiss Side HADRON Ultimate 650',
+    ('Zipp', 'Zipp353'): 'Zipp 353 NSW',
+    ('Zipp', 'Zipp454cc'): 'Zipp 454',
+    ('Zipp', '858 Super9'): 'Zipp 858/Super9',
+}
+# Wheels checked by default in Eric's chart.
+_ERIC_WHEEL_DEFAULTS = {
+    ('DTSwiss', 'ARC1100DICUT65'), ('DTSwiss', 'ARC1100DICUT85DISC'),
+    ('PrincetonCarbonWorks', 'Wake6560'), ('SwissSide', 'SwissSideHADRONUltimate650'),
+}
+
+_top_performers_cache = None
+
+
+def _humanize_model(brand, model):
+    """Turn a terse asset id like 'Zipp_404_Firecrest' into 'Zipp 404 Firecrest'."""
+    s = str(model or '')
+    b = str(brand or '')
+    if b and s.lower().startswith(b.lower()):
+        s = s[len(b):]
+    s = s.replace('_', ' ')
+    s = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', s)   # camelCase -> spaced
+    s = re.sub(r'(?<=[A-Za-z])(?=\d)', ' ', s)    # letter|digit boundary
+    s = re.sub(r'\s+', ' ', s).strip()
+    return f"{b} {s}".strip()
+
+
+def _frame_levels(frame):
+    """(cda_bias, weight_g) at level 0 (un-upgraded) and level 5 (fully upgraded)."""
+    c0 = frame.get('frameset_cda_bias_effective') or 0.0
+    w0 = frame.get('frameset_weight_g_effective') or 0.0
+    c5, w5 = c0, w0
+    for u in (frame.get('upgrades') or []):
+        if u.get('level') == 5:
+            if u.get('cda_bias_effective') is not None:
+                c5 = u['cda_bias_effective']
+            if u.get('weight_g_effective') is not None:
+                w5 = u['weight_g_effective']
+    return c0, w0, c5, w5
+
+
+def _build_top_performers_data():
+    """Assemble the exact frame/wheel set Eric (ZwiftInsider) plots in his Top
+    Performers chart, computed from the WAD-extracted game data (per-level CdA
+    bias + weight). The reference bike is always the Level 0 Zwift Carbon +
+    Zwift 32mm Carbon, regardless of the chart's upgrade-level toggle."""
+    global _top_performers_cache
+    if _top_performers_cache is not None:
+        return _top_performers_cache
+
+    base = Path(__file__).parent / 'zwiftdata'
+    frames_raw = json.loads((base / 'game_frames.json').read_text(encoding='utf-8-sig'))
+    wheels_raw = json.loads((base / 'game_wheels.json').read_text(encoding='utf-8-sig'))
+
+    frames_by_folder = {f.get('folder'): f for f in frames_raw}
+    wheels_by_key = {(w.get('brand'), w.get('model')): w for w in wheels_raw}
+
+    def built_in_wheel(folder, ftype):
+        halo_key = _HALO_BUILTIN_WHEELS.get(folder)
+        if not halo_key:
+            return None
+        bw = wheels_by_key.get(halo_key)
+        if not bw:
+            return None
+        is_tt = ftype == 'TT'
+        bias = bw.get('pair_cda_bias_tt') if (is_tt and bw.get('pair_cda_bias_tt') is not None) \
+            else bw.get('pair_cda_bias_effective')
+        return {
+            'name': _humanize_model(bw.get('brand'), bw.get('model')),
+            'cda': bias or 0.0,
+            'weight': bw.get('pair_weight_g_effective') or 0.0,
+        }
+
+    frames_out = []
+    for folder, label in _ERIC_FRAMES.items():
+        f = frames_by_folder.get(folder)
+        if not f:
+            continue
+        ftype = (f.get('type') or 'STANDARD').upper()
+        c0, w0, c5, w5 = _frame_levels(f)
+        halo_key = _HALO_BUILTIN_WHEELS.get(folder)
+        frames_out.append({
+            'id': folder,
+            'name': label,
+            'make': f.get('make'),
+            'type': ftype,
+            'halo': bool(halo_key),
+            'builtInWheel': built_in_wheel(folder, ftype),
+            'cda': [round(c0, 6), round(c5, 6)],
+            'weight': [round(w0, 1), round(w5, 1)],
+            'default': folder in _ERIC_FRAME_DEFAULTS,
+        })
+
+    wheels_out = []
+    for (brand, model), label in _ERIC_WHEELS.items():
+        w = wheels_by_key.get((brand, model))
+        if not w:
+            continue
+        wheels_out.append({
+            'id': f"{brand}|{model}",
+            'name': label,
+            'cda': round(w.get('pair_cda_bias_effective') or 0.0, 6),
+            'cdaTT': round((w.get('pair_cda_bias_tt') if w.get('pair_cda_bias_tt') is not None
+                            else w.get('pair_cda_bias_effective')) or 0.0, 6),
+            'weight': round(w.get('pair_weight_g_effective') or 0.0, 1),
+            'default': (brand, model) in _ERIC_WHEEL_DEFAULTS,
+        })
+
+    # Reference bike = Zwift Carbon frame + Zwift 32mm Carbon wheel, always Level 0.
+    rf = frames_by_folder.get(_REFERENCE_FRAME_FOLDER)
+    rc0, rw0, _rc5, _rw5 = _frame_levels(rf) if rf else (0.0, 0.0, 0.0, 0.0)
+    reference_frame = {
+        'name': 'Zwift Carbon',
+        'type': (rf.get('type') if rf else 'STANDARD') or 'STANDARD',
+        'cda': round(rc0, 6),
+        'weight': round(rw0, 1),
+    }
+    rw = next((w for w in wheels_raw if w.get('name') == _REFERENCE_WHEEL_NAME), None)
+    reference_wheel = {
+        'name': 'Zwift 32mm Carbon',
+        'cda': round((rw.get('pair_cda_bias_effective') if rw else 0.0) or 0.0, 6),
+        'cdaTT': round((rw.get('pair_cda_bias_tt') if rw else 0.0) or 0.0, 6),
+        'weight': round((rw.get('pair_weight_g_effective') if rw else 0.0) or 0.0, 1),
+    }
+
+    _top_performers_cache = {
+        'frames': frames_out,
+        'wheels': wheels_out,
+        'referenceFrame': reference_frame,
+        'referenceWheel': reference_wheel,
+    }
+    return _top_performers_cache
+
+
+@app.route('/api/top_performers')
+def api_top_performers():
+    """Frame/wheel dataset for the top-performers scatter chart."""
+    return jsonify(_build_top_performers_data())
+
+
+# Raw extracted datasets downloadable from the Top Performers methodology section.
+_DOWNLOADABLE_DATA = {
+    'game_frames.json',
+    'game_wheels.json',
+    'frame_zi_match.json',
+}
+
+
+@app.route('/data/<filename>')
+def download_data_file(filename):
+    """Serve one of the raw extracted JSON datasets (allowlisted to prevent
+    path traversal) as a download."""
+    if filename not in _DOWNLOADABLE_DATA:
+        return jsonify({'error': 'Not found'}), 404
+    return send_file(Path(__file__).parent / 'zwiftdata' / filename,
+                     mimetype='application/json', as_attachment=True,
+                     download_name=filename)
 
 
 @app.route('/api/my_profile')
@@ -1062,7 +1295,12 @@ def get_bike_stats_api():
         'wheel_name': setup.wheel_name,
         'upgrade_level': setup.upgrade_level,
         'cd': round(setup.cd, 4),
-        'weight_kg': round(setup.weight_kg, 3)
+        'weight_kg': round(setup.weight_kg, 3),
+        'cda_bias': round(setup.cda_bias, 4),
+        'frame_weight_g': round(setup.frame_weight_g),
+        'frame_cda_bias': round(setup.frame_cda_bias, 4),
+        'wheel_weight_g': round(setup.wheel_weight_g),
+        'wheel_cda_bias': round(setup.wheel_cda_bias, 4)
     })
 
 
@@ -1498,12 +1736,22 @@ def compare_bikes():
         'actual': {
             'name': str(actual),
             'cd': actual.cd,
-            'weight_kg': actual.weight_kg
+            'weight_kg': actual.weight_kg,
+            'cda_bias': round(actual.cda_bias, 4),
+            'frame_weight_g': round(actual.frame_weight_g),
+            'frame_cda_bias': round(actual.frame_cda_bias, 4),
+            'wheel_weight_g': round(actual.wheel_weight_g),
+            'wheel_cda_bias': round(actual.wheel_cda_bias, 4)
         },
         'alternative': {
             'name': str(alternative),
             'cd': alternative.cd,
-            'weight_kg': alternative.weight_kg
+            'weight_kg': alternative.weight_kg,
+            'cda_bias': round(alternative.cda_bias, 4),
+            'frame_weight_g': round(alternative.frame_weight_g),
+            'frame_cda_bias': round(alternative.frame_cda_bias, 4),
+            'wheel_weight_g': round(alternative.wheel_weight_g),
+            'wheel_cda_bias': round(alternative.wheel_cda_bias, 4)
         },
         'summary': {
             'total_actual_kj': round(result.total_actual_kj, 1),
@@ -1527,47 +1775,34 @@ def compare_bikes():
     })
 
 
-# Frame/wheel IDs that are always available by default (not special unlocks)
-# Frames: Zwift Steel (given at account creation), Zwift Handcycle (given at account creation)
-_DEFAULT_FRAME_IDS = {'F093', 'F111'}
-# Wheels: Classic (default), Buffalo Fahrad/Gravel/Safety (auto-included with frame purchases)
-_DEFAULT_WHEEL_IDS = {'W038', 'W037', 'W039', 'W041'}
-
-# Cumulative upgrade costs (Drops) per tier per level (from ZwiftInsider)
-# Same across Distance/Duration/Elevation categories
-_UPGRADE_COSTS = {
-    'Entry-Level': [0, 25000, 75000, 150000, 250000, 400000],
-    'Mid-Range':   [0, 50000, 150000, 300000, 500000, 750000],
-    'High-End':    [0, 100000, 300000, 650000, 1150000, 1900000],
-    'Halo':        [0, 400000, 1200000, 2400000, 5000000, 10000000],
-}
+# Frame/wheel IDs that are always available by default (not special unlocks).
+# Starter bikes given at account creation are encoded in the game data as
+# price 0 with rider level 1 (as opposed to special/event unlocks, which use a
+# negative level), so they are handled generically below rather than by id.
 
 def _get_combo_drops_cost(db, frame_id, wheel_id, upgrade_level=0):
-    """Get total Drops cost for a frame + wheel + upgrades combination."""
+    """Get total Drops cost for a frame + wheel combination, plus a non-shop flag.
+
+    Prices come straight from the game data: the frame carries the whole-bike
+    Drops price and each wheelset carries its own price. Items priced at 0 with a
+    negative unlock level are special/event unlocks (Tron, Bat, concept bikes,
+    bike-tied wheels) rather than normal shop purchases.
+    """
     frame = db.frames.get(frame_id, {})
     frame_price = int(frame.get('frameprice') or 0)
-    
+    frame_level = int(frame.get('framelevel') or 0)
+
     wheel_price = 0
+    non_shop = frame_price == 0 and frame_level < 0
     if wheel_id:
         wheel = db.wheels.get(wheel_id, {})
         wheel_price = int(wheel.get('wheelprice') or 0)
-    
-    # Add upgrade costs based on frame tier
-    upgrade_cost = 0
-    if upgrade_level > 0:
-        tier = frame.get('frameupgradelevel', '')
-        costs = _UPGRADE_COSTS.get(tier)
-        if costs and upgrade_level < len(costs):
-            upgrade_cost = costs[upgrade_level]
-    
-    # Check if frame or wheel has special unlock requirements
-    frame_tier = frame.get('frameupgradelevel', '')
-    non_shop = ((frame_price == 0 and frame_id not in _DEFAULT_FRAME_IDS)
-                or (frame_tier == 'Halo')
-                or (wheel_id and wheel_price == 0 and wheel_id not in _DEFAULT_WHEEL_IDS))
+        wheel_level = int(wheel.get('wheellevel') or 0)
+        if wheel_price == 0 and wheel_level < 0:
+            non_shop = True
 
-    total = frame_price + wheel_price + upgrade_cost
-    return total if total > 0 else 0, non_shop
+    total = frame_price + wheel_price
+    return total, non_shop
 
 
 def _filter_bike_combos(db, exclude_tt, use_pareto, upgrade_level, max_rider_level=None, excluded_frames=None, exclude_special=False):
@@ -1580,16 +1815,15 @@ def _filter_bike_combos(db, exclude_tt, use_pareto, upgrade_level, max_rider_lev
         bike_combos = [(k, v) for k, v in bike_combos 
                        if k[0] not in tt_frame_ids]
     
-    # Filter out bikes with special unlock requirements (price=0 or Halo tier)
-    # but keep default frames/wheels that every player has
+    # Filter out special/event unlocks (price 0 with a negative unlock level),
+    # while keeping starter bikes (price 0, level 1) and all Drops-priced items.
     if exclude_special:
         special_frame_ids = {fid for fid, frame in db.frames.items()
-                             if (int(frame.get('frameprice') or 0) == 0
-                                 and fid not in _DEFAULT_FRAME_IDS)
-                             or frame.get('frameupgradelevel') == 'Halo'}
+                             if int(frame.get('frameprice') or 0) == 0
+                             and int(frame.get('framelevel') or 0) < 0}
         special_wheel_ids = {wid for wid, wheel in db.wheels.items()
                              if int(wheel.get('wheelprice') or 0) == 0
-                             and wid not in _DEFAULT_WHEEL_IDS}
+                             and int(wheel.get('wheellevel') or 0) < 0}
         bike_combos = [(k, v) for k, v in bike_combos
                        if k[0] not in special_frame_ids
                        and (not k[1] or k[1] not in special_wheel_ids)]
@@ -1599,17 +1833,18 @@ def _filter_bike_combos(db, exclude_tt, use_pareto, upgrade_level, max_rider_lev
         excluded_set = set(excluded_frames)
         bike_combos = [(k, v) for k, v in bike_combos if k[0] not in excluded_set]
     
-    # Filter by max rider level (XP unlock level)
+    # Filter by max rider level (XP unlock level). A negative level in the game
+    # data means "no level requirement", so it is treated as level 0.
     if max_rider_level is not None:
         filtered = []
         for (frame_id, wheel_id), combo in bike_combos:
             frame = db.frames.get(frame_id, {})
-            frame_lvl = int(frame.get('framelevel', '0') or '0')
+            frame_lvl = max(0, int(frame.get('framelevel') or 0))
             if frame_lvl > max_rider_level:
                 continue
             if wheel_id:  # Only check wheel level for non-built-in wheels
                 wheel = db.wheels.get(wheel_id, {})
-                wheel_lvl = int(wheel.get('wheellevel', '0') or '0')
+                wheel_lvl = max(0, int(wheel.get('wheellevel') or 0))
                 if wheel_lvl > max_rider_level:
                     continue
             filtered.append(((frame_id, wheel_id), combo))
@@ -1805,6 +2040,11 @@ def find_best_bikes():
                 'name': f"{setup.frame_name} + {setup.wheel_name}",
                 'cd': round(setup.cd, 4),
                 'weight_kg': round(setup.weight_kg, 3),
+                'cda_bias': round(setup.cda_bias, 4),
+                'frame_weight_g': round(setup.frame_weight_g),
+                'frame_cda_bias': round(setup.frame_cda_bias, 4),
+                'wheel_weight_g': round(setup.wheel_weight_g),
+                'wheel_cda_bias': round(setup.wheel_cda_bias, 4),
                 'np': round(np_value, 1),
                 'avg_power': round(avg_power, 1),
                 'total_kj': round(total_kj, 1),

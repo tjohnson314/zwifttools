@@ -392,6 +392,16 @@ h1 {
     border-bottom: none;
 }
 
+.stats-row.stats-total {
+    border-top: 2px solid rgba(255,255,255,0.25);
+    margin-top: 4px;
+    padding-top: 12px;
+}
+
+.stats-row.stats-total .stats-label {
+    color: #ccc;
+}
+
 .stats-label {
     color: #888;
 }

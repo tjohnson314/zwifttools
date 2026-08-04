@@ -96,26 +96,37 @@
                     </select>
                 </div>
                 
-                <div class="form-group">
+                <div class="form-group" style="display:none;">
                     <label>Upgrade Level</label>
                     <select id="actualLevel" onchange="updateBikeStats('actual')">
-                        <option value="0">Level 0 (Stock)</option>
-                        <option value="1">Level 1</option>
-                        <option value="2">Level 2</option>
-                        <option value="3">Level 3</option>
-                        <option value="4">Level 4</option>
-                        <option value="5">Level 5 (Max)</option>
+                        <option value="0" selected>Level 0 (Stock)</option>
                     </select>
                 </div>
                 
                 <div class="stats-box" id="actualStats">
                     <div class="stats-row">
-                        <span class="stats-label">Air Resistance (Cd)</span>
-                        <span class="stats-value cd" id="actualCd">-</span>
+                        <span class="stats-label">Frame weight</span>
+                        <span class="stats-value weight" id="actualFrameWeight">-</span>
                     </div>
                     <div class="stats-row">
-                        <span class="stats-label">Bike Weight</span>
+                        <span class="stats-label">Frame CdA bias</span>
+                        <span class="stats-value cd" id="actualFrameCda">-</span>
+                    </div>
+                    <div class="stats-row">
+                        <span class="stats-label">Wheels weight</span>
+                        <span class="stats-value weight" id="actualWheelWeight">-</span>
+                    </div>
+                    <div class="stats-row">
+                        <span class="stats-label">Wheels CdA bias</span>
+                        <span class="stats-value cd" id="actualWheelCda">-</span>
+                    </div>
+                    <div class="stats-row stats-total">
+                        <span class="stats-label"><strong>Total weight</strong></span>
                         <span class="stats-value weight" id="actualWeight">-</span>
+                    </div>
+                    <div class="stats-row stats-total">
+                        <span class="stats-label"><strong>Total CdA bias</strong></span>
+                        <span class="stats-value cd" id="actualCda">-</span>
                     </div>
                 </div>
             </div>
@@ -144,26 +155,37 @@
                     </select>
                 </div>
                 
-                <div class="form-group">
+                <div class="form-group" style="display:none;">
                     <label>Upgrade Level</label>
                     <select id="altLevel" onchange="updateBikeStats('alt')">
-                        <option value="0">Level 0 (Stock)</option>
-                        <option value="1">Level 1</option>
-                        <option value="2">Level 2</option>
-                        <option value="3">Level 3</option>
-                        <option value="4">Level 4</option>
-                        <option value="5">Level 5 (Max)</option>
+                        <option value="0" selected>Level 0 (Stock)</option>
                     </select>
                 </div>
                 
                 <div class="stats-box" id="altStats">
                     <div class="stats-row">
-                        <span class="stats-label">Air Resistance (Cd)</span>
-                        <span class="stats-value cd" id="altCd">-</span>
+                        <span class="stats-label">Frame weight</span>
+                        <span class="stats-value weight" id="altFrameWeight">-</span>
                     </div>
                     <div class="stats-row">
-                        <span class="stats-label">Bike Weight</span>
+                        <span class="stats-label">Frame CdA bias</span>
+                        <span class="stats-value cd" id="altFrameCda">-</span>
+                    </div>
+                    <div class="stats-row">
+                        <span class="stats-label">Wheels weight</span>
+                        <span class="stats-value weight" id="altWheelWeight">-</span>
+                    </div>
+                    <div class="stats-row">
+                        <span class="stats-label">Wheels CdA bias</span>
+                        <span class="stats-value cd" id="altWheelCda">-</span>
+                    </div>
+                    <div class="stats-row stats-total">
+                        <span class="stats-label"><strong>Total weight</strong></span>
                         <span class="stats-value weight" id="altWeight">-</span>
+                    </div>
+                    <div class="stats-row stats-total">
+                        <span class="stats-label"><strong>Total CdA bias</strong></span>
+                        <span class="stats-value cd" id="altCda">-</span>
                     </div>
                 </div>
             </div>
@@ -286,15 +308,10 @@
             <p>Search bike combinations to find the ones that minimize your Normalized Power for this route</p>
             
             <div style="display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; align-items: center;">
-                <div>
+                <div style="display:none;">
                     <label>Upgrade Level:</label>
                     <select id="bestBikesLevel" style="width: 120px; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 2px solid #333;">
-                        <option value="0">Level 0</option>
-                        <option value="1">Level 1</option>
-                        <option value="2">Level 2</option>
-                        <option value="3">Level 3</option>
-                        <option value="4">Level 4</option>
-                        <option value="5" selected>Level 5 (Max)</option>
+                        <option value="0" selected>Level 0</option>
                     </select>
                 </div>
                 <div>
@@ -339,9 +356,9 @@
                         <tr>
                             <th>#</th>
                             <th>Bike Setup</th>
-                            <th>Cd</th>
+                            <th title="Total CdA bias (frame + wheels), m². Lower is more aero.">CdA bias</th>
                             <th>Weight</th>
-                            <th title="Total Drops cost: frame + wheels + upgrades">Total Drops</th>
+                            <th title="Total Drops to buy this frame plus wheelset. * marks special/event unlocks.">Total Drops</th>
                             <th>NP</th>
                             <th>vs Actual</th>
                             <th></th>
@@ -488,7 +505,7 @@
                 const compatible = getCompatibleWheels(frameType);
                 
                 wheelSelect.innerHTML = compatible
-                    .map(w => `<option value="${w.id}">${w.name} (A:${w.aero} W:${w.weight})</option>`)
+                    .map(w => `<option value="${w.id}">${w.name}${w.cdaBias != null ? ` (CdA ${w.cdaBias >= 0 ? '+' : ''}${w.cdaBias} · ${Math.round(w.weightG)}g)` : ''}</option>`)
                     .join('');
                 wheelSelect.disabled = false;
                 
@@ -513,7 +530,7 @@
                 frames = await resp.json();
                 
                 const html = frames.map(f => 
-                    `<option value="${f.id}">${f.name} (A:${f.aero} W:${f.weight})</option>`
+                    `<option value="${f.id}">${f.name}${f.cdaBias != null ? ` (CdA ${f.cdaBias >= 0 ? '+' : ''}${f.cdaBias} · ${Math.round(f.weightG)}g)` : ''}</option>`
                 ).join('');
                 
                 document.getElementById('actualFrame').innerHTML = html;
@@ -527,14 +544,15 @@
                     document.getElementById('actualFrame').value = savedActualFrame;
                 } else {
                     const tronIdx = frames.findIndex(f => f.id === 'F089');
-                    if (tronIdx >= 0) document.getElementById('actualFrame').selectedIndex = tronIdx;
+                    document.getElementById('actualFrame').selectedIndex = tronIdx >= 0 ? tronIdx : 0;
                 }
                 
                 if (savedAltFrame && frames.some(f => f.id === savedAltFrame)) {
                     document.getElementById('altFrame').value = savedAltFrame;
                 } else {
                     const tarmacIdx = frames.findIndex(f => f.id === 'F122');
-                    if (tarmacIdx >= 0) document.getElementById('altFrame').selectedIndex = tarmacIdx;
+                    document.getElementById('altFrame').selectedIndex =
+                        tarmacIdx >= 0 ? tarmacIdx : Math.min(1, frames.length - 1);
                 }
             } catch (e) {
                 console.error('Failed to load frames:', e);
@@ -815,11 +833,16 @@
                 
                 if (resp.ok) {
                     const stats = await resp.json();
-                    document.getElementById(`${prefix}Cd`).textContent = stats.cd.toFixed(4);
+                    const fmtBias = (v) => `${v >= 0 ? '+' : ''}${v.toFixed(4)} m²`;
+                    document.getElementById(`${prefix}FrameWeight`).textContent = `${Math.round(stats.frame_weight_g)} g`;
+                    document.getElementById(`${prefix}FrameCda`).textContent = fmtBias(stats.frame_cda_bias);
+                    document.getElementById(`${prefix}WheelWeight`).textContent = `${Math.round(stats.wheel_weight_g)} g`;
+                    document.getElementById(`${prefix}WheelCda`).textContent = fmtBias(stats.wheel_cda_bias);
                     document.getElementById(`${prefix}Weight`).textContent = `${stats.weight_kg.toFixed(2)} kg`;
+                    document.getElementById(`${prefix}Cda`).textContent = fmtBias(stats.cda_bias);
                 } else {
-                    document.getElementById(`${prefix}Cd`).textContent = 'N/A';
-                    document.getElementById(`${prefix}Weight`).textContent = 'N/A';
+                    ['FrameWeight','FrameCda','WheelWeight','WheelCda','Weight','Cda'].forEach(s =>
+                        document.getElementById(`${prefix}${s}`).textContent = 'N/A');
                 }
             } catch (e) {
                 console.error('Failed to get bike stats:', e);
@@ -1328,13 +1351,16 @@
                         const isActual = bike.is_actual;
                         const rowStyle = isActual ? 'background: rgba(247, 147, 30, 0.2); border: 2px solid #f7931e;' : '';
                         const actualTag = isActual ? ' <span style="color: #f7931e; font-size: 0.8em;">(YOUR BIKE)</span>' : '';
+                        const dropsStr = (bike.drops_cost === null || bike.drops_cost === undefined)
+                            ? '—'
+                            : `${bike.drops_cost.toLocaleString()}${bike.non_shop ? ' *' : ''}`;
                         
                         bestHtml += `<tr style="${rowStyle}">
                             <td style="color: #4caf50; font-weight: bold;">${i + 1}</td>
                             <td style="text-align: left;">${bike.name}${actualTag}</td>
-                            <td>${bike.cd.toFixed(4)}</td>
+                            <td>${bike.cda_bias >= 0 ? '+' : ''}${bike.cda_bias.toFixed(4)}</td>
                             <td>${bike.weight_kg.toFixed(2)} kg</td>
-                            <td style="color: #ffd54f;">${bike.drops_cost != null ? bike.drops_cost.toLocaleString() : '—'}${bike.non_shop ? '*' : ''}</td>
+                            <td title="${bike.non_shop ? 'Special/event unlock' : ''}">${dropsStr}</td>
                             <td style="font-weight: bold;">${bike.np} W</td>
                             <td style="color: ${diffColor}; font-weight: bold;">${diffStr} W</td>
                             <td>
