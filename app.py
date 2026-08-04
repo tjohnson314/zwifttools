@@ -265,6 +265,12 @@ def top_performers():
     return render_template('top_performers.html')
 
 
+@app.route('/top-performers-tt')
+def top_performers_tt():
+    """TT top-performers scatter: CdA/weight reduction per time-trial frame+wheel."""
+    return render_template('top_performers_tt.html')
+
+
 @app.route('/my-activities')
 def my_activities():
     """My Activities page — shows the logged-in user's recent activities."""
@@ -1088,7 +1094,39 @@ _ERIC_WHEEL_DEFAULTS = {
     ('PrincetonCarbonWorks', 'Wake6560'), ('SwissSide', 'SwissSideHADRONUltimate650'),
 }
 
-_top_performers_cache = None
+# --- TT variant (ZwiftInsider "TT Top Performers" chart) ---------------------
+# Time-trial game-frame folder -> display label (his chart order).
+_ERIC_TT_FRAMES = {
+    'BmcTimemachine01': 'BMC Timemachine01',
+    'CadexTri2022': 'CADEX Tri',
+    'CanyonSpeedmaxCRSLXDisc2021': 'Canyon Speedmax CF SLX Disc',
+    'CanyonSpeedmaxCFR2026': 'Canyon Speedmax CFR',
+    'CerveloP5': 'Cervelo P5',
+    'CerveloP5x': 'Cervelo PX-Series',
+    'CubeAerium2019': 'Cube Aerium',
+    'FeltIA2019': 'Felt IA 2.0',
+    'PinarelloBolideTT2018': 'Pinarello Bolide TT',
+    'PinarelloEspada': 'Pinarello Espada',
+    'QuintanaVPR2022': 'Quintana Roo V-PR',
+    'ScottPlasma2022': 'Scott Plasma RC Ultimate',
+    'SpecializedShiv2019': 'Specialized Shiv Disc',
+    'SpecializedShiv': 'Specialized Shiv S-Works',
+    'TrekSpeedConcept2021': 'Trek Speed Concept SLR 9',
+    'VanRyselRCRX2026': 'Van Rysel RCR-X',
+    'VentumOne': 'Ventum One',
+}
+# TT frames checked by default in his chart.
+_ERIC_TT_FRAME_DEFAULTS = {
+    'CadexTri2022', 'CanyonSpeedmaxCRSLXDisc2021', 'CanyonSpeedmaxCFR2026',
+    'FeltIA2019', 'ScottPlasma2022',
+}
+# TT wheels checked by default (same wheel set as the road chart).
+_ERIC_TT_WHEEL_DEFAULTS = {
+    ('DTSwiss', 'ARC1100DICUT85DISC'), ('PrincetonCarbonWorks', 'Alta3532'),
+    ('PrincetonCarbonWorks', 'Wake6560'), ('SwissSide', 'SwissSideHADRONUltimate650'),
+}
+
+_top_performers_cache = {}
 
 
 def _humanize_model(brand, model):
@@ -1118,14 +1156,20 @@ def _frame_levels(frame):
     return c0, w0, c5, w5
 
 
-def _build_top_performers_data():
+def _build_top_performers_data(variant='road'):
     """Assemble the exact frame/wheel set Eric (ZwiftInsider) plots in his Top
     Performers chart, computed from the WAD-extracted game data (per-level CdA
-    bias + weight). The reference bike is always the Level 0 Zwift Carbon +
+    bias + weight). ``variant`` selects the road ('road') or time-trial ('tt')
+    frame/default set. The reference bike is always the Level 0 Zwift Carbon +
     Zwift 32mm Carbon, regardless of the chart's upgrade-level toggle."""
-    global _top_performers_cache
-    if _top_performers_cache is not None:
-        return _top_performers_cache
+    if variant in _top_performers_cache:
+        return _top_performers_cache[variant]
+    if variant == 'tt':
+        frames_map, frame_defaults = _ERIC_TT_FRAMES, _ERIC_TT_FRAME_DEFAULTS
+        wheel_defaults = _ERIC_TT_WHEEL_DEFAULTS
+    else:
+        frames_map, frame_defaults = _ERIC_FRAMES, _ERIC_FRAME_DEFAULTS
+        wheel_defaults = _ERIC_WHEEL_DEFAULTS
 
     base = Path(__file__).parent / 'zwiftdata'
     frames_raw = json.loads((base / 'game_frames.json').read_text(encoding='utf-8-sig'))
@@ -1151,7 +1195,7 @@ def _build_top_performers_data():
         }
 
     frames_out = []
-    for folder, label in _ERIC_FRAMES.items():
+    for folder, label in frames_map.items():
         f = frames_by_folder.get(folder)
         if not f:
             continue
@@ -1167,7 +1211,7 @@ def _build_top_performers_data():
             'builtInWheel': built_in_wheel(folder, ftype),
             'cda': [round(c0, 6), round(c5, 6)],
             'weight': [round(w0, 1), round(w5, 1)],
-            'default': folder in _ERIC_FRAME_DEFAULTS,
+            'default': folder in frame_defaults,
         })
 
     wheels_out = []
@@ -1182,7 +1226,7 @@ def _build_top_performers_data():
             'cdaTT': round((w.get('pair_cda_bias_tt') if w.get('pair_cda_bias_tt') is not None
                             else w.get('pair_cda_bias_effective')) or 0.0, 6),
             'weight': round(w.get('pair_weight_g_effective') or 0.0, 1),
-            'default': (brand, model) in _ERIC_WHEEL_DEFAULTS,
+            'default': (brand, model) in wheel_defaults,
         })
 
     # Reference bike = Zwift Carbon frame + Zwift 32mm Carbon wheel, always Level 0.
@@ -1202,19 +1246,25 @@ def _build_top_performers_data():
         'weight': round((rw.get('pair_weight_g_effective') if rw else 0.0) or 0.0, 1),
     }
 
-    _top_performers_cache = {
+    _top_performers_cache[variant] = {
         'frames': frames_out,
         'wheels': wheels_out,
         'referenceFrame': reference_frame,
         'referenceWheel': reference_wheel,
     }
-    return _top_performers_cache
+    return _top_performers_cache[variant]
 
 
 @app.route('/api/top_performers')
 def api_top_performers():
     """Frame/wheel dataset for the top-performers scatter chart."""
     return jsonify(_build_top_performers_data())
+
+
+@app.route('/api/top_performers_tt')
+def api_top_performers_tt():
+    """Frame/wheel dataset for the TT top-performers scatter chart."""
+    return jsonify(_build_top_performers_data('tt'))
 
 
 # Raw extracted datasets downloadable from the Top Performers methodology section.

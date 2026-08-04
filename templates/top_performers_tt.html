@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TT Top Performers - Zwift Tools</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #e8e8e8;
+            min-height: 100vh;
+            padding: 24px;
+        }
+        a { color: #4fc3f7; }
+        .back-link { font-size: 0.9rem; text-decoration: none; }
+        h1 {
+            font-size: 2rem; margin: 8px 0 4px;
+            background: linear-gradient(90deg, #ff6b35, #f7931e);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .subtitle { color: #8a8a9a; margin-bottom: 20px; font-size: 0.95rem; }
+        .layout { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+        .sidebar {
+            width: 300px; flex-shrink: 0;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px; padding: 18px;
+        }
+        .chart-wrap {
+            flex: 1; min-width: 420px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px; padding: 18px;
+        }
+        .chart-canvas-box { position: relative; height: 640px; }
+        .panel-title {
+            font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;
+            color: #f7931e; margin: 18px 0 8px; font-weight: 700;
+        }
+        .panel-title:first-child { margin-top: 0; }
+        .toggle-row { display: flex; gap: 8px; margin-bottom: 8px; }
+        .toggle-btn {
+            flex: 1; padding: 10px; border-radius: 8px; cursor: pointer;
+            border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.03);
+            color: #ccc; font-size: 0.9rem; font-weight: 600; transition: all .2s;
+        }
+        .toggle-btn.active {
+            background: linear-gradient(90deg, #ff6b35, #f7931e);
+            color: #fff; border-color: transparent;
+        }
+        .check-list { max-height: 320px; overflow-y: auto; padding-right: 4px; }
+        .check-item {
+            display: flex; align-items: center; gap: 8px;
+            padding: 4px 2px; font-size: 0.85rem; cursor: pointer;
+        }
+        .check-item:hover { background: rgba(255,255,255,0.04); border-radius: 4px; }
+        .check-item input { cursor: pointer; }
+        .check-item .swatch { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
+        .mini-btns { display: flex; gap: 8px; margin-bottom: 6px; }
+        .mini-btn {
+            font-size: 0.75rem; padding: 4px 10px; border-radius: 6px; cursor: pointer;
+            background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #bbb;
+        }
+        .mini-btn:hover { background: rgba(255,255,255,0.12); }
+        #wheelSearch {
+            width: 100%; padding: 7px 9px; margin-bottom: 8px; font-size: 0.85rem;
+            background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 6px; color: #eee;
+        }
+        .hint { color: #8a8a9a; font-size: 0.78rem; line-height: 1.5; margin-top: 6px; }
+        .count-badge { color: #8a8a9a; font-size: 0.8rem; font-weight: 400; }
+
+        .docs {
+            margin: 24px 0 40px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px; padding: 24px 28px;
+            max-width: 1040px; line-height: 1.6;
+        }
+        .docs h2 {
+            font-size: 1.3rem; color: #f7931e; margin-bottom: 6px;
+        }
+        .docs h3 {
+            font-size: 1rem; color: #e8e8e8; margin: 20px 0 6px;
+        }
+        .docs p, .docs li { color: #c7c7d1; font-size: 0.92rem; }
+        .docs ul { margin: 6px 0 6px 22px; }
+        .docs code {
+            background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px;
+            font-size: 0.85em; color: #ffd8b1;
+        }
+        .docs .math {
+            display: block; background: rgba(0,0,0,0.25);
+            border-left: 3px solid #f7931e; border-radius: 4px;
+            padding: 10px 14px; margin: 8px 0; overflow-x: auto;
+            font-family: 'Cascadia Code', Consolas, monospace; font-size: 0.85rem; color: #d7d7e2;
+        }
+        .downloads {
+            display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px;
+        }
+        .dl-card {
+            display: block; text-decoration: none; flex: 1; min-width: 220px;
+            background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 8px; padding: 12px 14px; transition: all .15s;
+        }
+        .dl-card:hover { background: rgba(247,147,30,0.12); border-color: #f7931e; }
+        .dl-card .fname { color: #4fc3f7; font-weight: 600; font-size: 0.9rem; }
+        .dl-card .fdesc { color: #8a8a9a; font-size: 0.8rem; margin-top: 3px; }
+    </style>
+</head>
+<body>
+    <a href="/" class="back-link">← Back to Tools</a>
+    <h1>🏆 TT Top Performers</h1>
+    <p class="subtitle">
+        Aerodynamic &amp; weight advantage of every time-trial frame + wheel combination, relative to the
+        <strong>Zwift Carbon + Zwift 32mm Carbon</strong> reference bike. Up and to the right is faster.
+        Looking for road bikes? See the <a href="/top-performers">road Top Performers chart</a>.
+    </p>
+
+    <div class="layout">
+        <div class="sidebar">
+            <div class="panel-title">Upgrade Level</div>
+            <div class="toggle-row">
+                <button class="toggle-btn active" data-level="0" id="lvl0Btn">Level 0 (Stock)</button>
+                <button class="toggle-btn" data-level="1" id="lvl5Btn">Level 5 (Maxed)</button>
+            </div>
+
+            <div class="panel-title">
+                Frames <span class="count-badge" id="frameCount"></span>
+            </div>
+            <div class="mini-btns">
+                <button class="mini-btn" id="frameAll">All</button>
+                <button class="mini-btn" id="frameNone">None</button>
+            </div>
+            <div id="frameList" class="check-list"></div>
+
+            <div class="panel-title">
+                Wheels <span class="count-badge" id="wheelCount"></span>
+            </div>
+            <div class="mini-btns">
+                <button class="mini-btn" id="wheelAll">All</button>
+                <button class="mini-btn" id="wheelNone">None</button>
+            </div>
+            <div id="wheelList" class="check-list"></div>
+            <p class="hint">
+                Each non-Halo frame is plotted once per selected wheel, using the wheel's TT-specific
+                drag. Halo bikes have built-in wheels, so they always show as a single point. The
+                reference bike is fixed at Level 0.
+            </p>
+        </div>
+
+        <div class="chart-wrap">
+            <div class="chart-canvas-box">
+                <canvas id="scatter"></canvas>
+            </div>
+            <p class="hint" id="pointCount"></p>
+        </div>
+    </div>
+
+    <div class="docs">
+        <h2>Methodology</h2>
+        <p>
+            Every point places a time-trial bike on two axes relative to a fixed reference: the
+            <strong>Zwift Carbon frame with Zwift 32mm Carbon wheels at upgrade Level 0</strong>,
+            which sits at the origin (0, 0). That reference carries a frame CdA bias of
+            <strong>+0.012 m²</strong> at <strong>5,050 g</strong> and wheels at
+            <strong>+0.000 m²</strong> / <strong>2,350 g</strong> — a combined
+            <strong>0.012 m²</strong> bias and <strong>7,400 g</strong>. Up and to the right is
+            faster — more aerodynamic and lighter than the reference.
+        </p>
+
+        <h3>Where the numbers come from</h3>
+        <p>
+            Each frame and wheel in Zwift carries an intrinsic <em>CdA bias</em> (an aerodynamic drag
+            offset applied to the rider's frontal-area model) and a mass. Those values are extracted
+            directly from the game's own data files, so the chart reflects the physics the game
+            actually simulates rather than field-test estimates.
+        </p>
+        <ul>
+            <li>
+                <strong>Frame &amp; wheel CdA bias and mass</strong> are read from the extracted
+                <code>game_frames.json</code> and <code>game_wheels.json</code>.
+            </li>
+            <li>
+                <strong>TT-specific wheel drag</strong> — wheels carry a separate CdA bias for
+                time-trial frames (deep and disc wheels are modelled as more aerodynamic on a TT
+                bike). Because every frame on this chart is a TT frame, the plotted wheel drag uses
+                that TT value rather than the standard road bias.
+            </li>
+            <li>
+                <strong>Upgrade levels</strong> — each frame has a five-step upgrade ladder. The
+                Level 0 (stock) figures are read straight from the game assets, but the per-level
+                upgrade deltas are <em>not</em> stored there; they are estimated by matching each
+                frame against ZwiftInsider speed-test data (see below). The toggle switches every
+                plotted frame between Level 0 (stock) and Level 5 (fully upgraded); the reference
+                bike is always held at Level 0.
+            </li>
+            <li>
+                <strong>Halo bikes</strong> (here, the Pinarello Espada) have permanently attached
+                wheels, so they appear as a single point using their built-in wheelset rather than
+                one point per selectable wheel.
+            </li>
+        </ul>
+
+        <h3>How each axis is computed</h3>
+        <p>
+            For a given upgrade level, a bike's totals are the sum of its frame and wheel components.
+            The reference totals are computed the same way, always at Level 0. The plotted reduction
+            is simply the reference minus the bike, so positive means better:
+        </p>
+        <span class="math">CdA reduction (m²) = ref_CdA − (frame_CdA + wheel_CdA_TT)</span>
+        <span class="math">Weight reduction (g) = ref_weight − (frame_weight + wheel_weight)</span>
+        <p>
+            Because the reduction is measured relative to a common reference, the rider's own baseline
+            frontal area cancels out — the chart is independent of rider size and only reflects
+            equipment differences.
+        </p>
+
+        <h3>Upgrade deltas &amp; validation</h3>
+        <p>
+            The per-stage upgrade effects are cross-checked against ZwiftInsider's published speed
+            tests. A 2-equation steady-state solver back-solves each tested bike's CdA and mass from
+            its flat and climb average speeds, and those measured stage deltas become the per-level
+            upgrade estimates shown here. The frame-to-test mapping used for that validation lives in
+            <code>frame_zi_match.json</code>.
+        </p>
+
+        <h3>Frame &amp; wheel selection</h3>
+        <p>
+            The frames and wheelsets shown here mirror the curated set on the ZwiftInsider TT Top
+            Performers chart, so this page can be compared against it directly.
+        </p>
+
+        <h3>Download the data</h3>
+        <p>The raw extracted datasets behind this chart:</p>
+        <div class="downloads">
+            <a class="dl-card" href="/data/game_frames.json" download>
+                <div class="fname">game_frames.json</div>
+                <div class="fdesc">Per-frame CdA bias, mass, and the five-step upgrade ladder.</div>
+            </a>
+            <a class="dl-card" href="/data/game_wheels.json" download>
+                <div class="fname">game_wheels.json</div>
+                <div class="fdesc">Per-wheelset road &amp; TT CdA bias and mass.</div>
+            </a>
+            <a class="dl-card" href="/data/frame_zi_match.json" download>
+                <div class="fname">frame_zi_match.json</div>
+                <div class="fdesc">Mapping from game frames to ZwiftInsider speed-test rows.</div>
+            </a>
+        </div>
+    </div>
+
+    <script>window.TOP_PERF_API = '/api/top_performers_tt';</script>
+    <script src="/static/js/top_performers.js"></script>
+</body>
+</html>

@@ -198,7 +198,7 @@
     render();
   }
 
-  fetch('/api/top_performers')
+  fetch(window.TOP_PERF_API || '/api/top_performers')
     .then(r => r.json())
     .then(data => {
       DATA = data;
