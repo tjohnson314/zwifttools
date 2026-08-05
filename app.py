@@ -1842,34 +1842,58 @@ def compare_bikes():
 # price 0 with rider level 1 (as opposed to special/event unlocks, which use a
 # negative level), so they are handled generically below rather than by id.
 
+# The game data stores real-world component prices (US dollars), not Zwift Drops.
+# The Drop Shop price is a fixed multiple of that dollar price, rounded to the
+# nearest 100: frames use x71 and wheelsets use x142 (their stored price is per
+# single wheel, so a pair is twice the dollar amount). Verified exactly against
+# ZwiftInsider's published Drop Shop prices, e.g. Allied Able $7,746 -> 550,000;
+# BMC SLR01 $10,697 -> 759,500; BMC Timemachine01 $5,634 -> 400,000; Buffalo
+# $134 -> 9,500; CADEX Max 50 $4,789 -> 680,000; CADEX 36 $2,641 -> 375,000.
+_DROPS_PER_DOLLAR_FRAME = 71
+_DROPS_PER_DOLLAR_WHEEL = 142
+
+
+def _dollars_to_drops(dollars, factor):
+    """Convert a stored dollar price to its Drop Shop price (rounded to 100)."""
+    return int(round(dollars * factor / 100.0)) * 100
+
+
 def _get_combo_drops_cost(db, frame_id, wheel_id, upgrade_level=0):
     """Get total Drops cost for a frame + wheel combination, plus a non-shop flag.
 
-    Prices come straight from the game data: the frame carries the whole-bike
-    Drops price and each wheelset carries its own price. Items priced at 0 with a
-    negative unlock level are special/event unlocks (Tron, Bat, concept bikes,
-    bike-tied wheels) rather than normal shop purchases.
+    The game data stores each item's real-world dollar price; the Drop Shop price
+    is that value scaled (frames x71, wheelsets x142) and rounded to the nearest
+    100 (see ``_dollars_to_drops``). Items priced at 0 with a negative unlock
+    level are special/event unlocks (Tron, Bat, concept bikes, bike-tied wheels)
+    rather than normal shop purchases.
     """
     frame = db.frames.get(frame_id, {})
-    frame_price = int(frame.get('frameprice') or 0)
+    frame_dollars = int(frame.get('frameprice') or 0)
     frame_level = int(frame.get('framelevel') or 0)
 
-    wheel_price = 0
-    non_shop = frame_price == 0 and frame_level < 0
+    wheel_dollars = 0
+    non_shop = frame_dollars == 0 and frame_level < 0
     if wheel_id:
         wheel = db.wheels.get(wheel_id, {})
-        wheel_price = int(wheel.get('wheelprice') or 0)
+        wheel_dollars = int(wheel.get('wheelprice') or 0)
         wheel_level = int(wheel.get('wheellevel') or 0)
-        if wheel_price == 0 and wheel_level < 0:
+        if wheel_dollars == 0 and wheel_level < 0:
             non_shop = True
 
-    total = frame_price + wheel_price
+    total = (_dollars_to_drops(frame_dollars, _DROPS_PER_DOLLAR_FRAME)
+             + _dollars_to_drops(wheel_dollars, _DROPS_PER_DOLLAR_WHEEL))
     return total, non_shop
 
 
 def _filter_bike_combos(db, exclude_tt, use_pareto, upgrade_level, max_rider_level=None, excluded_frames=None, exclude_special=False):
     """Filter bike combos by TT exclusion, rider level, excluded frames, and Pareto frontier. Returns filtered list."""
     bike_combos = list(db.bikes.items())
+    # Drop the synthetic "built-in wheels" combos (wheel_id == ''): every frame
+    # in the search must be paired with a real wheelset. A bare frameset carries
+    # no wheel weight or CdA, so it would spuriously dominate the Pareto search
+    # (e.g. surfacing "Canyon Speedmax CFR + (Built-in wheels)"). The user's
+    # actual bike, if it has no wheel, is re-added by the caller.
+    bike_combos = [(k, v) for k, v in bike_combos if k[1]]
     
     if exclude_tt:
         tt_frame_ids = {fid for fid, frame in db.frames.items() 
