@@ -1015,6 +1015,7 @@ def get_wheels():
             'weight': wheel.get('wheelweight_g'),
             'weightG': wheel.get('wheelweight_g'),
             'cdaBias': wheel.get('wheelcda_bias'),
+            'cdaBiasTt': wheel.get('wheelcda_bias_tt'),
             'fitsFrame': wheel.get('wheelfitsframe', 'Standard,TT'),
             'level': _safe_int(wheel.get('wheellevel'), 0),
             'price': wheel.get('wheelprice')

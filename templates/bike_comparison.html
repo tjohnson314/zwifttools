@@ -503,9 +503,14 @@
                 // Filter wheels by frame type compatibility
                 const frameType = getFrameType(frameId);
                 const compatible = getCompatibleWheels(frameType);
-                
+                const isTT = frameType === 'TT';
+
                 wheelSelect.innerHTML = compatible
-                    .map(w => `<option value="${w.id}">${w.name}${w.cdaBias != null ? ` (CdA ${w.cdaBias >= 0 ? '+' : ''}${w.cdaBias} · ${Math.round(w.weightG)}g)` : ''}</option>`)
+                    .map(w => {
+                        // TT frames get the wheel's TT-specific (more aero) bias.
+                        const bias = (isTT && w.cdaBiasTt != null) ? w.cdaBiasTt : w.cdaBias;
+                        return `<option value="${w.id}">${w.name}${bias != null ? ` (CdA ${bias >= 0 ? '+' : ''}${bias} · ${Math.round(w.weightG)}g)` : ''}</option>`;
+                    })
                     .join('');
                 wheelSelect.disabled = false;
                 
@@ -833,12 +838,16 @@
                 
                 if (resp.ok) {
                     const stats = await resp.json();
-                    const fmtBias = (v) => `${v >= 0 ? '+' : ''}${v.toFixed(4)} m²`;
+                    const fmtBias = (v) => v == null ? 'N/A' : `${v >= 0 ? '+' : ''}${v.toFixed(4)} m²`;
+                    // weight_kg is the total-bike weight in kg; tolerate the legacy
+                    // field name (weight_g held a kg value) so a lagging backend
+                    // deploy doesn't blank out the totals.
+                    const totalWeightKg = stats.weight_kg != null ? stats.weight_kg : stats.weight_g;
                     document.getElementById(`${prefix}FrameWeight`).textContent = `${Math.round(stats.frame_weight_g)} g`;
                     document.getElementById(`${prefix}FrameCda`).textContent = fmtBias(stats.frame_cda_bias);
                     document.getElementById(`${prefix}WheelWeight`).textContent = `${Math.round(stats.wheel_weight_g)} g`;
                     document.getElementById(`${prefix}WheelCda`).textContent = fmtBias(stats.wheel_cda_bias);
-                    document.getElementById(`${prefix}Weight`).textContent = `${stats.weight_kg.toFixed(2)} kg`;
+                    document.getElementById(`${prefix}Weight`).textContent = totalWeightKg != null ? `${totalWeightKg.toFixed(2)} kg` : 'N/A';
                     document.getElementById(`${prefix}Cda`).textContent = fmtBias(stats.cda_bias);
                 } else {
                     ['FrameWeight','FrameCda','WheelWeight','WheelCda','Weight','Cda'].forEach(s =>

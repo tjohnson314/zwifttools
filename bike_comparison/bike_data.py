@@ -186,12 +186,26 @@ class BikeDatabase:
                 'wheelprice': wh.get('price'),
                 'wheelweight_g': weight_g,
                 'wheelcda_bias': cda_bias,
+                # TT-specific CdA bias (deep/disc wheels are more aero on a TT
+                # bike); falls back to the road bias when the game omits it.
+                'wheelcda_bias_tt': (wh.get('pair_cda_bias_tt')
+                                     if wh.get('pair_cda_bias_tt') is not None else cda_bias),
             }
+
+    @staticmethod
+    def _wheel_bias_for_frame(frame: dict, wheel: Optional[dict]) -> float:
+        """CdA bias a wheelset applies on a given frame. TT frames use the
+        wheel's TT-specific bias (deep/disc wheels help TT bikes more)."""
+        if not wheel:
+            return 0.0
+        if (frame.get('frametype') or '').upper() == 'TT' and wheel.get('wheelcda_bias_tt') is not None:
+            return float(wheel.get('wheelcda_bias_tt') or 0.0)
+        return float(wheel.get('wheelcda_bias') or 0.0)
 
     def _combo_cd_weight(self, frame: dict, wheel: Optional[dict]) -> Tuple[float, float]:
         frame_bias = float(frame.get('framecda_bias') or 0.0)
         frame_wt = float(frame.get('frameweight_g') or 0.0)
-        wheel_bias = float(wheel.get('wheelcda_bias') or 0.0) if wheel else 0.0
+        wheel_bias = self._wheel_bias_for_frame(frame, wheel)
         wheel_wt = float(wheel.get('wheelweight_g') or 0.0) if wheel else 0.0
         cda = BASE_CDA + frame_bias + wheel_bias
         cd = cda / REF_FRONTAL_AREA
@@ -229,7 +243,7 @@ class BikeDatabase:
 
         cd, weight_kg = self._combo_cd_weight(frame, wheel)
         frame_bias = float(frame.get('framecda_bias') or 0.0)
-        wheel_bias = float(wheel.get('wheelcda_bias') or 0.0) if wheel else 0.0
+        wheel_bias = self._wheel_bias_for_frame(frame, wheel)
 
         return BikeSetup(
             frame_id=frame_id,
