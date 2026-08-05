@@ -176,6 +176,13 @@ class BikeDatabase:
         for wh in raw:
             if not isinstance(wh, dict):
                 continue
+            # Skip bike-integrated wheels: their game name is a LOC_BIKE_* bike
+            # name (Project 74, Espada, Brompton, Big Spin, Tron R4000). These
+            # come welded to one specific halo/special bike and are not
+            # standalone wheelsets, so they must not appear in the general wheel
+            # pool or be paired with other frames in the best-bike search.
+            if str(wh.get('name') or '').startswith('LOC_BIKE_'):
+                continue
             weight_g = wh.get('pair_weight_g_effective')
             cda_bias = wh.get('pair_cda_bias_effective')
             if weight_g is None or cda_bias is None:
