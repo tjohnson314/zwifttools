@@ -978,6 +978,13 @@ def get_frames():
         frame_make = _safe_text(frame.get('framemake'))
         frame_model = _safe_text(frame.get('framemodel'))
         frame_name = f"{frame_make} {frame_model}".strip() or str(frame_id)
+        cda_stages = frame.get('framecda_bias_stages') or []
+        wt_stages = frame.get('frameweight_g_stages') or []
+        upgrade_stages = [
+            {'cdaBias': cda_stages[i] if i < len(cda_stages) else frame.get('framecda_bias'),
+             'weightG': wt_stages[i] if i < len(wt_stages) else frame.get('frameweight_g')}
+            for i in range(6)
+        ]
         frames.append({
             'id': frame_id,
             'name': frame_name,
@@ -985,6 +992,7 @@ def get_frames():
             'weight': frame.get('frameweight_g'),
             'weightG': frame.get('frameweight_g'),
             'cdaBias': frame.get('framecda_bias'),
+            'upgradeStages': upgrade_stages,
             'hasBuiltInWheels': frame.get('framewheeltype') == 'fixed',
             'isTT': frame.get('frametype') == 'TT',
             'frameType': frame.get('frametype', 'Standard'),
@@ -1330,7 +1338,10 @@ def get_bike_stats_api():
     """Get stats for a specific bike combo."""
     frame_id = request.args.get('frame_id')
     wheel_id = request.args.get('wheel_id', '')
-    upgrade_level = int(request.args.get('upgrade_level', 0))
+    try:
+        upgrade_level = int(request.args.get('upgrade_level') or 0)
+    except (TypeError, ValueError):
+        upgrade_level = 0
     
     if not frame_id:
         return jsonify({'error': 'frame_id required'}), 400
@@ -1928,7 +1939,10 @@ def combo_count():
     """Quick count of bike combos after applying filters."""
     data = request.json
     db = get_db()
-    upgrade_level = int(data.get('upgrade_level', 0))
+    try:
+        upgrade_level = int(data.get('upgrade_level') or 0)
+    except (TypeError, ValueError):
+        upgrade_level = 0
     exclude_tt = data.get('exclude_tt', True)
     use_pareto = data.get('use_pareto', True)
     max_rider_level = data.get('max_rider_level')
@@ -1959,7 +1973,10 @@ def find_best_bikes():
     """
     data = request.json
     top_n = int(data.get('top_n', 10))
-    upgrade_level = int(data.get('upgrade_level', 0))
+    try:
+        upgrade_level = int(data.get('upgrade_level') or 0)
+    except (TypeError, ValueError):
+        upgrade_level = 0
     rider_weight = float(data.get('rider_weight', 75))
     rider_height = float(data.get('rider_height', 175))
     exclude_tt = data.get('exclude_tt', True)

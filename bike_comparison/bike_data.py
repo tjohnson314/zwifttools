@@ -19,9 +19,10 @@ sourcing the numbers from the game.  The bike-vs-bike comparison and best-bike
 search are differential (evaluated against recorded power), so BASE_CDA cancels
 there; it only anchors absolute solo / ride-simulator predictions.
 
-Note: the extracted game data represents base (un-upgraded, "stage 0") bikes.
-Zwift's 5-stage bike upgrades are computed at runtime from bike type/tier and are
-not present in the game files, so upgrade levels are not modelled here.
+Note: frame upgrades ARE modelled.  game_frames.json carries a measured 5-stage
+upgrade ladder per frame (levels 1-5, each with cumulative ``cda_bias_effective``
+and ``weight_g_effective``); level 0 is the stock frameset.  Wheels have no
+upgrade ladder in the game data, so only the frame changes with upgrade level.
 """
 
 import json
@@ -139,6 +140,18 @@ class BikeDatabase:
                 model = _humanize(folder)
             frame_type = _GAME_TYPE_TO_FRAME_TYPE.get(fr.get('type'), 'Standard')
             level = fr.get('level')
+            # Build the 6-stage (0..5) upgrade ladder. Stage 0 is the stock
+            # frameset; stages 1-5 use the game's cumulative "effective" values
+            # recorded per upgrade reward. Frames without upgrade data simply
+            # repeat the stock values so every level is well-defined.
+            cda_stages = [cda_bias]
+            wt_stages = [weight_g]
+            for up in (fr.get('upgrades') or []):
+                cda_stages.append(up.get('cda_bias_effective', cda_stages[-1]))
+                wt_stages.append(up.get('weight_g_effective', wt_stages[-1]))
+            while len(cda_stages) < 6:
+                cda_stages.append(cda_stages[-1])
+                wt_stages.append(wt_stages[-1])
             self.frames[folder] = {
                 'frameid': folder,
                 'framemake': make,
@@ -150,6 +163,8 @@ class BikeDatabase:
                 'frameupgradelevel': '',
                 'frameweight_g': weight_g,
                 'framecda_bias': cda_bias,
+                'framecda_bias_stages': cda_stages[:6],
+                'frameweight_g_stages': wt_stages[:6],
                 'frameyear': fr.get('year'),
                 'frameclass': fr.get('class'),
             }
@@ -202,9 +217,18 @@ class BikeDatabase:
             return float(wheel.get('wheelcda_bias_tt') or 0.0)
         return float(wheel.get('wheelcda_bias') or 0.0)
 
-    def _combo_cd_weight(self, frame: dict, wheel: Optional[dict]) -> Tuple[float, float]:
-        frame_bias = float(frame.get('framecda_bias') or 0.0)
-        frame_wt = float(frame.get('frameweight_g') or 0.0)
+    @staticmethod
+    def _frame_stage(frame: dict, upgrade_level: int = 0) -> Tuple[float, float]:
+        """(cda_bias, weight_g) for the frame at a given upgrade stage (0..5)."""
+        level = max(0, min(5, int(upgrade_level or 0)))
+        cda_stages = frame.get('framecda_bias_stages')
+        wt_stages = frame.get('frameweight_g_stages')
+        cda = cda_stages[level] if cda_stages else frame.get('framecda_bias', 0.0)
+        wt = wt_stages[level] if wt_stages else frame.get('frameweight_g', 0.0)
+        return float(cda or 0.0), float(wt or 0.0)
+
+    def _combo_cd_weight(self, frame: dict, wheel: Optional[dict], upgrade_level: int = 0) -> Tuple[float, float]:
+        frame_bias, frame_wt = self._frame_stage(frame, upgrade_level)
         wheel_bias = self._wheel_bias_for_frame(frame, wheel)
         wheel_wt = float(wheel.get('wheelweight_g') or 0.0) if wheel else 0.0
         cda = BASE_CDA + frame_bias + wheel_bias
@@ -213,15 +237,21 @@ class BikeDatabase:
         return cd, weight_kg
 
     def _build_combos(self):
-        """Precompute (frame, wheel) combos with cd/weight arrays (6 identical stages)."""
+        """Precompute (frame, wheel) combos with per-upgrade-stage cd/weight arrays."""
         self.bikes = {}
         for fid, frame in self.frames.items():
             # Built-in / no separate wheelset option (wheel_id == '')
-            cd, wt = self._combo_cd_weight(frame, None)
-            self.bikes[(fid, '')] = {'cd': [cd] * 6, 'weight': [wt] * 6}
+            builtin = [self._combo_cd_weight(frame, None, lvl) for lvl in range(6)]
+            self.bikes[(fid, '')] = {
+                'cd': [c for c, _ in builtin],
+                'weight': [w for _, w in builtin],
+            }
             for wid, wheel in self.wheels.items():
-                cd, wt = self._combo_cd_weight(frame, wheel)
-                self.bikes[(fid, wid)] = {'cd': [cd] * 6, 'weight': [wt] * 6}
+                stages = [self._combo_cd_weight(frame, wheel, lvl) for lvl in range(6)]
+                self.bikes[(fid, wid)] = {
+                    'cd': [c for c, _ in stages],
+                    'weight': [w for _, w in stages],
+                }
 
     def get_bike_stats(self, frame_id: str, wheel_id: Optional[str] = None, upgrade_level: int = 0) -> Optional[BikeSetup]:
         """Get complete bike stats for a frame/wheel combination (game data).
@@ -229,8 +259,8 @@ class BikeDatabase:
         Args:
             frame_id: Frame folder id (e.g. 'CanyonAeroad2024').
             wheel_id: Wheel id, or None/'' for the frame's built-in wheels.
-            upgrade_level: Retained for API compatibility; game data has no
-                upgrade stages, so this does not change the result.
+            upgrade_level: Frame upgrade stage 0-5. Selects the frame's measured
+                upgrade values; wheels are unaffected (no wheel upgrade ladder).
         """
         frame = self.frames.get(frame_id)
         if not frame:
@@ -241,8 +271,9 @@ class BikeDatabase:
         if lookup_wheel_id and wheel is None:
             return None
 
-        cd, weight_kg = self._combo_cd_weight(frame, wheel)
-        frame_bias = float(frame.get('framecda_bias') or 0.0)
+        level = max(0, min(5, int(upgrade_level or 0)))
+        cd, weight_kg = self._combo_cd_weight(frame, wheel, level)
+        frame_bias, frame_wt = self._frame_stage(frame, level)
         wheel_bias = self._wheel_bias_for_frame(frame, wheel)
 
         return BikeSetup(
@@ -250,12 +281,12 @@ class BikeDatabase:
             frame_name=f"{frame['framemake']} {frame['framemodel']}".strip() or frame_id,
             wheel_id=lookup_wheel_id,
             wheel_name=(f"{wheel['wheelmake']} {wheel['wheelmodel']}".strip() if wheel else '(Built-in wheels)'),
-            upgrade_level=upgrade_level,
+            upgrade_level=level,
             cd=cd,
             weight_kg=weight_kg,
             frame_type=frame.get('frametype', 'Standard'),
             cda_bias=frame_bias + wheel_bias,
-            frame_weight_g=float(frame.get('frameweight_g') or 0.0),
+            frame_weight_g=frame_wt,
             frame_cda_bias=frame_bias,
             wheel_weight_g=(float(wheel.get('wheelweight_g') or 0.0) if wheel else 0.0),
             wheel_cda_bias=wheel_bias,
@@ -273,7 +304,7 @@ class BikeDatabase:
         return sorted(self.wheels.values(), key=lambda w: f"{w['wheelmake']} {w['wheelmodel']}")
 
     def get_all_upgrade_levels(self, frame_id: str, wheel_id: str) -> List[BikeSetup]:
-        """Compatibility shim: game data has no upgrade stages, so all 6 are identical."""
+        """Return the frame's 6 upgrade stages (0-5) for the given wheel."""
         return [self.get_bike_stats(frame_id, wheel_id, level) for level in range(6)]
 
 

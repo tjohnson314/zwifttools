@@ -96,30 +96,19 @@
                     </select>
                 </div>
                 
-                <div class="form-group" style="display:none;">
+                <div class="form-group">
                     <label>Upgrade Level</label>
                     <select id="actualLevel" onchange="updateBikeStats('actual')">
                         <option value="0" selected>Level 0 (Stock)</option>
+                        <option value="1">Level 1</option>
+                        <option value="2">Level 2</option>
+                        <option value="3">Level 3</option>
+                        <option value="4">Level 4</option>
+                        <option value="5">Level 5 (Max)</option>
                     </select>
                 </div>
                 
                 <div class="stats-box" id="actualStats">
-                    <div class="stats-row">
-                        <span class="stats-label">Frame weight</span>
-                        <span class="stats-value weight" id="actualFrameWeight">-</span>
-                    </div>
-                    <div class="stats-row">
-                        <span class="stats-label">Frame CdA bias</span>
-                        <span class="stats-value cd" id="actualFrameCda">-</span>
-                    </div>
-                    <div class="stats-row">
-                        <span class="stats-label">Wheels weight</span>
-                        <span class="stats-value weight" id="actualWheelWeight">-</span>
-                    </div>
-                    <div class="stats-row">
-                        <span class="stats-label">Wheels CdA bias</span>
-                        <span class="stats-value cd" id="actualWheelCda">-</span>
-                    </div>
                     <div class="stats-row stats-total">
                         <span class="stats-label"><strong>Total weight</strong></span>
                         <span class="stats-value weight" id="actualWeight">-</span>
@@ -155,30 +144,19 @@
                     </select>
                 </div>
                 
-                <div class="form-group" style="display:none;">
+                <div class="form-group">
                     <label>Upgrade Level</label>
                     <select id="altLevel" onchange="updateBikeStats('alt')">
                         <option value="0" selected>Level 0 (Stock)</option>
+                        <option value="1">Level 1</option>
+                        <option value="2">Level 2</option>
+                        <option value="3">Level 3</option>
+                        <option value="4">Level 4</option>
+                        <option value="5">Level 5 (Max)</option>
                     </select>
                 </div>
                 
                 <div class="stats-box" id="altStats">
-                    <div class="stats-row">
-                        <span class="stats-label">Frame weight</span>
-                        <span class="stats-value weight" id="altFrameWeight">-</span>
-                    </div>
-                    <div class="stats-row">
-                        <span class="stats-label">Frame CdA bias</span>
-                        <span class="stats-value cd" id="altFrameCda">-</span>
-                    </div>
-                    <div class="stats-row">
-                        <span class="stats-label">Wheels weight</span>
-                        <span class="stats-value weight" id="altWheelWeight">-</span>
-                    </div>
-                    <div class="stats-row">
-                        <span class="stats-label">Wheels CdA bias</span>
-                        <span class="stats-value cd" id="altWheelCda">-</span>
-                    </div>
                     <div class="stats-row stats-total">
                         <span class="stats-label"><strong>Total weight</strong></span>
                         <span class="stats-value weight" id="altWeight">-</span>
@@ -308,10 +286,15 @@
             <p>Search bike combinations to find the ones that minimize your Normalized Power for this route</p>
             
             <div style="display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; align-items: center;">
-                <div style="display:none;">
+                <div>
                     <label>Upgrade Level:</label>
                     <select id="bestBikesLevel" style="width: 120px; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 2px solid #333;">
                         <option value="0" selected>Level 0</option>
+                        <option value="1">Level 1</option>
+                        <option value="2">Level 2</option>
+                        <option value="3">Level 3</option>
+                        <option value="4">Level 4</option>
+                        <option value="5">Level 5</option>
                     </select>
                 </div>
                 <div>
@@ -518,6 +501,32 @@
                 if (compatible.some(w => w.id === previousValue)) {
                     wheelSelect.value = previousValue;
                 }
+            }
+        }
+        
+        function syncLevelDropdown(prefix) {
+            // Rebuild the upgrade-level options for the selected frame, showing
+            // the cumulative weight/CdA effect of each stage vs stock (level 0).
+            const frameId = document.getElementById(prefix + 'Frame').value;
+            const levelSelect = document.getElementById(prefix + 'Level');
+            if (!levelSelect) return;
+            const frame = frames.find(f => f.id === frameId);
+            const stages = frame && frame.upgradeStages;
+            const previousValue = levelSelect.value;
+            const labelFor = (lvl) => {
+                if (lvl === 0) return 'Level 0 (Stock)';
+                if (!stages || !stages[lvl] || !stages[0]) return `Level ${lvl}`;
+                const dW = Math.round((stages[lvl].weightG || 0) - (stages[0].weightG || 0));
+                const dCda = (stages[lvl].cdaBias || 0) - (stages[0].cdaBias || 0);
+                const wStr = `${dW > 0 ? '+' : ''}${dW} g`;
+                const cStr = `CdA ${dCda >= 0 ? '+' : ''}${dCda.toFixed(4)}`;
+                return `Level ${lvl} (${cStr} · ${wStr})`;
+            };
+            levelSelect.innerHTML = [0, 1, 2, 3, 4, 5]
+                .map(l => `<option value="${l}">${labelFor(l)}</option>`)
+                .join('');
+            if ([...levelSelect.options].some(o => o.value === previousValue)) {
+                levelSelect.value = previousValue;
             }
         }
         
@@ -823,6 +832,7 @@
             
             // For built-in wheel frames, force wheel to empty and disable dropdown
             syncWheelDropdownState(prefix);
+            syncLevelDropdown(prefix);
             const wheelId = wheelSelect.value;
             
             // Save selections to browser cache
@@ -843,14 +853,10 @@
                     // field name (weight_g held a kg value) so a lagging backend
                     // deploy doesn't blank out the totals.
                     const totalWeightKg = stats.weight_kg != null ? stats.weight_kg : stats.weight_g;
-                    document.getElementById(`${prefix}FrameWeight`).textContent = `${Math.round(stats.frame_weight_g)} g`;
-                    document.getElementById(`${prefix}FrameCda`).textContent = fmtBias(stats.frame_cda_bias);
-                    document.getElementById(`${prefix}WheelWeight`).textContent = `${Math.round(stats.wheel_weight_g)} g`;
-                    document.getElementById(`${prefix}WheelCda`).textContent = fmtBias(stats.wheel_cda_bias);
                     document.getElementById(`${prefix}Weight`).textContent = totalWeightKg != null ? `${totalWeightKg.toFixed(2)} kg` : 'N/A';
                     document.getElementById(`${prefix}Cda`).textContent = fmtBias(stats.cda_bias);
                 } else {
-                    ['FrameWeight','FrameCda','WheelWeight','WheelCda','Weight','Cda'].forEach(s =>
+                    ['Weight','Cda'].forEach(s =>
                         document.getElementById(`${prefix}${s}`).textContent = 'N/A');
                 }
             } catch (e) {
