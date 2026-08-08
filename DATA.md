@@ -347,63 +347,41 @@ For each `rank*_*.csv` file:
 
 #### Step 6: Align Distances
 
-**If route data available** → `align_riders_to_route()` (preferred path):
+**If the WAD main lap and ZwiftMap route are available** → `align_riders_to_game_route()` (preferred path):
 
-##### Pass 1 — Per-Rider GPS Projection
+- `load_game_route_profile()` resolves `race_meta.json.route_id` directly against the WAD route `nameHash` in `zwift_routes/index.json`
+- Each WAD profile contains distance, altitude, and local-world `x/z` coordinates for the lead-in and main lap
+- `calibrate_game_route()` fits the WAD main lap to the existing ZwiftMap main-route data:
+   - affine `x/z → lat/lng` transform
+   - linear raw-altitude → exported-altitude transform
+   - reject the calibration and use the old path if horizontal p95 error exceeds 50m
+- When WAD lead-in checkpoints exist, the fitted transform is also applied to them, producing a complete GPS/elevation path from the pen through the finish
 
-For each rider:
+**Full-course projection:**
 
-**A. Lead-in Detection (known distance from API):**
-- `detect_route()` extracts `leadinDistanceInMeters` from `routes_cache.json` alongside the route name/slug
-- This value is passed to `align_riders_to_route()` as `leadin_distance_m`
-- **If `leadin_distance_m > 50m`** (known long lead-in):
-  - Use `np.searchsorted(raw_traveled_m, leadin_distance_m × 0.8)` to skip ahead to approximate route-join index
-  - Search window: 80% to 150% of API lead-in distance (handles GPS jitter / speed variation)
-- **Otherwise** (short/unknown lead-in):
-  - Search first 1500 GPS points (covers up to ~16 km at typical density)
-- Within the search window, compute haversine distance from each point to its nearest route point
-- "On route" = deviation < 50 meters
-- `leadin_end_idx` = index of first on-route point
-- For the first 20 on-route points, compute `offset = route_distance[nearest] - raw_traveled_meters`
-- `initial_offset` = median of those offsets (negative = lead-in distance)
-- Points before `leadin_end_idx` get assigned `distance = initial_offset + raw_traveled` (typically negative, counting down toward 0)
-- This handles lead-ins up to ~12 km (e.g. Richmond Rollercoaster at 12,062m)
-
-**B. KD-tree Alignment (K=8 neighbors):**
-- For each GPS point past the lead-in, query the route's `cKDTree` for K=8 nearest route points
+- Combine `[lead-in distance] + [leadin_distance + lap distance]` on an absolute race axis beginning at 0
+- Query the complete path's `cKDTree` for K=12 nearest route points
 - KD-tree uses latitude-scaled coordinates: `[lat, lng × cos(median_lat)]`
-- For each of the 8 candidates, compute a **score** = `|candidate_route_distance - expected_distance|` where expected = `initial_offset + raw_traveled_meters`
-- On loop routes, also test `± route_total_distance` wrap variants
-- Select the candidate with the lowest score (correctly disambiguates where a route crosses itself)
-
-**C. Segment Interpolation:**
-- For the best route point, try projecting the GPS point onto the route segment between the best point and each of its two neighbors
-- Vector projection: `t = dot(P - A, B - A) / dot(B - A, B - A)`, clamped to [0, 1]
-- Interpolated distance: `dist_A + t × (dist_B - dist_A)`
-- Deviation: haversine from GPS point to projected point on segment
-- If projected deviation < snap-to-point deviation, use the interpolated distance
-- This provides sub-route-point precision (~1m vs ~13m route point spacing)
-
-**D. Collect Start Offsets** for loop route unwrapping
-
-##### Pass 2 — Global Unwrapping & Smoothing
-
-**E. Loop Route Unwrapping:**
-- `loop_start_offset` = median of all riders' start distances
-- For each point, pick the wrap variant (`route_dist + k × route_total`, k ∈ {-2..2}) closest to `expected = loop_start_offset + raw_traveled`
-- Rebase: subtract `loop_start_offset` so distance 0 = race start
-
-**F. Distance Smoothing (Zwift distance-delta approach):**
+- Repeat only main-lap candidates for multi-lap races; lead-in candidates can occur only once
+- Candidate score = `GPS error × 10 + odometer error`, which disambiguates overlaps and intersections
+- Estimate every rider's spatial course offset from the first 30 moving samples close to calibrated geometry
+- Subtract that offset for on-time riders, so categories released from different pens each begin at race distance 0
+- Keep true late joiners on the absolute course axis rather than rebasing them to 0
+- While an alternate lead-in is off the known geometry, use raw Zwift distance without GPS correction; correction begins after it joins the route
+- Smooth with the Zwift distance-delta approach:
 - Uses Zwift's raw distance data (centimeter precision from `distanceInCm`)
 - Walking forward: `predicted = smooth[i-1] + raw_delta`
 - `smooth[i] = predicted + α × (route_distances[i] - predicted)` with **α = 0.05**
-- The 5% drift correction gently pulls toward the route-aligned value to prevent cumulative drift while maintaining sub-meter smoothness
-- **Fallback** (no raw distance): use `speed_kmh / 3.6 × dt` with same alpha blending
+- Enforce non-decreasing derived course distance when GPS correction switches between nearby branches
+- Write `distance_km` and `route_deviation_m` back to each rider
 
-**G. Write Back:**
-- Overwrite `distance_km` = `route_distances / 1000`
-- Add `route_deviation_m` column
-- Warn if average deviation > 20m
+**If the WAD route has no lead-in checkpoints:**
+
+- Use raw Zwift distance while the rider is off the calibrated main lap
+- Estimate the pen offset when the rider joins the main lap, then rebase on-time riders to 0
+- Retain the previous telemetry-altitude fallback because no authoritative lead-in elevation exists
+
+**If WAD/ZwiftMap calibration fails** → `align_riders_to_route()` retains the previous heuristic alignment.
 
 **If no route data** → fallback to `align_rider_distances()`:
 - Pick reference rider (most data points)
@@ -415,11 +393,15 @@ For each rider:
 
 #### Step 7: Determine Finish Line
 
-`determine_finish_line()` — four-method cascade:
+Finish-distance cascade:
 1. `segment_distance_cm` from `race_meta.json` (÷ 100000 → km)
-2. `route_id` → `get_total_race_distance()` from `routes_cache.json`
-3. `subgroupResults[0].segmentDistanceInCentimeters` from any rider's raw JSON
-4. Median of top 5 ranked riders' maximum `distance_km`
+2. If segment distance is absent on a calibrated loop, `infer_loop_finish_distance()`:
+   - Search near each rider's official `elapsed_ms` for a GPS pass through the lap finish
+   - Convert the aligned crossing distance to a lap count
+   - Use the modal lap count across riders and snap to `leadin + laps × lap_distance`
+3. `route_id` → `get_total_race_distance()` from `routes_cache.json`
+4. `subgroupResults[0].segmentDistanceInCentimeters` from any rider's raw JSON
+5. Median of top 5 ranked riders' maximum `distance_km`
 
 #### Step 8: Compute Global Time Range
 
@@ -431,18 +413,26 @@ For each rider:
 
 For each rider:
 
-**A. Cut at Finish:**
+**A. Align Replay Clock:**
+- Zwift telemetry begins at the rider's start-line crossing, not necessarily the race gun
+- Use the final GPS finish crossing and official result `elapsed_ms` to compute `telemetry_finish - official_elapsed`
+- Subtract that offset from `time_sec`; rear-pen riders therefore appear only after their actual release/crossing delay
+- Resample shifted telemetry to integer race-clock seconds
+- The cached/API field remains named `ttt_time_offset` for backward compatibility, but it now applies to mass starts too
+
+**B. Cut at Finish:**
 - The Zwift race results API only returns finishers (DNF riders are silently excluded), so all riders in our data completed the race
 - Detect finish crossing: first timestamp where `distance_km >= finish_line_km - 0.03 km` (30m tolerance for alignment noise)
+- Prefer official `elapsed_ms` as `finish_time_sec` when replay-clock calibration succeeds
 - Record `finish_time_sec` = that timestamp
 - Keep data only up to `finish_time + 5 seconds`, drop everything after
 
-**B. Compute Rolling Resistance (CRR):**
+**C. Compute Rolling Resistance (CRR):**
 - If world detected: `compute_crr_array(lat, lng, world)` — ray-cast each GPS point against surface polygons
 - Per-surface CRR values vary by bike type (road_bike, mtb, gravel_bike): Tarmac=0.004, Cobbles=0.0065, Dirt=0.025, etc.
 - Default: 0.004 (tarmac)
 
-**C. Index by Time:**
+**D. Index by Time:**
 - Set `time_sec` as DataFrame index for O(1) lookups during playback
 
 #### Step 10: Cap Max Time
@@ -451,16 +441,14 @@ Clamp `max_time` to last finisher's time + 10 seconds to exclude cooldown/post-r
 
 #### Step 11: Build Elevation Profile
 
-**If route data available:**
-- Use `RouteData.distance` and `RouteData.altitude` arrays
-- For loop routes: rebase by `loop_start_offset % route_total`, sort by distance
-- **Lead-in handling:** If the reference rider has off-route points (deviation=999) at the start, the route data doesn't cover the lead-in terrain. In that case:
-  - Extract the ref rider's telemetry altitude for the lead-in distance range
-  - Resample at 10m intervals using linear interpolation
-  - Offset the loop elevation data to start where the lead-in ends
-  - Concatenate: [telemetry lead-in] + [loop route data]
-  - This is critical for routes like Richmond Rollercoaster (12 km lead-in along a river valley at 4–55m altitude, vs the loop at 52–65m)
-- Tile extra copies to cover multi-lap races (up to max rider distance)
+**If a calibrated WAD lead-in is available:**
+- Use the calibrated WAD lead-in followed by the calibrated main lap
+- Repeat only the main lap to the official finish distance
+- Allow 100m tolerance when counting laps so tiny metadata/profile distance differences do not append an extra lap
+- This removes dependence on one rider's telemetry altitude for long lead-ins such as Richmond Rollercoaster
+
+**If only main-route data is available:**
+- Retain the previous loop rebasing and reference-rider lead-in elevation logic
 
 **Fallback:**
 - `build_elevation_profile()` from reference rider's `altitude_m` column

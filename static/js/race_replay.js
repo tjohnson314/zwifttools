@@ -442,11 +442,11 @@ function initRaceData(data) {
     }
 
     // Build typed-array lookup for each rider for fast interpolation
-    // Log TTT time offsets if present
-    const tttRiders = data.riders.filter(r => r.ttt_time_offset != null);
-    if (tttRiders.length > 0) {
-        console.log('%c TTT Time Offsets Applied ', 'background: #4a90d9; color: white; font-weight: bold');
-        tttRiders.forEach(r => {
+    // Log finish-calibrated replay clock offsets if present
+    const offsetRiders = data.riders.filter(r => r.ttt_time_offset != null);
+    if (offsetRiders.length > 0) {
+        console.log('%c Replay Clock Offsets Applied ', 'background: #4a90d9; color: white; font-weight: bold');
+        offsetRiders.forEach(r => {
             console.log(`  Rider ${r.rank} (${r.name}): offset = ${r.ttt_time_offset.toFixed(1)}s`);
         });
     }

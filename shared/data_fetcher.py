@@ -359,6 +359,7 @@ def get_event_subgroups(event_id, headers):
                 'id': sg_id,
                 'label': label,
                 'route_id': sg.get('routeId'),
+                'start_location': sg.get('startLocation'),
                 'event_subgroup_start': sg.get('eventSubgroupStart'),
             })
     if not subgroups:
@@ -452,6 +453,7 @@ def fetch_all_subgroups_from_activity(activity_url_or_id, headers, output_base_d
             'activity_start_time': activity_data.get('startDate'),
             'world_id': activity_data.get('worldId'),
             'route_id': sg.get('route_id'),
+            'start_location': sg.get('start_location'),
             'subgroup_label': label,
         }
         with open(meta_path, 'w') as f:
@@ -631,6 +633,7 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
     # Get event details (start time, route) from the parent event API
     event_start_time = None
     route_id = None
+    start_location = None
     if event_id:
         try:
             event_url = f"{BASE_URL}/events/{event_id}"
@@ -642,6 +645,7 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
                     if esg.get('id') == event_subgroup_id:
                         event_start_time = esg.get('eventSubgroupStart')
                         route_id = esg.get('routeId')
+                        start_location = esg.get('startLocation')
                         if event_start_time:
                             logger.info("Event start time: %s", event_start_time)
                         if route_id:
@@ -661,6 +665,7 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
         'activity_start_time': race_start_time,
         'world_id': world_id,
         'route_id': route_id,
+        'start_location': start_location,
     }
     if segment_distance_cm:
         meta['segment_distance_cm'] = segment_distance_cm

@@ -8,11 +8,11 @@ For each ``assets/Worlds/world*/data_1.wad`` this tool:
 3. Parses each route's header plus its ``<leadinhighrescheckpoint>`` and
    ``<highrescheckpoint>`` polylines.
 4. Converts the raw world geometry (game units, 100 units == 1 metre) into
-   metre-based ``(distance, altitude)`` profiles. Altitudes are the raw ``y``
-   values divided by 100 (no clamping). Cumulative planar distance is anchored
-   to Zwift's authoritative header distances (``leadinDistanceInMeters`` /
-   ``distanceInMeters``) so total distances match the game exactly while the
-   checkpoint geometry provides the shape.
+    metre-based ``(distance, altitude, x, z)`` profiles. Coordinates are the raw
+    values divided by 100 (no clamping). Cumulative planar distance is anchored
+    to Zwift's authoritative header distances (``leadinDistanceInMeters`` /
+    ``distanceInMeters``) so total distances match the game exactly while the
+    checkpoint geometry provides the shape.
 
 The decompression algorithm is a faithful in-memory port of r3dey3's
 ``decode_wad.py`` (https://gitlab.com/r3dey3/zwift-utils).
@@ -168,13 +168,21 @@ def _cumulative_planar(pts: list[tuple[float, float, float]]) -> list[float]:
     return cum
 
 
-def _resample(dist_m: list[float], alt_m: list[float], n: int
-              ) -> tuple[list[float], list[float]]:
-    """Uniformly resample the profile to at most ``n`` points by distance."""
+def _resample(dist_m: list[float], pts: list[tuple[float, float, float]], n: int
+              ) -> dict[str, list[float]]:
+    """Uniformly resample distance and local-world geometry to at most ``n`` points."""
+    x_m = [p[0] / UNITS_PER_METRE for p in pts]
+    alt_m = [p[1] / UNITS_PER_METRE for p in pts]
+    z_m = [p[2] / UNITS_PER_METRE for p in pts]
     if len(dist_m) <= n or len(dist_m) < 2:
-        return ([round(d, 2) for d in dist_m], [round(a, 3) for a in alt_m])
+        return {
+            "d": [round(d, 2) for d in dist_m],
+            "alt": [round(a, 3) for a in alt_m],
+            "x": [round(x, 3) for x in x_m],
+            "z": [round(z, 3) for z in z_m],
+        }
     total = dist_m[-1]
-    out_d, out_a = [], []
+    out_d, out_a, out_x, out_z = [], [], [], []
     j = 0
     for k in range(n):
         target = total * k / (n - 1)
@@ -183,14 +191,18 @@ def _resample(dist_m: list[float], alt_m: list[float], n: int
         d0, d1 = dist_m[j], dist_m[j + 1]
         frac = 0.0 if d1 == d0 else (target - d0) / (d1 - d0)
         alt = alt_m[j] + frac * (alt_m[j + 1] - alt_m[j])
+        x = x_m[j] + frac * (x_m[j + 1] - x_m[j])
+        z = z_m[j] + frac * (z_m[j + 1] - z_m[j])
         out_d.append(round(target, 2))
         out_a.append(round(alt, 3))
-    return out_d, out_a
+        out_x.append(round(x, 3))
+        out_z.append(round(z, 3))
+    return {"d": out_d, "alt": out_a, "x": out_x, "z": out_z}
 
 
 def build_profile(pts: list[tuple[float, float, float]], header_distance_m: float,
                   max_points: int) -> dict | None:
-    """Convert a checkpoint polyline into a metre-based distance/altitude profile."""
+    """Convert a checkpoint polyline into a metre-based route geometry profile."""
     if len(pts) < 2:
         return None
     cum = _cumulative_planar(pts)
@@ -204,9 +216,7 @@ def build_profile(pts: list[tuple[float, float, float]], header_distance_m: floa
     else:
         scale = 1.0 / UNITS_PER_METRE
     dist_m = [u * scale for u in cum]
-    alt_m = [p[1] / UNITS_PER_METRE for p in pts]
-    d, a = _resample(dist_m, alt_m, max_points)
-    return {"d": d, "alt": a}
+    return _resample(dist_m, pts, max_points)
 
 
 def _f(el: ET.Element, attr: str, default: float = 0.0) -> float:
@@ -320,7 +330,8 @@ def main() -> int:
 
         out_file = f"world_{map_id}.json"
         with open(os.path.join(args.out, out_file), "w", encoding="utf-8") as f:
-            json.dump({"mapID": map_id, "world": world, "routes": routes},
+            json.dump({"mapID": map_id, "world": world,
+                       "coordinate_system": "zwift_local_m", "routes": routes},
                       f, ensure_ascii=False, separators=(",", ":"))
         print(f"  {world} (map {map_id}): {len(routes)} routes -> {out_file}")
 

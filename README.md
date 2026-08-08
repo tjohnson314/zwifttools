@@ -68,7 +68,7 @@ Standalone browser overlays for [Sauce4Zwift](https://www.sauce.llc/), installed
 ## Data Sources
 
 - **Bike performance data**: [ZwifterBikes](https://zwifterbikes.web.app) — Cd, weight, and speed measurements for every frame and wheelset
-- **Route geometry**: [ZwiftMap](https://zwiftmap.com) — lat/lng polylines and elevation profiles for Zwift routes
+- **Route geometry**: Zwift game WAD checkpoints for lead-ins/laps, calibrated to [ZwiftMap](https://zwiftmap.com) lat/lng and elevation axes
 - **Telemetry**: Zwift API — second-by-second power, HR, speed, distance, altitude, GPS coordinates
 - **Streamer matching**: YouTube Data API v3 — livestream VOD lookup and trim detection
 
