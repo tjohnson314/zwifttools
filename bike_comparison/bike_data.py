@@ -35,11 +35,11 @@ from dataclasses import dataclass
 # Reference rider frontal area (183 cm / 75 kg), matching physics.frontal_area_from_rider.
 REF_FRONTAL_AREA = 0.3449
 # Baseline absolute CdA (m^2) for a rider on a zero-bias bike at the reference
-# rider.  This anchors absolute predictions; it cancels out of all differential
-# (vs recorded power) comparisons, so its exact value only affects solo /
-# ride-sim absolute watts.  Chosen so aero TT setups land near ~0.22 m^2 and
-# neutral road bikes near ~0.27 m^2.
-BASE_CDA = 0.2680
+# rider.  Calibrated by tools/export_frame_stats.py from Zwift Insider flat and
+# climb speed tests, with the authoritative game CdA biases kept at 1:1 scale.
+# This anchor cancels out of differential comparisons but controls absolute
+# solo, ride-simulator, and draft-savings predictions.
+BASE_CDA = 0.3042
 
 # Map Zwift game frame "type" tokens to the frametype strings used by
 # shared.surface_lookup (which drives per-surface CRR selection).
