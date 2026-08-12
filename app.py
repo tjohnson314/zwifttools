@@ -27,6 +27,10 @@ from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from scipy.ndimage import uniform_filter1d
 
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s %(name)s: %(message)s',
+)
 logger = logging.getLogger(__name__)
 
 from bike_comparison.bike_data import get_bike_database, get_bike_stats
@@ -3014,6 +3018,7 @@ def api_race_data(race_id):
             'is_late_joiner': is_late_joiner,
             'finish_time_sec': float(r.finish_time_sec) if r.finish_time_sec is not None else None,
             'ttt_time_offset': round(float(r.ttt_time_offset), 1) if r.ttt_time_offset is not None else None,
+            'segment_distance_anomaly': bool(r.segment_distance_anomaly),
             'time_sec': df['time_sec'].tolist(),
             'distance_km': safe_list(df['distance_km']),
             'altitude_m': safe_list(df['altitude_m']) if 'altitude_m' in df.columns else [],

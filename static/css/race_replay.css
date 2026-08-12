@@ -477,6 +477,18 @@ h1 .header-icon {
     font-style: italic;
 }
 
+.seg-anomaly-badge {
+    font-size: 0.65em;
+    color: #ef5350;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.info-seg-anomaly {
+    color: #ef5350;
+    font-weight: 600;
+}
+
 .cat-badge {
     display: inline-block;
     width: 16px;

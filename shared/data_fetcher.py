@@ -113,6 +113,49 @@ def get_activity_details(activity_id, headers):
         return None, f"Failed to parse activity JSON: {e} — body: {(response.text or '')[:200]}"
 
 
+def _extract_own_segment_distance(act_data, activity_id, player_id):
+    """Return this rider's own segmentDistanceInCentimeters from their activity.
+
+    Zwift's subgroupResults only lists the podium (topResults) plus the rows
+    around the activity owner (nearPlayerResults), so we match the owner's row
+    by activity id or profile id.
+    """
+    if not act_data:
+        return None
+    sgr = act_data.get('subgroupResults') or {}
+    for bucket in ('nearPlayerResults', 'topResults'):
+        for r in sgr.get(bucket, []) or []:
+            prof = r.get('profile') or {}
+            pid = prof.get('id') if prof.get('id') is not None else r.get('profileId')
+            same_activity = activity_id and str(r.get('activityId')) == str(activity_id)
+            same_profile = player_id is not None and pid == player_id
+            if same_activity or same_profile:
+                return r.get('segmentDistanceInCentimeters')
+    return None
+
+
+def flag_segment_distance_anomalies(summary_df):
+    """Flag riders whose segment distance differs from the field's most common
+    value by more than ten meters (1000 cm).
+
+    Adds a boolean 'segment_distance_anomaly' column. Riders with a missing
+    segment distance are left unflagged.
+    """
+    if 'segment_distance_cm' not in summary_df.columns:
+        summary_df['segment_distance_anomaly'] = False
+        return summary_df
+    valid = summary_df['segment_distance_cm'].dropna()
+    mode = valid.mode()
+    if mode.empty:
+        summary_df['segment_distance_anomaly'] = False
+        return summary_df
+    ref = mode.iloc[0]
+    summary_df['segment_distance_anomaly'] = summary_df['segment_distance_cm'].apply(
+        lambda v: bool(pd.notna(v) and abs(v - ref) > 1000)
+    )
+    return summary_df
+
+
 def fetch_rider_telemetry(activity_id, headers):
     """
     Fetch telemetry data for a single rider.
@@ -498,6 +541,7 @@ def fetch_all_subgroups_from_activity(activity_url_or_id, headers, output_base_d
                 'max_power': df['power_watts'].max() if len(df) > 0 else 0,
                 'avg_hr': round(df['hr_bpm'].mean(), 1) if len(df) > 0 else 0,
                 'data_points': len(df),
+                'segment_distance_cm': _extract_own_segment_distance(act_data, act_id, p.get('player_id')) or p.get('segment_distance_cm'),
             }
             if p.get('elapsed_ms'):
                 result['elapsed_ms'] = p['elapsed_ms']
@@ -523,6 +567,7 @@ def fetch_all_subgroups_from_activity(activity_url_or_id, headers, output_base_d
                 summary_data.append(results_by_idx[idx])
 
         summary_df = pd.DataFrame(summary_data)
+        summary_df = flag_segment_distance_anomalies(summary_df)
         summary_df.to_csv(os.path.join(output_dir, "complete_race_summary.csv"), index=False)
         success_count = len([s for s in summary_data if s.get('status') == 'SUCCESS'])
         cumulative_fetched += success_count
@@ -625,10 +670,21 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
     segment_distance_cm = None
     sgr = activity_data.get('subgroupResults', {})
     top_results = sgr.get('topResults', [])
+    # Per-rider segment distance keyed by profile id (same source as the race-wide value)
+    segment_distance_by_profile = {}
     if top_results:
+        logger.info("topResults: %d entries (podium only)", len(top_results))
         segment_distance_cm = top_results[0].get('segmentDistanceInCentimeters')
         if segment_distance_cm:
             logger.info("Race segment distance from subgroupResults: %.2f km", segment_distance_cm / 100000)
+        for tr in top_results:
+            prof = tr.get('profile') or {}
+            pid = prof.get('id') if prof.get('id') is not None else (tr.get('profileId') or tr.get('playerId'))
+            sd = tr.get('segmentDistanceInCentimeters')
+            if pid is not None and sd is not None:
+                segment_distance_by_profile[int(pid)] = sd
+    else:
+        logger.warning("No subgroupResults.topResults on source activity — per-rider segment distance unavailable")
     
     # Get event details (start time, route) from the parent event API
     event_start_time = None
@@ -680,6 +736,15 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
     
     # Step 6: Fetch telemetry for each participant (concurrent)
     participants = deduplicate_ranks(participants)
+    # Attach per-rider segment distance from the source activity's subgroupResults
+    if segment_distance_by_profile:
+        matched = 0
+        for p in participants:
+            pid = p.get('player_id')
+            if pid is not None and int(pid) in segment_distance_by_profile:
+                p['segment_distance_cm'] = segment_distance_by_profile[int(pid)]
+                matched += 1
+        logger.info("Matched per-rider segment distance for %d/%d riders", matched, len(participants))
     total_riders = len(participants)
     _CONCURRENT_WORKERS = 5
     
@@ -733,7 +798,8 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
             'normalized_power': np_value,
             'max_power': df['power_watts'].max() if len(df) > 0 else 0,
             'avg_hr': round(df['hr_bpm'].mean(), 1) if len(df) > 0 else 0,
-            'data_points': len(df)
+            'data_points': len(df),
+            'segment_distance_cm': _extract_own_segment_distance(act_data, act_id, p.get('player_id')) or p.get('segment_distance_cm'),
         }
         if p.get('elapsed_ms'):
             result['elapsed_ms'] = p['elapsed_ms']
@@ -767,6 +833,7 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
     
     # Step 7: Save summary
     summary_df = pd.DataFrame(summary_data)
+    summary_df = flag_segment_distance_anomalies(summary_df)
     summary_df.to_csv(os.path.join(output_dir, "complete_race_summary.csv"), index=False)
     
     success_count = len([s for s in summary_data if s.get('status') == 'SUCCESS'])

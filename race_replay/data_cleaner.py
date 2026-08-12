@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # Bump this version when data cleaning logic changes in a way that invalidates
 # previously cached results.  The cache loader will discard stale caches.
-CLEANING_VERSION = 16
+CLEANING_VERSION = 17
 
 # Map of Strava segment IDs for each route (sourced from ZwiftMap / ZwiftInsider)
 # Loaded from route_strava_segments.json
@@ -63,6 +63,7 @@ class RiderData:
     player_id: Optional[int] = None  # Numeric Zwift profile ID
     activity_start_time: Optional[str] = None  # ISO 8601 UTC when activity started
     ttt_time_offset: Optional[float] = None  # Replay clock offset (legacy field name)
+    segment_distance_anomaly: bool = False  # Segment distance differs from field (lead-in bug)
 
 
 @dataclass
@@ -1776,6 +1777,7 @@ def clean_race_data(
         player_id = None
         activity_start_time = None
         elapsed_ms = None
+        segment_distance_anomaly = False
         if summary is not None:
             match = summary[summary['rank'] == rank]
             if len(match) > 0:
@@ -1788,6 +1790,8 @@ def clean_race_data(
                     activity_start_time = str(match['activity_start_time'].values[0])
                 if 'elapsed_ms' in match.columns and pd.notna(match['elapsed_ms'].values[0]):
                     elapsed_ms = float(match['elapsed_ms'].values[0])
+                if 'segment_distance_anomaly' in match.columns and pd.notna(match['segment_distance_anomaly'].values[0]):
+                    segment_distance_anomaly = bool(match['segment_distance_anomaly'].values[0])
         
         riders.append({
             'rank': rank,
@@ -1798,6 +1802,7 @@ def clean_race_data(
             'player_id': player_id,
             'activity_start_time': activity_start_time,
             'elapsed_ms': elapsed_ms,
+            'segment_distance_anomaly': segment_distance_anomaly,
             'data': rider_data['data'],
             'metadata': rider_data['metadata']
         })
@@ -2006,6 +2011,7 @@ def clean_race_data(
             player_id=rider.get('player_id'),
             activity_start_time=rider.get('activity_start_time'),
             ttt_time_offset=ttt_time_offset,
+            segment_distance_anomaly=rider.get('segment_distance_anomaly', False),
         ))
     
     # Find global time range
@@ -2273,6 +2279,7 @@ def save_to_cache(data: CleanedRaceData, cache_path: Path):
             'activity_start_time': rider.activity_start_time,
             'finish_time_sec': to_python(rider.finish_time_sec) if rider.finish_time_sec is not None else None,
             'ttt_time_offset': to_python(rider.ttt_time_offset) if rider.ttt_time_offset is not None else None,
+            'segment_distance_anomaly': bool(rider.segment_distance_anomaly),
             'data_file': rider_file.name
         })
     
@@ -2334,6 +2341,7 @@ def load_from_cache(cache_path: Path) -> Optional[CleanedRaceData]:
                 player_id=rider_info.get('player_id'),
                 activity_start_time=rider_info.get('activity_start_time'),
                 ttt_time_offset=rider_info.get('ttt_time_offset'),
+                segment_distance_anomaly=rider_info.get('segment_distance_anomaly', False),
             ))
         
         # Load elevation
