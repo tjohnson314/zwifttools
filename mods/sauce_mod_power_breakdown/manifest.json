@@ -1,0 +1,18 @@
+{
+    "manifest_version": 1,
+    "name": "Power Breakdown",
+    "description": "Live breakdown of where your watts go: aero, rolling, gravity, kinetic, draft and residual",
+    "version": "0.1.0",
+    "author": "zwifttools",
+    "windows": [{
+        "id": "power-breakdown",
+        "file": "power-breakdown.html",
+        "name": "Power Breakdown",
+        "description": "Real-time power balance (aero / rolling / gravity / kinetic / draft / residual)",
+        "overlay": true,
+        "default_bounds": {
+            "width": 340,
+            "height": 520
+        }
+    }]
+}

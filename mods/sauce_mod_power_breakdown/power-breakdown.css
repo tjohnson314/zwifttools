@@ -1,0 +1,101 @@
+html, body {
+    margin: 0;
+    padding: 0;
+    color: #e8e8e8;
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 17px;
+}
+
+#content {
+    padding: 8px 10px 10px;
+    box-sizing: border-box;
+}
+
+.pb-config {
+    font-size: 16px;
+    line-height: 1.35;
+    margin-bottom: 5px;
+    color: #cfd3d6;
+}
+.bike-summary { font-weight: 600; }
+.config-line {
+    display: flex;
+    gap: 10px;
+    color: #9aa;
+}
+
+.pb-surface {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-size: 16px;
+    margin-bottom: 8px;
+    padding: 3px 6px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+}
+.surface-label { color: #8a9; }
+.surface-style { font-weight: 700; }
+.surface-type { color: #cfc; }
+.surface-crr { margin-left: auto; color: #9aa; font-variant-numeric: tabular-nums; }
+
+/* Breakdown rows -------------------------------------------------------- */
+.breakdown-rows { display: flex; flex-direction: column; gap: 4px; }
+
+.brk-row {
+    display: grid;
+    grid-template-columns: 92px 1fr 58px;
+    align-items: center;
+    gap: 6px;
+}
+.brk-label {
+    font-size: 16px;
+    color: #d6dadd;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.brk-bar {
+    position: relative;
+    height: 14px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 3px;
+    overflow: hidden;
+    display: flex;
+}
+/* Center divider */
+.brk-bar::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 0; bottom: 0;
+    width: 1px;
+    background: rgba(255, 255, 255, 0.25);
+    z-index: 2;
+}
+.brk-neg, .brk-pos {
+    position: absolute;
+    top: 0; bottom: 0;
+    transition: width 0.15s ease-out;
+}
+.brk-neg { right: 50%; background: #d1495b; border-radius: 3px 0 0 3px; }
+.brk-pos { left: 50%; background: #45a86e; border-radius: 0 3px 3px 0; }
+
+.brk-value {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+/* Category accents */
+.brk-row.in  .brk-pos { background: #45a86e; }
+.brk-row.out .brk-neg { background: #d1495b; }
+.brk-row.pe  .brk-pos { background: #4c8fd6; }
+.brk-row.pe  .brk-neg { background: #4c8fd6; }
+.brk-row.ke  .brk-pos { background: #d68f4c; }
+.brk-row.ke  .brk-neg { background: #d68f4c; }
+.brk-row.res .brk-pos { background: #8a8a8a; }
+.brk-row.res .brk-neg { background: #8a8a8a; }
+.brk-row.res .brk-label { color: #9aa; font-style: italic; }

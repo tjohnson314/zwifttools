@@ -1,0 +1,8 @@
+﻿Using cached telemetry: C:\Users\timjo\Documents\Coding\Zwift\zwifttools\tools\_telem_2202922917312921632.json
+activity 2202922917312921632 | Tarmac stable moving pts: 158 | align R^2 0.852
+model: CdA 0.2422 m^2 | mass 77.76 kg | frontal 0.3327 | cd 0.7279
+
+[fix Crr = 0.0040]  -> CdA = 0.2359 m^2  (95% CI 0.2297..0.2420, n=158)
+    vs model CdA 0.2422  ->  -2.6%
+[fix CdA = 0.2422] -> Crr = 0.00326  (95% CI 0.00262..0.00391, n=158)
+[joint fit]              -> Crr = 0.00423, CdA = 0.2337 m^2

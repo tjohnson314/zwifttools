@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html class="settings-page" tabindex="0" data-settings-key="power-breakdown-settings-v1">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';"/>
+    <title>Power Breakdown Settings - Sauce for Zwift™</title>
+    <script src="/pages/src/preloads.js"></script>
+    <link id="favicon" rel="shortcut icon" href="/pages/images/favicon.png"/>
+    <link rel="stylesheet" href="/pages/css/common.css"/>
+    <link rel="stylesheet" href="/pages/css/settings.css"/>
+    <style>
+        #options { padding: 4px 2px; }
+        .option-group {
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.03);
+            padding: 6px 12px 10px;
+            margin: 0 0 12px;
+        }
+        .option-group > label:first-child {
+            display: block;
+            margin: 0 0 4px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .option-group > label:first-child key {
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-size: 0.82em;
+            opacity: 0.75;
+        }
+    </style>
+    <script type="module">
+        import {settingsMain} from './power-breakdown.mjs';
+        settingsMain();
+    </script>
+</head>
+<body>
+    <div id="titlebar">
+        <header>
+            <div class="title">Power Breakdown Settings</div>
+            <div class="filler"></div>
+            <div class="buttons">
+                <div title="Close" class="button close electron-only"><ms>close</ms></div>
+            </div>
+        </header>
+    </div>
+    <div id="content">
+        <form id="options" class="section">
+            <div class="option-group">
+                <label><key>Bike setup</key></label>
+                <label>Frame <select data-set="frameId"></select></label>
+                <label>Wheels <select data-set="wheelId"></select></label>
+                <label>Upgrade level
+                    <select data-set="upgradeLevel">
+                        <option value="0">0 (stock)</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                    </select>
+                </label>
+            </div>
+
+            <div class="option-group">
+                <label><key>Rider</key></label>
+                <label><input type="checkbox" data-set="useZwiftWeight"/> Use Zwift weight &amp; height</label>
+                <label>Weight (kg) <input type="number" data-set="weightKg" min="30" max="150" step="0.1"/></label>
+                <label>Height (cm) <input type="number" data-set="heightCm" min="120" max="220" step="1"/></label>
+            </div>
+
+            <div class="option-group">
+                <label><key>Surface</key></label>
+                <label><input type="checkbox" data-set="autoSurface"/> Auto-detect from position</label>
+                <label>Manual surface <select data-set="manualSurface"></select></label>
+            </div>
+
+            <div class="option-group">
+                <label><key>Model</key></label>
+                <label>Smoothing (s) <input type="number" data-set="smoothSec" min="0.5" max="15" step="0.5"/></label>
+            </div>
+        </form>
+    </div>
+</body>
+</html>

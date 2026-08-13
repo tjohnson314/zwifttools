@@ -5,33 +5,33 @@
       "Brick": 0.0055,
       "Wood": 0.0065,
       "Cobbles": 0.0065,
-      "Snow": 0.0075,
-      "Dirt": 0.025,
-      "Grass": null,
+      "Snow": 0.0055,
+      "Dirt": 0.016,
+      "Grass": 0.025,
       "Sand": 0.004,
       "Gravel": 0.012
     },
     "mtb": {
-      "Tarmac": 0.01,
-      "Brick": 0.01,
-      "Wood": 0.01,
-      "Cobbles": 0.01,
+      "Tarmac": 0.009,
+      "Brick": 0.009,
+      "Wood": 0.009,
+      "Cobbles": 0.009,
       "Snow": 0.014,
-      "Dirt": 0.014,
-      "Grass": 0.042,
-      "Sand": 0.014,
-      "Gravel": 0.009
+      "Dirt": 0.01,
+      "Grass": 0.014,
+      "Sand": 0.009,
+      "Gravel": 0.014
     },
     "gravel_bike": {
       "Tarmac": 0.008,
       "Brick": 0.008,
       "Wood": 0.008,
       "Cobbles": 0.008,
-      "Snow": 0.018,
-      "Dirt": 0.018,
-      "Grass": null,
+      "Snow": 0.006,
+      "Dirt": 0.009,
+      "Grass": 0.016,
       "Sand": 0.008,
-      "Gravel": 0.009
+      "Gravel": 0.006
     }
   },
   "worlds": {

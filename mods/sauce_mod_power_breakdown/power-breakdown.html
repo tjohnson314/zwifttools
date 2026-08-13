@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html class="transparent-bg" tabindex="0" data-settings-key="power-breakdown-settings-v1">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';"/>
+    <title>Power Breakdown - Sauce for Zwift™</title>
+    <script src="/pages/src/preloads.js"></script>
+    <link id="favicon" rel="shortcut icon" href="/pages/images/favicon.png"/>
+    <link rel="stylesheet" href="/pages/css/common.css"/>
+    <link rel="stylesheet" href="power-breakdown.css"/>
+    <script type="module">
+        try {
+            const {main} = await import('./power-breakdown.mjs');
+            main();
+        } catch (e) {
+            document.body.insertAdjacentHTML('afterbegin',
+                `<pre style="color:#ff6b6b;white-space:pre-wrap;padding:8px;font-size:11px">Power Breakdown load error:\n${e && e.stack ? e.stack : e}</pre>`);
+        }
+    </script>
+</head>
+<body>
+    <div id="titlebar" class="always-visible">
+        <header>
+            <div class="title">Power Breakdown</div>
+            <div class="filler"></div>
+            <div class="buttons">
+                <a class="button open-settings" href="power-breakdown-settings.html?width=360&height=560&child-window"
+                   title="Open settings" target="power-breakdown-settings"><ms>settings</ms></a>
+                <div title="Minimize" class="button minimize electron-only"><ms>minimize</ms></div>
+                <div title="Close" class="button close electron-only"><ms>close</ms></div>
+            </div>
+        </header>
+    </div>
+    <div id="content">
+        <div class="pb-config">
+            <div class="bike-summary">—</div>
+            <div class="config-line">
+                <span class="cda-summary">CdA —</span>
+                <span class="mass-summary">— kg</span>
+            </div>
+        </div>
+
+        <div class="pb-surface">
+            <span class="surface-label">Surface:</span>
+            <span class="surface-style">—</span>
+            <span class="surface-type"></span>
+            <span class="surface-crr"></span>
+        </div>
+
+        <div class="breakdown-rows"></div>
+    </div>
+</body>
+</html>

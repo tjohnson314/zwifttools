@@ -1,0 +1,148 @@
+[
+ {
+  "mapID": 0,
+  "world": "world0",
+  "file": "world_0.json",
+  "segments": 1,
+  "surfaces": {
+   "Tarmac": 1
+  }
+ },
+ {
+  "mapID": 1,
+  "world": "world1",
+  "file": "world_1.json",
+  "segments": 277,
+  "surfaces": {
+   "Tarmac": 175,
+   "Cobbles": 10,
+   "Wood": 33,
+   "Dirt": 32,
+   "Snow": 4,
+   "Sand": 15,
+   "Gravel": 8
+  }
+ },
+ {
+  "mapID": 2,
+  "world": "world2",
+  "file": "world_2.json",
+  "segments": 39,
+  "surfaces": {
+   "Tarmac": 37,
+   "Cobbles": 2
+  }
+ },
+ {
+  "mapID": 3,
+  "world": "world3",
+  "file": "world_3.json",
+  "segments": 58,
+  "surfaces": {
+   "Tarmac": 56,
+   "Wood": 2
+  }
+ },
+ {
+  "mapID": 4,
+  "world": "world4",
+  "file": "world_4.json",
+  "segments": 375,
+  "surfaces": {
+   "Tarmac": 375
+  }
+ },
+ {
+  "mapID": 5,
+  "world": "world5",
+  "file": "world_5.json",
+  "segments": 18,
+  "surfaces": {
+   "Tarmac": 18
+  }
+ },
+ {
+  "mapID": 6,
+  "world": "world6",
+  "file": "world_6.json",
+  "segments": 28,
+  "surfaces": {
+   "Tarmac": 21,
+   "Cobbles": 6,
+   "Dirt": 1
+  }
+ },
+ {
+  "mapID": 7,
+  "world": "world7",
+  "file": "world_7.json",
+  "segments": 56,
+  "surfaces": {
+   "Tarmac": 40,
+   "Cobbles": 12,
+   "Dirt": 4
+  }
+ },
+ {
+  "mapID": 8,
+  "world": "world8",
+  "file": "world_8.json",
+  "segments": 27,
+  "surfaces": {
+   "Tarmac": 27
+  }
+ },
+ {
+  "mapID": 9,
+  "world": "world9",
+  "file": "world_9.json",
+  "segments": 279,
+  "surfaces": {
+   "Tarmac": 205,
+   "Wood": 37,
+   "Dirt": 9,
+   "Sand": 28
+  }
+ },
+ {
+  "mapID": 10,
+  "world": "world10",
+  "file": "world_10.json",
+  "segments": 161,
+  "surfaces": {
+   "Tarmac": 62,
+   "Cobbles": 6,
+   "Dirt": 93
+  }
+ },
+ {
+  "mapID": 11,
+  "world": "world11",
+  "file": "world_11.json",
+  "segments": 130,
+  "surfaces": {
+   "Tarmac": 74,
+   "Cobbles": 56
+  }
+ },
+ {
+  "mapID": 12,
+  "world": "world12",
+  "file": "world_12.json",
+  "segments": 7,
+  "surfaces": {
+   "Tarmac": 7
+  }
+ },
+ {
+  "mapID": 13,
+  "world": "world13",
+  "file": "world_13.json",
+  "segments": 33,
+  "surfaces": {
+   "Tarmac": 31,
+   "Cobbles": 1,
+   "Gravel": 1
+  }
+ }
+]

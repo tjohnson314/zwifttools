@@ -36,15 +36,15 @@ WORLD_NAME_MAP = {
     'GRAVEL MOUNTAIN': 'gravel-mountain',
 }
 
-# Default CRR values for road bikes (from ZwiftInsider research)
+# Default CRR values for road bikes (ZwiftInsider, current as of Jan 2026)
 DEFAULT_CRR = {
     'Tarmac': 0.004,
     'Brick': 0.0055,
     'Wood': 0.0065,
     'Cobbles': 0.0065,
-    'Snow': 0.0075,
-    'Dirt': 0.025,
-    'Grass': 0.004,   # Grass has no effect on road bikes
+    'Snow': 0.0055,
+    'Dirt': 0.016,
+    'Grass': 0.025,
     'Sand': 0.004,
     'Gravel': 0.012,
 }
