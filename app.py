@@ -263,6 +263,52 @@ def race_replay():
     return render_template('race_replay.html')
 
 
+@app.route('/surface-map')
+def surface_map():
+    """Surface map / route explorer tool."""
+    return render_template('surface_map.html')
+
+
+@app.route('/api/surface_map/worlds')
+def api_surface_map_worlds():
+    """List worlds that have both surface and route data."""
+    try:
+        from shared.surface_map import list_worlds
+        return jsonify({'worlds': list_worlds()})
+    except Exception as e:
+        logger.exception("Error listing surface-map worlds")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/surface_map/world/<int:map_id>')
+def api_surface_map_world(map_id):
+    """Return a world's road network (coloured by surface) and its route list."""
+    try:
+        from shared.surface_map import get_world_surfaces
+        return jsonify(get_world_surfaces(map_id))
+    except FileNotFoundError:
+        return jsonify({'error': f'No data for world {map_id}'}), 404
+    except Exception as e:
+        logger.exception("Error loading surface-map world %s", map_id)
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/surface_map/route/<int:map_id>/<int:name_hash>')
+def api_surface_map_route(map_id, name_hash):
+    """Return one route's geometry, elevation, and per-point surface."""
+    try:
+        from shared.surface_map import get_route
+        data = get_route(map_id, name_hash)
+        if data is None:
+            return jsonify({'error': 'Route not found'}), 404
+        return jsonify(data)
+    except FileNotFoundError:
+        return jsonify({'error': f'No data for world {map_id}'}), 404
+    except Exception as e:
+        logger.exception("Error loading surface-map route %s/%s", map_id, name_hash)
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/top-performers')
 def top_performers():
     """Top-performers scatter: CdA reduction vs weight reduction per frame+wheel."""

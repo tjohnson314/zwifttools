@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Surface Map - Zwift Tools</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <link rel="stylesheet" href="/static/css/surface_map.css?v=3">
+</head>
+<body>
+    <div class="header-bar">
+        <div>
+            <a href="/" class="back-link">← Back to Tools</a>
+            <h1><span class="header-icon">🗺️</span> Surface Map</h1>
+            <p class="subtitle">Explore each world's road network by surface type, then browse routes and inspect their elevation and surfaces.</p>
+        </div>
+    </div>
+
+    <div id="status" class="status"></div>
+
+    <div class="layout">
+        <!-- Sidebar: world selector + route browser -->
+        <aside class="sidebar">
+            <div class="world-select-wrap">
+                <label for="world-select">World</label>
+                <select id="world-select"><option value="">Loading…</option></select>
+            </div>
+            <div class="sidebar-head">
+                <h2>Routes</h2>
+                <span id="route-count" class="route-count"></span>
+            </div>
+            <input id="route-search" type="search" placeholder="Search routes…" autocomplete="off">
+            <ul id="route-list" class="route-list"></ul>
+        </aside>
+
+        <!-- Main map + charts -->
+        <main class="main">
+            <div class="map-panel">
+                <div class="map-toolbar">
+                    <div id="legend" class="legend"></div>
+                    <div class="map-actions">
+                        <button id="btn-fit" class="btn-sm" title="Fit view">Reset view</button>
+                        <label class="toggle"><input type="checkbox" id="toggle-network" checked> Show network</label>
+                    </div>
+                </div>
+                <div class="canvas-wrap">
+                    <canvas id="map-canvas"></canvas>
+                    <div id="map-hint" class="map-hint">Select a world, then pick a route.</div>
+                </div>
+            </div>
+
+            <div id="route-detail" class="route-detail" style="display:none;">
+                <div class="route-detail-head">
+                    <h2 id="rd-name">—</h2>
+                    <div id="rd-stats" class="rd-stats"></div>
+                </div>
+                <div id="rd-breakdown" class="rd-breakdown"></div>
+                <div id="elevation-chart" class="elevation-chart"></div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/js/surface_map.js?v=6"></script>
+</body>
+</html>
