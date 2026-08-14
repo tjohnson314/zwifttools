@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # Bump this version when data cleaning logic changes in a way that invalidates
 # previously cached results.  The cache loader will discard stale caches.
-CLEANING_VERSION = 17
+CLEANING_VERSION = 18
 
 # Map of Strava segment IDs for each route (sourced from ZwiftMap / ZwiftInsider)
 # Loaded from route_strava_segments.json
@@ -121,14 +121,30 @@ def compute_ttt_time_offset(
         lats[search_indices], lngs[search_indices],
         finish_lat, finish_lng,
     )
-    best_local = np.argmin(gps_dists)
-    best_idx = search_indices[best_local]
-    best_gps_dist = gps_dists[best_local]
-
-    if best_gps_dist >= gps_sanity_m:
+    # Only consider points that are genuinely at the finish line.
+    gps_valid = gps_dists < gps_sanity_m
+    if not np.any(gps_valid):
         return None
 
-    # Refine within a small window around the best index
+    # A rider may pass near the finish line more than once (multi-lap routes)
+    # or coast/linger past it during cooldown, so the GPS-closest point over
+    # the whole ride is not necessarily the finish crossing. First anchor on
+    # the qualifying point whose time is closest to the official finish time to
+    # select the correct pass, then within that pass take the true GPS closest
+    # approach so we time the actual line crossing rather than a point tens of
+    # metres past it.
+    valid_indices = search_indices[gps_valid]
+    valid_times = times[valid_indices]
+    anchor_idx = valid_indices[int(np.argmin(np.abs(valid_times - official_time_sec)))]
+    same_pass = np.abs(valid_times - times[anchor_idx]) <= 60.0
+    pass_indices = valid_indices[same_pass]
+    pass_gps = haversine(
+        lats[pass_indices], lngs[pass_indices],
+        finish_lat, finish_lng,
+    )
+    best_idx = pass_indices[int(np.argmin(pass_gps))]
+
+    # Refine within a small window around the closest-approach index
     window_start = max(search_indices[0], best_idx - 2)
     window_end = min(search_indices[-1], best_idx + 2) + 1
     win_indices = np.arange(window_start, window_end)
