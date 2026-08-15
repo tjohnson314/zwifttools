@@ -14,8 +14,10 @@ entirely — the simulator never fabricates an approximate profile.
 from __future__ import annotations
 
 import json
+import re
 import numpy as np
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
@@ -27,11 +29,21 @@ from bike_comparison.physics import (
     GRAVITY,
     DRIVETRAIN_LOSS,
 )
-from shared.surface_lookup import compute_crr_array, get_bike_type_for_frame
+from shared.surface_lookup import (
+    compute_crr_array,
+    get_bike_type_for_frame,
+    surface_types_to_crr,
+)
+from shared import surface_map
 from race_replay.data_cleaner import fetch_route_from_zwiftmap, ROUTE_STRAVA_SEGMENTS
 
 ROUTE_DIR = Path(__file__).parent.parent / "zwiftmap_surfaces"
 ROUTES_CACHE = Path(__file__).parent.parent / "routes_cache.json"
+ZWIFT_ROUTES_DIR = Path(__file__).parent.parent / "zwift_routes"
+
+# routes_cache.json world names that don't normalise cleanly to surface_map's
+# WORLD_NAMES (e.g. the Bologna TT world).
+_WORLD_ALIASES = {"bolognatt": 6}
 
 
 def _route_name_to_slug(name: str) -> str:
@@ -44,10 +56,121 @@ def _cached_route_file(slug: str) -> Path:
     return ROUTE_DIR / f'{slug.replace("-", "_")}_route.json'
 
 
-def route_has_profile(route_name: str) -> bool:
-    """True if real elevation geometry is available (cached or fetchable)."""
+def route_has_profile(route_name: str, world: Optional[str] = None) -> bool:
+    """True if real elevation geometry is available.
+
+    Prefers the WAD ``zwift_routes`` geometry (same source as the surface map),
+    and falls back to ZwiftMap geometry (cached or fetchable).
+    """
+    if _find_wad_route(route_name, world) is not None:
+        return True
     slug = _route_name_to_slug(route_name)
     return _cached_route_file(slug).exists() or slug in ROUTE_STRAVA_SEGMENTS
+
+
+def _normalize_world(world: str) -> str:
+    """Collapse a world name to lowercase alphanumerics for loose matching."""
+    return re.sub(r"[^a-z0-9]", "", (world or "").lower())
+
+
+def _world_to_map_id(world: Optional[str]) -> Optional[int]:
+    """Resolve a routes_cache world name to a surface_map mapID."""
+    if not world:
+        return None
+    key = _normalize_world(world)
+    if key in _WORLD_ALIASES:
+        return _WORLD_ALIASES[key]
+    for map_id, name in surface_map.WORLD_NAMES.items():
+        if _normalize_world(name) == key:
+            return map_id
+    return None
+
+
+@lru_cache(maxsize=1)
+def _wad_route_index() -> dict:
+    """Map a casefolded route name to its ``zwift_routes/index.json`` entries."""
+    path = ZWIFT_ROUTES_DIR / "index.json"
+    if not path.exists():
+        return {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            entries = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    by_name: dict[str, list] = {}
+    for entry in entries:
+        name = str(entry.get("name", "")).strip().casefold()
+        if name:
+            by_name.setdefault(name, []).append(entry)
+    return by_name
+
+
+def _find_wad_route(route_name: str, world: Optional[str] = None) -> Optional[dict]:
+    """Find the WAD route index entry for a route name (disambiguated by world)."""
+    entries = _wad_route_index().get((route_name or "").strip().casefold())
+    if not entries:
+        return None
+    if len(entries) > 1 and world:
+        map_id = _world_to_map_id(world)
+        if map_id is not None:
+            for entry in entries:
+                if entry.get("mapID") == map_id:
+                    return entry
+    return entries[0]
+
+
+def _load_wad_profile(
+    route_name: str, world: Optional[str], include_leadin: bool
+) -> Optional[dict]:
+    """Build a route profile from WAD ``zwift_routes`` geometry.
+
+    Returns distance/altitude/surface arrays identical to what the surface map
+    page renders, optionally prepending the lead-in leg. Returns ``None`` when
+    no WAD geometry is available for the route.
+    """
+    entry = _find_wad_route(route_name, world)
+    if entry is None:
+        return None
+    data = surface_map.get_route(entry["mapID"], entry["nameHash"])
+    if data is None:
+        return None
+    main = data.get("route")
+    if not main or not main.get("d"):
+        return None
+
+    distance = np.asarray(main["d"], dtype=float)
+    altitude = np.asarray(main["alt"], dtype=float)
+    surfaces = np.asarray(main["surface"], dtype=object)
+    source_distance_m = float(data.get("distance_m") or 0.0)
+    source_ascent_m = float(data.get("ascent_m") or 0.0)
+
+    leadin = data.get("leadin")
+    if include_leadin and leadin and leadin.get("d"):
+        leadin_len = float(data.get("leadin_distance_m") or leadin["d"][-1])
+        # Offset the route leg so it follows the lead-in on a single axis
+        # (mirrors the surface map, which draws the route at +leadin_distance_m).
+        distance = np.concatenate([
+            np.asarray(leadin["d"], dtype=float),
+            distance + leadin_len,
+        ])
+        altitude = np.concatenate([
+            np.asarray(leadin["alt"], dtype=float),
+            altitude,
+        ])
+        surfaces = np.concatenate([
+            np.asarray(leadin["surface"], dtype=object),
+            surfaces,
+        ])
+        source_distance_m += float(data.get("leadin_distance_m") or 0.0)
+        source_ascent_m += float(data.get("leadin_ascent_m") or 0.0)
+
+    return {
+        "distance_m": distance,
+        "altitude_m": altitude,
+        "surfaces": surfaces,
+        "source_distance_m": source_distance_m or None,
+        "source_ascent_m": source_ascent_m or None,
+    }
 
 
 def _load_route_geometry(slug: str) -> Optional[dict]:
@@ -87,6 +210,8 @@ class RouteProfile:
     altitude_m: np.ndarray      # Altitude in metres
     lats: Optional[np.ndarray] = None
     lngs: Optional[np.ndarray] = None
+    # Per-point surface tags (from WAD geometry) used for surface-aware CRR.
+    surfaces: Optional[np.ndarray] = None
     world: Optional[str] = None
     # Authoritative totals from routes_cache.json (Zwift's own figures).
     # Used for display so the reported stats match Zwift Insider exactly,
@@ -132,6 +257,8 @@ class SimulationResult:
     altitude_m: list[float] = field(default_factory=list)
     speed_kph: list[float] = field(default_factory=list)
     gradient_pct: list[float] = field(default_factory=list)
+    surfaces: list[str] = field(default_factory=list)
+    surface_breakdown: list[dict] = field(default_factory=list)
 
     @property
     def total_time_formatted(self) -> str:
@@ -174,33 +301,59 @@ def list_routes() -> list[dict]:
             continue
 
         # Only include routes with real elevation data available
-        if not route_has_profile(name):
+        if not route_has_profile(name, world):
             continue
 
+        leadin_dist_m = info.get("leadinDistanceInMeters", 0) or 0
+        leadin_ascent_m = info.get("leadinAscentInMeters", 0) or 0
         routes.append({
             "id": route_id,
             "name": name,
             "world": world,
             "distance_km": round(dist_m / 1000, 1),
             "ascent_m": round(ascent_m),
+            "leadin_distance_km": round(leadin_dist_m / 1000, 1),
+            "leadin_ascent_m": round(leadin_ascent_m),
         })
 
     return sorted(routes, key=lambda r: (r["world"], r["name"]))
 
 
-def load_route_profile(route_id: str, route_name: str, world: Optional[str] = None) -> RouteProfile:
+def load_route_profile(
+    route_id: str,
+    route_name: str,
+    world: Optional[str] = None,
+    include_leadin: bool = True,
+) -> RouteProfile:
     """
-    Load the real elevation profile for a route from ZwiftMap geometry.
+    Load the real elevation profile for a route.
 
-    Uses the local cache when present, otherwise fetches from ZwiftMap and
-    caches the result. Raises ValueError when no real geometry is available —
-    the simulator never synthesises an approximate profile.
+    Prefers the WAD ``zwift_routes`` geometry (identical to the surface map
+    page, including the lead-in), and falls back to ZwiftMap geometry when a
+    route has no WAD data. Raises ValueError when no real geometry is available
+    — the simulator never synthesises an approximate profile.
 
     Args:
-        route_id: Route ID (unused for lookup; kept for API symmetry/logging).
-        route_name: Route name, converted to a ZwiftMap slug for lookup.
-        world: World name (e.g. 'WATOPIA') used for surface-aware CRR lookup.
+        route_id: Route ID, used to look up authoritative totals; also kept for
+            API symmetry/logging.
+        route_name: Route name, used for WAD/ZwiftMap geometry lookup.
+        world: World name (e.g. 'WATOPIA') used for surface-aware CRR lookup and
+            to disambiguate WAD routes that share a name.
+        include_leadin: Include the route's lead-in leg in the profile (WAD
+            geometry only).
     """
+    wad = _load_wad_profile(route_name, world, include_leadin)
+    if wad is not None:
+        return RouteProfile(
+            name=route_name,
+            distance_m=wad["distance_m"],
+            altitude_m=wad["altitude_m"],
+            surfaces=wad["surfaces"],
+            world=world,
+            source_distance_m=wad["source_distance_m"],
+            source_ascent_m=wad["source_ascent_m"],
+        )
+
     slug = _route_name_to_slug(route_name)
     data = _load_route_geometry(slug)
     if data is None:
@@ -292,9 +445,12 @@ def simulate_ride(
     cda = bike_setup.cd * frontal_area
     total_mass = rider_weight_kg + bike_setup.weight_kg
 
-    # Per-point CRR: use surface lookup when GPS coords are available
+    # Per-point CRR: prefer WAD per-point surface tags (same surfaces the
+    # surface map shows), then GPS surface polygons, else a constant default.
     bike_type = get_bike_type_for_frame(bike_setup.frame_type)
-    if route.lats is not None and route.lngs is not None and route.world:
+    if route.surfaces is not None and len(route.surfaces) == n:
+        crr_arr = surface_types_to_crr(route.surfaces, bike_type)
+    elif route.lats is not None and route.lngs is not None and route.world:
         crr_arr = compute_crr_array(route.lats, route.lngs, route.world, bike_type)
     else:
         crr_arr = np.full(n, default_crr)
@@ -386,6 +542,28 @@ def simulate_ride(
     # final node so the array lines up with the node-indexed distance/altitude.
     grad_nodes = np.append(gradient, gradient[-1])
 
+    # Per-surface distance breakdown + downsampled per-point surface tags, so
+    # the elevation chart can colour each segment like the surface map page.
+    surfaces_ds: list[str] = []
+    breakdown_list: list[dict] = []
+    if route.surfaces is not None and len(route.surfaces) == n:
+        surfaces_ds = [str(route.surfaces[i]) for i in idx]
+        seg_len_full = np.diff(dist)
+        totals: dict[str, float] = {}
+        for i in range(n - 1):
+            seg_len = float(seg_len_full[i])
+            if seg_len <= 0:
+                continue
+            surf = str(route.surfaces[i])
+            totals[surf] = totals.get(surf, 0.0) + seg_len
+        breakdown_list = sorted(
+            ({"surface": s, "distance_m": round(d, 1),
+              "color": surface_map.SURFACE_COLORS.get(
+                  s, surface_map.SURFACE_COLORS["Unknown"])}
+             for s, d in totals.items()),
+            key=lambda e: -e["distance_m"],
+        )
+
     return SimulationResult(
         route_name=route.name,
         total_time_seconds=total_time,
@@ -396,4 +574,6 @@ def simulate_ride(
         altitude_m=[round(float(alt[i]), 1) for i in idx],
         speed_kph=[round(float(node_speed[i]) * 3.6, 1) for i in idx],
         gradient_pct=[round(float(grad_nodes[i]) * 100, 1) for i in idx],
+        surfaces=surfaces_ds,
+        surface_breakdown=breakdown_list,
     )

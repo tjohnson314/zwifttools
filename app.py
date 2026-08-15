@@ -2247,6 +2247,7 @@ def api_simulate_ride():
         route_id      (str)   — route ID from routes_cache.json
         route_name    (str)   — route name (used for ZwiftMap geometry lookup)
         world         (str)   — world name (for surface-aware CRR)
+        include_leadin (bool) — include the route lead-in (default true)
         rider_weight_kg (float)
         rider_height_cm (float)
         power_watts   (float)
@@ -2278,7 +2279,10 @@ def api_simulate_ride():
         return jsonify({'error': f'Unknown frame/wheel combination: {frame_id}/{wheel_id}'}), 400
 
     try:
-        route = load_route_profile(body.get('route_id', ''), route_name, world=body.get('world'))
+        route = load_route_profile(
+            body.get('route_id', ''), route_name, world=body.get('world'),
+            include_leadin=bool(body.get('include_leadin', True)),
+        )
         result = _simulate_ride(
             route=route,
             rider_weight_kg=weight_kg,
@@ -2304,7 +2308,9 @@ def api_simulate_ride():
             'altitude_m': result.altitude_m,
             'speed_kph': result.speed_kph,
             'gradient_pct': result.gradient_pct,
+            'surfaces': result.surfaces,
         },
+        'surface_breakdown': result.surface_breakdown,
     })
 
 

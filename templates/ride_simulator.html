@@ -40,6 +40,11 @@
                 </select>
             </div>
 
+            <div class="form-group form-check">
+                <input type="checkbox" id="includeLeadin" checked onchange="onLeadinToggle()">
+                <label for="includeLeadin">Include lead-in</label>
+            </div>
+
             <div class="route-stats" id="routeStats" style="display:none;">
                 <div class="stat-pill"><span class="stat-label">Distance</span><span class="stat-value" id="statDist">—</span></div>
                 <div class="stat-pill"><span class="stat-label">Ascent</span><span class="stat-value" id="statAscent">—</span></div>
@@ -143,6 +148,9 @@
                 <div class="card-label">Avg Speed</div>
             </div>
         </div>
+
+        <!-- Surface breakdown -->
+        <div class="surface-breakdown" id="surfaceBreakdown" style="display:none;"></div>
 
         <!-- Chart -->
         <div class="chart-container">

@@ -108,6 +108,37 @@ h1 {
     padding-right: 32px;
 }
 
+/* Inline checkbox row (e.g. "Include lead-in") */
+.form-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.form-check input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    background: none;
+    appearance: auto;
+    -webkit-appearance: checkbox;
+    accent-color: #f7931e;
+    cursor: pointer;
+    flex: none;
+}
+
+.form-check label {
+    margin-bottom: 0;
+    text-transform: none;
+    letter-spacing: normal;
+    font-size: 0.9rem;
+    color: #ddd;
+    cursor: pointer;
+}
+
 /* Stat pills */
 .route-stats, .bike-stats {
     display: flex;
@@ -260,6 +291,40 @@ h1 {
 .chart-container {
     position: relative;
     height: 300px;
+}
+
+/* Surface breakdown */
+.surface-breakdown {
+    margin-bottom: 16px;
+}
+.surface-breakdown .bar {
+    display: flex;
+    height: 16px;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid rgba(0, 0, 0, 0.4);
+}
+.surface-breakdown .bar span {
+    height: 100%;
+}
+.surface-breakdown .bkey {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    margin-top: 8px;
+    font-size: 0.82rem;
+    color: #aaa;
+}
+.surface-breakdown .bkey .item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.surface-breakdown .bkey .swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    border: 1px solid rgba(0, 0, 0, 0.4);
 }
 
 /* Error toast */

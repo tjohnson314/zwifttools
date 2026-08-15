@@ -13,6 +13,20 @@ let bikeDatabase = null;     // { frames, wheels } from /api/bike_database
 let selectedRoute = null;    // currently selected route object
 let profileChart = null;     // Chart.js instance
 
+// Surface colours — mirror shared/surface_map.py SURFACE_COLORS so the
+// elevation profile is coloured consistently with the surface map page.
+const SURFACE_COLORS = {
+    Tarmac: '#7d828b',
+    Cobbles: '#9c7a63',
+    Brick: '#b5503c',
+    Dirt: '#9a6634',
+    Gravel: '#cbb079',
+    Wood: '#c07f3c',
+    Sand: '#ddcd91',
+    Grass: '#5f9a4d',
+    Unknown: '#555a63',
+};
+
 // ── Initialise ───────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
     Promise.all([loadRoutes(), loadBikeDatabase()])
@@ -100,10 +114,17 @@ function onRouteChange() {
     updateSimulateButton();
 }
 
+function onLeadinToggle() {
+    if (selectedRoute) showRouteStats(selectedRoute);
+}
+
 function showRouteStats(route) {
     document.getElementById('routeStats').style.display = 'flex';
-    document.getElementById('statDist').textContent = route.distance_km + ' km';
-    document.getElementById('statAscent').textContent = route.ascent_m + ' m';
+    const includeLeadin = document.getElementById('includeLeadin').checked;
+    const dist = route.distance_km + (includeLeadin ? (route.leadin_distance_km || 0) : 0);
+    const ascent = route.ascent_m + (includeLeadin ? (route.leadin_ascent_m || 0) : 0);
+    document.getElementById('statDist').textContent = dist.toFixed(1) + ' km';
+    document.getElementById('statAscent').textContent = Math.round(ascent) + ' m';
 }
 
 function hideRouteStats() {
@@ -254,6 +275,7 @@ async function runSimulation() {
                 route_id:        selectedRoute.id,
                 route_name:      selectedRoute.name,
                 world:           selectedRoute.world,
+                include_leadin:  document.getElementById('includeLeadin').checked,
                 rider_weight_kg: weightKg,
                 rider_height_cm: heightCm,
                 power_watts:     powerW,
@@ -291,9 +313,30 @@ function displayResults(data) {
     document.getElementById('totalAscent').textContent = data.total_ascent_m + ' m';
     document.getElementById('avgSpeed').textContent    = data.avg_speed_kph.toFixed(1) + ' km/h';
 
+    renderBreakdown(data.surface_breakdown);
     renderChart(data.profile);
 
     section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderBreakdown(breakdown) {
+    const el = document.getElementById('surfaceBreakdown');
+    if (!breakdown || !breakdown.length) {
+        el.style.display = 'none';
+        el.innerHTML = '';
+        return;
+    }
+    el.style.display = 'block';
+    const total = breakdown.reduce((s, b) => s + b.distance_m, 0) || 1;
+    const bar = breakdown.map(b =>
+        `<span style="width:${(b.distance_m / total * 100).toFixed(2)}%;background:${b.color}" title="${b.surface}"></span>`
+    ).join('');
+    const key = breakdown.map(b => {
+        const pct = (b.distance_m / total * 100).toFixed(0);
+        const km = (b.distance_m / 1000).toFixed(1);
+        return `<span class="item"><span class="swatch" style="background:${b.color}"></span>${b.surface} · ${km} km (${pct}%)</span>`;
+    }).join('');
+    el.innerHTML = `<div class="bar">${bar}</div><div class="bkey">${key}</div>`;
 }
 
 function renderChart(profile) {
@@ -309,6 +352,15 @@ function renderChart(profile) {
     const elevationPoints = profile.distance_km.map((d, i) => ({ x: d, y: profile.altitude_m[i] }));
     const speedPoints     = profile.distance_km.map((d, i) => ({ x: d, y: profile.speed_kph[i] }));
 
+    // Colour each elevation segment by the surface at its end point so the
+    // profile matches the surface map's per-surface colouring.
+    const surfaces = profile.surfaces || [];
+    const segColor = ctx => {
+        const surf = surfaces[ctx.p1DataIndex];
+        return surf ? (SURFACE_COLORS[surf] || SURFACE_COLORS.Unknown) : undefined;
+    };
+    const hasSurfaces = surfaces.length === profile.distance_km.length;
+
     profileChart = new Chart(ctx, {
         data: {
             datasets: [
@@ -322,6 +374,7 @@ function renderChart(profile) {
                     tension: 0.35,
                     pointRadius: 0,
                     yAxisID: 'y',
+                    segment: hasSurfaces ? { borderColor: segColor } : undefined,
                 },
                 {
                     type: 'line',
@@ -346,6 +399,10 @@ function renderChart(profile) {
                 tooltip: {
                     callbacks: {
                         title: ctx => ctx[0].parsed.x.toFixed(2) + ' km',
+                        afterBody: ctx => {
+                            const surf = surfaces[ctx[0].dataIndex];
+                            return surf ? 'Surface: ' + surf : '';
+                        },
                     },
                 },
             },
