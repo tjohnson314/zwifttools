@@ -1930,11 +1930,9 @@ def clean_race_data(
         ref_rider = max(riders, key=lambda r: len(r['data']))
         landmarks = find_course_landmarks(ref_rider['data'])
         riders, offsets = align_rider_distances(riders, landmarks)
-        # Landmark alignment keeps the raw Zwift odometer, which includes the
-        # lead-in. Segment distances from metadata exclude it, so pass the
-        # lead-in to place the finish on the same axis.
-        finish_line = determine_finish_line(
-            riders, data_path, leadin_distance_m=leadin_distance_m or 0.0)
+        # Landmark alignment keeps the raw Zwift odometer, which already
+        # includes the lead-in — the same axis as Zwift's segment distance.
+        finish_line = determine_finish_line(riders, data_path)
     
     if progress_callback:
         progress_callback(len(csv_files) + 2, total_steps, "Processing riders...")
@@ -2198,17 +2196,13 @@ def clean_race_data(
 def determine_finish_line(
     riders: List[Dict],
     data_path: Path,
-    leadin_distance_m: float = 0.0,
 ) -> Optional[float]:
     """Determine the finish line distance in km on the rider distance axis.
 
-    ``leadin_distance_m`` is the lead-in already present in the rider axis (the
-    landmark path keeps the raw odometer, which includes the lead-in). Race
-    segment distances from metadata exclude the lead-in, so it is added back so
-    the finish sits on the same axis. Route-projected axes (WAD / ZwiftMap) pass
-    0 because their distances are measured from the start banner.
+    Zwift's segment distance already includes the lead-in, matching both the
+    raw landmark odometer axis and the route-projected axes (WAD / ZwiftMap),
+    so no lead-in adjustment is applied.
     """
-    leadin_km = (leadin_distance_m or 0.0) / 1000.0
     # Try to get from race_meta.json route_id
     meta_path = data_path / 'race_meta.json'
     if meta_path.exists():
@@ -2219,7 +2213,7 @@ def determine_finish_line(
             # Use segment distance saved from subgroupResults on the source activity
             segment_dist_cm = meta.get('segment_distance_cm')
             if segment_dist_cm:
-                finish = segment_dist_cm / 100000.0 + leadin_km
+                finish = segment_dist_cm / 100000.0
                 logger.info("Finish line from race segment distance: %.2f km", finish)
                 return finish
             
@@ -2241,7 +2235,7 @@ def determine_finish_line(
             if subgroup_results:
                 segment_dist_cm = subgroup_results[0].get('segmentDistanceInCentimeters')
                 if segment_dist_cm:
-                    return segment_dist_cm / 100000.0 + leadin_km
+                    return segment_dist_cm / 100000.0
     
     # Fallback: use top-ranked riders' max distances (they definitely finished)
     # Sort by rank and use the top finishers for a reliable estimate
