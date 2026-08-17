@@ -40,6 +40,10 @@ let followRider = true;       // Auto-follow selected rider
 let showWkg = localStorage.getItem('powerUnit') === 'wkg';  // Toggle: false=watts, true=W/kg
 let chartMode = 'riders';  // 'riders' or 'peloton'
 
+// Guards against overlapping fetch/load cycles (double-click or URL auto-load
+// racing with a manual click), which would otherwise load the race twice.
+let raceOpInProgress = false;
+
 // YouTube stream links data
 let streamLinks = [];         // [{streamer_name, youtube_url, offset_seconds, stream_title}]
 
@@ -243,6 +247,8 @@ async function tryLoadCachedOrFetch(activityId, allSubgroups) {
 async function fetchRace(forceRefresh = false) {
     const input = document.getElementById('activity-input').value.trim();
     if (!input) return;
+    if (raceOpInProgress) return;  // ignore overlapping fetch/load cycles
+    setRaceBusy(true);
 
     showStatus('Fetching race data from Zwift API...', 'info');
     showLoading('Connecting to Zwift API...');
@@ -322,20 +328,39 @@ async function fetchRace(forceRefresh = false) {
 
         if (finalData.success) {
             showStatus(finalData.message, 'success');
-            await loadRaceById(finalData.race_id);
+            await loadRaceById(finalData.race_id, true);
         }
     } catch (e) {
         hideProgress();
         hideLoading();
         console.error('Fetch stream error:', e);
         showStatus('Connection lost while fetching race data.', 'error');
+    } finally {
+        setRaceBusy(false);
     }
 }
 
 // ---------------------------------------------------------------------------
 // Load race data
 // ---------------------------------------------------------------------------
-async function loadRaceById(raceId) {
+// Disable the fetch buttons while a fetch/load is running so a second click
+// can't start an overlapping cycle.
+function setRaceBusy(busy) {
+    raceOpInProgress = busy;
+    const fetchBtn = document.getElementById('fetch-btn');
+    const refetchBtn = document.getElementById('refetch-btn');
+    if (fetchBtn) fetchBtn.disabled = busy;
+    if (refetchBtn) refetchBtn.disabled = busy;
+}
+
+async function loadRaceById(raceId, internal = false) {
+    // When called directly (URL auto-load, cached-race resolve) guard against a
+    // concurrent cycle. When called from fetchRace (internal=true) the guard is
+    // already held by the caller.
+    if (!internal) {
+        if (raceOpInProgress) return;
+        setRaceBusy(true);
+    }
     showLoading('Loading and cleaning race data...');
     try {
         // Step 1: Load/clean on server
@@ -399,6 +424,8 @@ async function loadRaceById(raceId) {
         hideLoading();
         console.error('Race load exception:', e);
         showStatus('Error loading race: ' + e.message, 'error');
+    } finally {
+        if (!internal) setRaceBusy(false);
     }
 }
 

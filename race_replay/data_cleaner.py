@@ -28,7 +28,14 @@ logger = logging.getLogger(__name__)
 
 # Bump this version when data cleaning logic changes in a way that invalidates
 # previously cached results.  The cache loader will discard stale caches.
-CLEANING_VERSION = 18
+CLEANING_VERSION = 19
+
+# Grace period after the official race start before a rider is treated as a
+# "late joiner".  Riders routinely begin recording / cross the start banner a
+# few seconds to tens of seconds after the gun in a normal mass start, so a
+# zero-tolerance check misclassifies them.  Genuine late joiners (who ride a
+# different lead-in and break altitude alignment) join well beyond this window.
+LATE_JOINER_GRACE_SEC = 30
 
 # Map of Strava segment IDs for each route (sourced from ZwiftMap / ZwiftInsider)
 # Loaded from route_strava_segments.json
@@ -660,7 +667,7 @@ def align_riders_to_game_route(
             detect_late_joiners
             and race_start_epoch is not None
             and rider_start_epoch is not None
-            and rider_start_epoch > race_start_epoch
+            and rider_start_epoch > race_start_epoch + LATE_JOINER_GRACE_SEC
         )
 
         nearest = kd_indices[:, 0]
@@ -1142,7 +1149,7 @@ def align_riders_to_route(riders: List[Dict], route: RouteData,
     #
     # In TTT races all teams start from the same pen at staggered times, so
     # none of them are late joiners.  Callers pass detect_late_joiners=False.
-    LATE_JOINER_THRESHOLD_SEC = 0  # any activity starting after race start = late joiner
+    LATE_JOINER_THRESHOLD_SEC = LATE_JOINER_GRACE_SEC  # grace period after the gun
     late_joiner_set = set()  # rider indices flagged as late joiners
     
     # Parse the reference time: prefer official race start, fall back to median

@@ -3033,8 +3033,9 @@ def api_race_data(race_id):
         return [None if pd.isna(v) else v for v in series]
 
     # Detect late joiners by comparing each rider's activity start time against
-    # the official race start time.  Anyone who started their activity after the
-    # race gun is flagged.
+    # the official race start time.  A grace period absorbs riders who simply
+    # began recording / crossed the start banner shortly after the gun.
+    from race_replay.data_cleaner import LATE_JOINER_GRACE_SEC
     race_start_dt = None
     if race_start_time:
         try:
@@ -3050,13 +3051,14 @@ def api_race_data(race_id):
     for i, r in enumerate(race_data.riders):
         df = r.data.reset_index()  # time_sec is the index
 
-        # Late joiner: activity started after the race start
+        # Late joiner: activity started more than the grace period after the gun
         is_late_joiner = False
         if race_start_dt and r.activity_start_time:
             try:
                 ts = r.activity_start_time.replace('+0000', '+00:00').replace('Z', '+00:00')
                 rider_start_dt = datetime.fromisoformat(ts)
-                is_late_joiner = rider_start_dt > race_start_dt
+                delay_sec = (rider_start_dt - race_start_dt).total_seconds()
+                is_late_joiner = delay_sec > LATE_JOINER_GRACE_SEC
             except Exception:
                 pass
         rider_json = {
