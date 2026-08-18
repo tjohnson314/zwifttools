@@ -20,7 +20,8 @@ zc = _load("zc", "_zi_compare.py")
 zs = _load("zs", "_zi_stage_solve.py")
 
 frames = {f["folder"]: f for f in json.load(
-    open(os.path.join(ROOT, "zwiftdata", "game_frames.json"), encoding="utf-8-sig"))}
+    open(os.path.join(ROOT, "zwiftdata", "game_frames.json"), encoding="utf-8-sig"))
+    if "folder" in f}
 recs, theta = zs.build()
 
 

@@ -341,8 +341,9 @@ def audit2():
 
 
 def _load_our_full():
-    return json.load(open(os.path.join(ROOT, "zwiftdata", "game_frames.json"),
-                          encoding="utf-8-sig"))
+    raw = json.load(open(os.path.join(ROOT, "zwiftdata", "game_frames.json"),
+                         encoding="utf-8-sig"))
+    return [f for f in raw if isinstance(f, dict) and "folder" in f]
 
 
 _SHEET_CACHE = None
