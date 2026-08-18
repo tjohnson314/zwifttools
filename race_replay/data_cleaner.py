@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # Bump this version when data cleaning logic changes in a way that invalidates
 # previously cached results.  The cache loader will discard stale caches.
-CLEANING_VERSION = 19
+CLEANING_VERSION = 24
 
 # Grace period after the official race start before a rider is treated as a
 # "late joiner".  Riders routinely begin recording / cross the start banner a
@@ -98,7 +98,7 @@ def haversine(lat1, lng1, lat2, lng2):
     return 2 * R * np.arcsin(np.sqrt(a))
 
 
-def compute_ttt_time_offset(
+def compute_finish_crossing_time(
     times: np.ndarray,
     distances_m: np.ndarray,
     lats: np.ndarray,
@@ -106,16 +106,16 @@ def compute_ttt_time_offset(
     finish_lat: float,
     finish_lng: float,
     finish_distance_m: float,
-    official_time_sec: float,
+    expected_time_sec: Optional[float] = None,
     search_radius_m: float = 500,
     gps_sanity_m: float = 50,
 ) -> Optional[float]:
-    """Compute TTT time offset via GPS proximity to the finish line.
+    """Return the telemetry-clock time when the rider crosses the finish line.
 
-    Uses the GPS coordinates to find the exact moment the rider crosses
-    the finish, then returns ``telem_finish - official_time_sec``.
-    Subtract the returned offset from the rider's time array to align
-    all riders to the official race clock.
+    Uses the GPS coordinates to time the exact line crossing.
+    ``expected_time_sec`` disambiguates multi-lap routes by selecting the pass
+    whose telemetry time is closest to it; when ``None`` the last qualifying
+    pass is used.
 
     Returns ``None`` if the finish crossing cannot be determined.
     """
@@ -135,14 +135,19 @@ def compute_ttt_time_offset(
 
     # A rider may pass near the finish line more than once (multi-lap routes)
     # or coast/linger past it during cooldown, so the GPS-closest point over
-    # the whole ride is not necessarily the finish crossing. First anchor on
-    # the qualifying point whose time is closest to the official finish time to
-    # select the correct pass, then within that pass take the true GPS closest
+    # the whole ride is not necessarily the finish crossing. First select the
+    # correct pass (nearest to the expected time, or the last pass when no
+    # estimate is given), then within that pass take the true GPS closest
     # approach so we time the actual line crossing rather than a point tens of
     # metres past it.
     valid_indices = search_indices[gps_valid]
     valid_times = times[valid_indices]
-    anchor_idx = valid_indices[int(np.argmin(np.abs(valid_times - official_time_sec)))]
+    if expected_time_sec is not None:
+        anchor_idx = valid_indices[
+            int(np.argmin(np.abs(valid_times - expected_time_sec)))
+        ]
+    else:
+        anchor_idx = valid_indices[int(np.argmax(valid_times))]
     same_pass = np.abs(valid_times - times[anchor_idx]) <= 60.0
     pass_indices = valid_indices[same_pass]
     pass_gps = haversine(
@@ -181,6 +186,39 @@ def compute_ttt_time_offset(
     else:
         telem_finish = times[bi]
 
+    return float(telem_finish)
+
+
+def compute_ttt_time_offset(
+    times: np.ndarray,
+    distances_m: np.ndarray,
+    lats: np.ndarray,
+    lngs: np.ndarray,
+    finish_lat: float,
+    finish_lng: float,
+    finish_distance_m: float,
+    official_time_sec: float,
+    search_radius_m: float = 500,
+    gps_sanity_m: float = 50,
+) -> Optional[float]:
+    """Compute a finish-anchored time offset via GPS proximity to the finish.
+
+    Finds the exact moment the rider crosses the finish, then returns
+    ``telem_finish - official_time_sec``.  Subtract the returned offset from
+    the rider's time array to place their finish crossing at
+    ``official_time_sec``.
+
+    Returns ``None`` if the finish crossing cannot be determined.
+    """
+    telem_finish = compute_finish_crossing_time(
+        times, distances_m, lats, lngs,
+        finish_lat, finish_lng, finish_distance_m,
+        expected_time_sec=official_time_sec,
+        search_radius_m=search_radius_m,
+        gps_sanity_m=gps_sanity_m,
+    )
+    if telem_finish is None:
+        return None
     return float(telem_finish - official_time_sec)
 
 
@@ -463,6 +501,92 @@ def calibrate_game_route(
         route_altitude=profile.route_altitude * altitude_scale + altitude_offset,
         route_latlng=transform_latlng(profile.route_x, profile.route_z),
         horizontal_p95_m=horizontal_p95_m,
+    )
+
+
+def load_world_calibration(map_id: int) -> Optional[tuple]:
+    """Load a world's local-x/z -> GPS affine transform (built for the surface map).
+
+    Returns (coef, p95_m) where latlng = [x, z, 1] @ coef, or None if the world
+    has no calibration.
+    """
+    cal_path = (Path(__file__).parent.parent
+                / 'zwift_surfaces' / 'world_gps_calibration.json')
+    if not cal_path.exists():
+        return None
+    try:
+        with open(cal_path, encoding='utf-8') as f:
+            calibrations = json.load(f)
+        entry = calibrations.get(str(int(map_id)))
+        if not entry:
+            return None
+        coef = np.asarray(entry['coef'], dtype=float)
+        if coef.shape != (3, 2):
+            return None
+        return coef, float(entry.get('p95_m', float('nan')))
+    except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        logger.warning("Could not load world calibration: %s", exc)
+        return None
+
+
+def calibrate_game_route_from_world(
+    profile: GameRouteProfile,
+    coef: np.ndarray,
+    p95_m: float,
+    ref_distance_m: Optional[np.ndarray] = None,
+    ref_altitude_m: Optional[np.ndarray] = None,
+) -> Optional[CalibratedGameRoute]:
+    """Project a WAD route onto GPS using the shared world calibration.
+
+    Unlike ``calibrate_game_route`` (which fits each route to its own ZwiftMap
+    GPS trace), this reuses the world-wide affine fit built for the surface map,
+    so routes with no Strava/ZwiftMap segment can still be aligned by GPS.
+
+    WAD altitude uses a different vertical datum than Zwift's per-ride telemetry
+    (a large constant offset), so when a reference rider's distance/altitude is
+    supplied the WAD elevation is shifted onto the telemetry datum.
+    """
+    if len(profile.route_distance) < 3 or len(profile.route_x) != len(profile.route_distance):
+        return None
+
+    def transform_latlng(x: np.ndarray, z: np.ndarray) -> np.ndarray:
+        if len(x) == 0:
+            return np.empty((0, 2), dtype=float)
+        return np.column_stack([x, z, np.ones(len(x))]) @ coef
+
+    altitude_offset = 0.0
+    if (ref_distance_m is not None and ref_altitude_m is not None
+            and len(ref_distance_m) >= 2):
+        full_alt = np.concatenate([profile.leadin_altitude, profile.route_altitude])
+        full_dist = np.concatenate([
+            profile.leadin_distance,
+            profile.leadin_distance_m + profile.route_distance,
+        ])
+        # Match on absolute distance and ignore any post-finish cool-down
+        # samples, which ride off-route and would bias the datum shift.
+        in_route = (
+            (ref_distance_m >= full_dist.min())
+            & (ref_distance_m <= full_dist.max())
+        )
+        if in_route.sum() >= 2:
+            wad_at_ref = np.interp(
+                ref_distance_m[in_route], full_dist, full_alt
+            )
+            altitude_offset = float(
+                np.median(ref_altitude_m[in_route] - wad_at_ref)
+            )
+
+    return CalibratedGameRoute(
+        route_name=profile.route_name,
+        leadin_distance_m=profile.leadin_distance_m,
+        lap_distance_m=profile.distance_m,
+        leadin_distance=profile.leadin_distance,
+        leadin_altitude=profile.leadin_altitude + altitude_offset,
+        leadin_latlng=transform_latlng(profile.leadin_x, profile.leadin_z),
+        route_distance=profile.route_distance,
+        route_altitude=profile.route_altitude + altitude_offset,
+        route_latlng=transform_latlng(profile.route_x, profile.route_z),
+        horizontal_p95_m=p95_m,
     )
 
 
@@ -791,6 +915,81 @@ def build_game_elevation_profile(
         'distance_km': np.concatenate(distance_parts) / 1000.0,
         'altitude_m': np.concatenate(altitude_parts),
     })
+
+
+def align_profile_distance_to_riders(
+    elevation_profile: pd.DataFrame,
+    riders: List[Dict],
+    max_shift_m: float = 400.0,
+) -> pd.DataFrame:
+    """Shift the elevation profile's distance axis onto the riders' axis.
+
+    ``align_riders_to_game_route`` rebases each rider's odometer to zero at
+    their first recorded sample. Riders typically begin recording ~100 m into
+    the lead-in (already moving), while ``build_game_elevation_profile`` starts
+    at the true lead-in origin, so the WAD profile sits systematically ahead of
+    every rider by that same amount. Using the reference rider's measured
+    ``altitude_m`` vs ``distance_km``, we find the distance shift that best
+    lines the riders up with the profile and apply it to the profile axis.
+    """
+    if elevation_profile is None or elevation_profile.empty:
+        return elevation_profile
+    if 'altitude_m' not in elevation_profile.columns:
+        return elevation_profile
+
+    # Pick the rider with the most telemetry as the reference.
+    ref = None
+    ref_len = 0
+    for rider in riders:
+        df = rider.get('data')
+        if df is None or 'altitude_m' not in df.columns:
+            continue
+        if len(df) > ref_len:
+            ref_len = len(df)
+            ref = df
+    if ref is None or ref_len < 10:
+        return elevation_profile
+
+    prof_dist = elevation_profile['distance_km'].to_numpy(dtype=float)
+    prof_alt = elevation_profile['altitude_m'].to_numpy(dtype=float)
+    ref_dist = ref['distance_km'].to_numpy(dtype=float)
+    ref_alt = ref['altitude_m'].to_numpy(dtype=float)
+
+    # Restrict to samples that fall within the profile's distance span.
+    in_route = (ref_dist >= prof_dist.min()) & (ref_dist <= prof_dist.max())
+    if in_route.sum() < 10:
+        return elevation_profile
+    ref_dist = ref_dist[in_route]
+    ref_alt = ref_alt[in_route]
+
+    def _residual_std(shift_km: float) -> float:
+        prof_at_ref = np.interp(ref_dist + shift_km, prof_dist, prof_alt)
+        return float(np.std(ref_alt - prof_at_ref))
+
+    base_std = _residual_std(0.0)
+    if base_std < 0.5:
+        # Route is essentially flat here — a shift is ill-determined and
+        # would not change the display meaningfully.
+        return elevation_profile
+
+    shifts_km = np.arange(-max_shift_m, max_shift_m + 1.0, 5.0) / 1000.0
+    stds = np.array([_residual_std(s) for s in shifts_km])
+    best_idx = int(np.argmin(stds))
+    best_shift_km = float(shifts_km[best_idx])
+    best_std = float(stds[best_idx])
+
+    # Only apply if the shift yields a clear, meaningful improvement.
+    if best_std < 0.8 * base_std and abs(best_shift_km) > 1e-6:
+        adjusted = elevation_profile.copy()
+        adjusted['distance_km'] = prof_dist - best_shift_km
+        logger.info(
+            "Aligned elevation profile to riders: shift %.0f m "
+            "(residual std %.2f m -> %.2f m)",
+            best_shift_km * 1000.0, base_std, best_std,
+        )
+        return adjusted
+
+    return elevation_profile
 
 
 def align_riders_to_route(riders: List[Dict], route: RouteData, 
@@ -1923,9 +2122,59 @@ def clean_race_data(
                 # Fallback to route total if metadata unavailable
                 finish_line = route_data.total_distance_m / 1000.0
             logger.info("  Finish line set to: %.3f km", finish_line)
-    
+
+    # No ZwiftMap/Strava route, but the game (WAD) route may still exist. Project
+    # its geometry onto GPS with the shared world calibration (the same affine
+    # fit used by the surface map) so we get full GPS alignment and late-joiner
+    # handling without needing a per-route Strava segment.
+    if route_data is None and route_id is not None:
+        game_profile = load_game_route_profile(
+            route_id=route_id,
+            route_name=route_name,
+        )
+        if game_profile is not None:
+            world_cal = load_world_calibration(game_profile.map_id)
+            if world_cal is not None:
+                coef, cal_p95_m = world_cal
+                alt_ref = max(riders, key=lambda r: len(r['data']))['data']
+                ref_dist_m = ref_alt_m = None
+                if 'altitude_m' in alt_ref.columns:
+                    ref_dist_m = alt_ref['distance_km'].to_numpy(dtype=float) * 1000.0
+                    ref_alt_m = alt_ref['altitude_m'].to_numpy(dtype=float)
+                calibrated_game_route = calibrate_game_route_from_world(
+                    game_profile, coef, cal_p95_m,
+                    ref_distance_m=ref_dist_m, ref_altitude_m=ref_alt_m,
+                )
+        if calibrated_game_route is not None:
+            logger.info(
+                "Using world-calibrated WAD geometry for alignment: %s "
+                "(lead-in %.2f km, world GPS p95 %.1fm)",
+                calibrated_game_route.route_name,
+                calibrated_game_route.leadin_distance_m / 1000,
+                calibrated_game_route.horizontal_p95_m,
+            )
+            riders, loop_start_offset = align_riders_to_game_route(
+                riders,
+                calibrated_game_route,
+                race_start_time=race_start_time,
+                detect_late_joiners=not is_ttt,
+            )
+            finish_line = determine_finish_line(riders, data_path)
+            if not segment_distance_cm:
+                inferred_finish_m = infer_loop_finish_distance(
+                    riders, calibrated_game_route
+                )
+                if inferred_finish_m is not None:
+                    finish_line = inferred_finish_m / 1000.0
+            if not finish_line:
+                finish_line = (
+                    calibrated_game_route.leadin_distance_m
+                    + calibrated_game_route.lap_distance_m
+                ) / 1000.0
+            logger.info("  Finish line set to: %.3f km", finish_line)
+
     # Fallback to landmark-based alignment if no route data
-    if route_data is None:
+    if route_data is None and calibrated_game_route is None:
         logger.info("No route data available, using landmark-based alignment")
         ref_rider = max(riders, key=lambda r: len(r['data']))
         landmarks = find_course_landmarks(ref_rider['data'])
@@ -1944,36 +2193,53 @@ def clean_race_data(
         df = rider['data']
 
         finish_time = None
-        # Telemetry time begins when a rider crosses their start line, which
-        # can be later than the race gun for rear pens and TTT starts. Align
-        # it to the official race clock using the final GPS crossing.
+        # Anchor each rider's finish-line crossing to their official Zwift
+        # result time (elapsed_ms from the race results), so on-screen finish
+        # gaps match the published results and late joiners are shifted onto
+        # their true race clock. The crossing is timed by GPS when route
+        # geometry is available, otherwise by the distance odometer, so this
+        # also works on the landmark path (routes with no ZwiftMap/WAD data).
         ttt_time_offset = None
-        if finish_line and route_data is not None:
+        if finish_line:
             elapsed_ms = rider.get('elapsed_ms')
-            if elapsed_ms is not None and 'lat' in df.columns and 'lng' in df.columns:
-                official_time_sec = elapsed_ms / 1000.0
-                finish_latlng = (
-                    calibrated_game_route.route_latlng[-1]
-                    if calibrated_game_route is not None
-                    else route_data.latlng[-1]
-                )
+            official_time_sec = elapsed_ms / 1000.0 if elapsed_ms is not None else None
+            if official_time_sec is not None:
+                times = df['time_sec'].values
+                dist_m = df['distance_km'].values * 1000.0
+                telem_finish = None
 
-                ttt_time_offset = compute_ttt_time_offset(
-                    times=df['time_sec'].values,
-                    distances_m=df['distance_km'].values * 1000.0,
-                    lats=df['lat'].values,
-                    lngs=df['lng'].values,
-                    finish_lat=finish_latlng[0],
-                    finish_lng=finish_latlng[1],
-                    finish_distance_m=finish_line * 1000.0,
-                    official_time_sec=official_time_sec,
-                )
+                if 'lat' in df.columns and 'lng' in df.columns and (
+                        calibrated_game_route is not None or route_data is not None):
+                    finish_latlng = (
+                        calibrated_game_route.route_latlng[-1]
+                        if calibrated_game_route is not None
+                        else route_data.latlng[-1]
+                    )
+                    telem_finish = compute_finish_crossing_time(
+                        times=times,
+                        distances_m=dist_m,
+                        lats=df['lat'].values,
+                        lngs=df['lng'].values,
+                        finish_lat=finish_latlng[0],
+                        finish_lng=finish_latlng[1],
+                        finish_distance_m=finish_line * 1000.0,
+                        expected_time_sec=official_time_sec,
+                    )
 
-                if ttt_time_offset is not None:
+                if telem_finish is None:
+                    # Distance-based crossing (landmark path or missing GPS):
+                    # pick the crossing whose time is closest to the result.
+                    crossed = np.where(dist_m >= finish_line * 1000.0 - 30.0)[0]
+                    if len(crossed) > 0:
+                        cross_times = times[crossed]
+                        telem_finish = float(cross_times[
+                            int(np.argmin(np.abs(cross_times - official_time_sec)))
+                        ])
+
+                if telem_finish is not None:
+                    ttt_time_offset = telem_finish - official_time_sec
                     logger.info("  Rider %s (%s): replay clock offset=%.2fs",
-                                rider['rank'], rider['name'],
-                                ttt_time_offset)
-
+                                rider['rank'], rider['name'], ttt_time_offset)
                     df['time_sec'] = df['time_sec'] - ttt_time_offset
                     finish_time = official_time_sec
                     df = resample_to_integer_seconds(df)
@@ -2057,6 +2323,10 @@ def clean_race_data(
         )
         elevation_profile = build_game_elevation_profile(
             calibrated_game_route, profile_distance_m
+        )
+        elevation_profile = align_profile_distance_to_riders(
+            elevation_profile,
+            [{'data': r.data} for r in cleaned_riders if len(r.data) > 0],
         )
         logger.info(
             "Using full game elevation profile: %.2f km (%d points)",
