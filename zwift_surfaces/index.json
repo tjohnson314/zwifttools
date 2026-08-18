@@ -12,9 +12,9 @@
   "mapID": 1,
   "world": "world1",
   "file": "world_1.json",
-  "segments": 277,
+  "segments": 276,
   "surfaces": {
-   "Tarmac": 175,
+   "Tarmac": 174,
    "Cobbles": 10,
    "Wood": 33,
    "Dirt": 32,
@@ -96,9 +96,9 @@
   "mapID": 9,
   "world": "world9",
   "file": "world_9.json",
-  "segments": 279,
+  "segments": 280,
   "surfaces": {
-   "Tarmac": 205,
+   "Tarmac": 206,
    "Wood": 37,
    "Dirt": 9,
    "Sand": 28

@@ -137,6 +137,68 @@ def read_wad_entries(path: str, keep_substrings: tuple[str, ...] | None = None) 
 # Route XML parsing
 # --------------------------------------------------------------------------- #
 UNITS_PER_METRE = 100.0  # calibrated: game world units are centimetres
+UNSET_STYLE = 31  # 0x1F sentinel in <defaultStyle> -> NORMAL/tarmac
+
+_STYLE_SURFACE_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "zwift_surfaces", "style_surface_map.json")
+
+
+def _load_style_surface() -> dict:
+    """Authoritative roadstyle NAME -> surface category map (e.g. SNOW -> Tarmac)."""
+    try:
+        with open(_STYLE_SURFACE_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except OSError:
+        return {}
+
+
+def parse_roadstyles(data: bytes) -> list[str]:
+    """roadstyle.xml segment names in document order (index == style id)."""
+    txt = data.decode("utf-8", "replace")
+    return re.findall(r'<segment\s+[^>]*\bstyle="([^"]+)"', txt)
+
+
+def parse_roads(road_xml: str) -> dict:
+    """road_id -> (base_style_id, [(t0, t1, style_id), ...]) from road.xml."""
+    roads: dict[int, tuple[int, list]] = {}
+    for m in re.finditer(r"<road>(.*?)</road>", road_xml, re.S):
+        block = m.group(1)
+        idm = re.search(r"<id>(\d+)</id>", block)
+        if not idm:
+            continue
+        dm = re.search(r"<defaultStyle>(\d+)</defaultStyle>", block)
+        base = int(dm.group(1)) if dm else UNSET_STYLE
+        markers = []
+        for em in re.finditer(r'<ent\b[^>]*type="ENTITY_TYPE_ROADMARKER"[^>]*>', block):
+            tag = em.group(0)
+            st = re.search(r'm_style="(\d+)"', tag)
+            t1 = re.search(r'm_roadTime1="([-\d.]+)"', tag)
+            t2 = re.search(r'm_roadTime2="([-\d.]+)"', tag)
+            if st and t1 and t2:
+                a, b = float(t1.group(1)), float(t2.group(1))
+                if b < a:
+                    a, b = b, a
+                markers.append((a, b, int(st.group(1))))
+        roads[int(idm.group(1))] = (base, markers)
+    return roads
+
+
+def _resolve_style_name(rid: int, t: float, roads: dict, styles: list[str]) -> str:
+    """Authoritative roadstyle NAME for a checkpoint via road-id + time join.
+
+    Unambiguous even where roads run parallel (unlike spatial nearest-vertex),
+    because each checkpoint carries the exact road id and normalised position it
+    lies on.
+    """
+    base, markers = roads.get(rid, (UNSET_STYLE, []))
+    style = base
+    for a, b, s in markers:
+        if a <= t <= b:
+            style = s
+    if style == UNSET_STYLE or not (0 <= style < len(styles)):
+        style = 0
+    return styles[style] if 0 <= style < len(styles) else "NORMAL"
 
 
 def load_multiroot(data: bytes) -> ET.Element:
@@ -158,6 +220,30 @@ def _points(el: ET.Element | None) -> list[tuple[float, float, float]]:
     return pts
 
 
+def _leg_points(el: ET.Element | None):
+    """Aligned geometry ``[(x, y, z)]`` and per-entry ``(road_id, time)``."""
+    pts: list[tuple[float, float, float]] = []
+    rts: list[tuple[int, float]] = []
+    if el is None:
+        return pts, rts
+    for e in el.findall("entry"):
+        try:
+            x, y, z = float(e.get("x")), float(e.get("y")), float(e.get("z"))
+        except (TypeError, ValueError):
+            continue
+        pts.append((x, y, z))
+        try:
+            rid = int(e.get("road"))
+        except (TypeError, ValueError):
+            rid = -1
+        try:
+            tt = float(e.get("time"))
+        except (TypeError, ValueError):
+            tt = 0.0
+        rts.append((rid, tt))
+    return pts, rts
+
+
 def _cumulative_planar(pts: list[tuple[float, float, float]]) -> list[float]:
     """Cumulative horizontal distance (game units) along the polyline."""
     cum = [0.0]
@@ -168,21 +254,30 @@ def _cumulative_planar(pts: list[tuple[float, float, float]]) -> list[float]:
     return cum
 
 
-def _resample(dist_m: list[float], pts: list[tuple[float, float, float]], n: int
-              ) -> dict[str, list[float]]:
-    """Uniformly resample distance and local-world geometry to at most ``n`` points."""
+def _resample(dist_m: list[float], pts: list[tuple[float, float, float]], n: int,
+              surfaces: list[str] | None = None) -> dict[str, list]:
+    """Uniformly resample distance and local-world geometry to at most ``n`` points.
+
+    ``surfaces`` (one label per source point) is resampled as a step function:
+    each output point takes the surface of the nearer bracketing source point, so
+    style boundaries are preserved rather than blended.
+    """
     x_m = [p[0] / UNITS_PER_METRE for p in pts]
     alt_m = [p[1] / UNITS_PER_METRE for p in pts]
     z_m = [p[2] / UNITS_PER_METRE for p in pts]
     if len(dist_m) <= n or len(dist_m) < 2:
-        return {
+        out: dict[str, list] = {
             "d": [round(d, 2) for d in dist_m],
             "alt": [round(a, 3) for a in alt_m],
             "x": [round(x, 3) for x in x_m],
             "z": [round(z, 3) for z in z_m],
         }
+        if surfaces is not None:
+            out["surface"] = list(surfaces)
+        return out
     total = dist_m[-1]
     out_d, out_a, out_x, out_z = [], [], [], []
+    out_s: list[str] = []
     j = 0
     for k in range(n):
         target = total * k / (n - 1)
@@ -197,11 +292,16 @@ def _resample(dist_m: list[float], pts: list[tuple[float, float, float]], n: int
         out_a.append(round(alt, 3))
         out_x.append(round(x, 3))
         out_z.append(round(z, 3))
-    return {"d": out_d, "alt": out_a, "x": out_x, "z": out_z}
+        if surfaces is not None:
+            out_s.append(surfaces[j + 1] if frac >= 0.5 else surfaces[j])
+    res: dict[str, list] = {"d": out_d, "alt": out_a, "x": out_x, "z": out_z}
+    if surfaces is not None:
+        res["surface"] = out_s
+    return res
 
 
 def build_profile(pts: list[tuple[float, float, float]], header_distance_m: float,
-                  max_points: int) -> dict | None:
+                  max_points: int, surfaces: list[str] | None = None) -> dict | None:
     """Convert a checkpoint polyline into a metre-based route geometry profile."""
     if len(pts) < 2:
         return None
@@ -216,7 +316,7 @@ def build_profile(pts: list[tuple[float, float, float]], header_distance_m: floa
     else:
         scale = 1.0 / UNITS_PER_METRE
     dist_m = [u * scale for u in cum]
-    return _resample(dist_m, pts, max_points)
+    return _resample(dist_m, pts, max_points, surfaces)
 
 
 def _f(el: ET.Element, attr: str, default: float = 0.0) -> float:
@@ -233,20 +333,31 @@ def _i(el: ET.Element, attr: str, default: int = 0) -> int:
         return default
 
 
-def parse_route(data: bytes, map_id: int, max_points: int) -> dict | None:
+def parse_route(data: bytes, map_id: int, max_points: int,
+                roads: dict | None = None, styles: list[str] | None = None,
+                surface_map: dict | None = None) -> dict | None:
     root = load_multiroot(data)
     r = root.find("route")
     if r is None:
         return None
     name = (r.get("name") or "").strip()
-    leadin_pts = _points(root.find("leadinhighrescheckpoint"))
-    main_pts = _points(root.find("highrescheckpoint"))
+    leadin_pts, leadin_rt = _leg_points(root.find("leadinhighrescheckpoint"))
+    main_pts, main_rt = _leg_points(root.find("highrescheckpoint"))
 
     distance_m = _f(r, "distanceInMeters")
     leadin_distance_m = _f(r, "leadinDistanceInMeters")
 
-    route_profile = build_profile(main_pts, distance_m, max_points)
-    leadin_profile = build_profile(leadin_pts, leadin_distance_m, max_points)
+    def _surfaces(rt: list[tuple[int, float]]) -> list[str] | None:
+        # Authoritative per-point surface via the road-id + time join. Robust to
+        # parallel roads (where spatial nearest-vertex snaps to the wrong road).
+        if not roads or not styles or surface_map is None:
+            return None
+        return [surface_map.get(_resolve_style_name(rid, t, roads, styles), "Unknown")
+                for rid, t in rt]
+
+    route_profile = build_profile(main_pts, distance_m, max_points, _surfaces(main_rt))
+    leadin_profile = build_profile(leadin_pts, leadin_distance_m, max_points,
+                                   _surfaces(leadin_rt))
 
     return {
         "name": name,
@@ -290,6 +401,7 @@ def main() -> int:
 
     os.makedirs(args.out, exist_ok=True)
     index: list[dict] = []
+    surface_map = _load_style_surface()
 
     world_names = sorted(
         (d for d in os.listdir(worlds_dir)
@@ -303,10 +415,20 @@ def main() -> int:
             continue
         map_id = int(re.sub(r"\D", "", world) or 0)
         try:
-            entries = read_wad_entries(wad, keep_substrings=("/routes/",))
+            entries = read_wad_entries(
+                wad, keep_substrings=("/routes/", "road.xml", "roadstyle.xml"))
         except Exception as exc:  # noqa: BLE001 - report and continue
             print(f"  {world}: FAILED to read wad ({exc})", file=sys.stderr)
             continue
+
+        # Authoritative surface data for this world's road network (road-id join).
+        road_bytes = next((v for k, v in entries.items()
+                           if k.lower().endswith("road.xml")
+                           and "roadstyle" not in k.lower()), None)
+        style_bytes = next((v for k, v in entries.items()
+                            if k.lower().endswith("roadstyle.xml")), None)
+        roads = parse_roads(road_bytes.decode("utf-8", "replace")) if road_bytes else {}
+        styles = parse_roadstyles(style_bytes) if style_bytes else []
 
         route_files = sorted(
             (nm for nm in entries if "/routes/" in nm and nm.endswith(".xml")),
@@ -318,7 +440,8 @@ def main() -> int:
         routes: list[dict] = []
         for nm in route_files:
             try:
-                route = parse_route(entries[nm], map_id, args.max_points)
+                route = parse_route(entries[nm], map_id, args.max_points,
+                                    roads, styles, surface_map)
             except Exception as exc:  # noqa: BLE001
                 print(f"  {world}/{nm}: parse error ({exc})", file=sys.stderr)
                 continue

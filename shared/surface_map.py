@@ -287,8 +287,15 @@ def _pack_leg(map_id: int, leg: dict | None) -> dict | None:
     if not xs:
         return None
 
-    surfaces = _match_surfaces(map_id, np.asarray(xs, dtype=float),
-                               np.asarray(zs, dtype=float))
+    # Prefer the authoritative per-point surface precomputed at extraction time
+    # (road-id + time join, robust to parallel roads). Fall back to spatial
+    # nearest-vertex matching for legacy route files without stored surfaces.
+    stored = leg.get("surface")
+    if stored is not None and len(stored) == len(xs):
+        surfaces = list(stored)
+    else:
+        surfaces = _match_surfaces(map_id, np.asarray(xs, dtype=float),
+                                   np.asarray(zs, dtype=float))
     X, Y = _projection(map_id)["project"](xs, zs)
     return {
         "d": [round(v, 1) for v in leg.get("d", [])],

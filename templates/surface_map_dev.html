@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Surface Map (Dev) - Zwift Tools</title>
+    <link rel="stylesheet" href="/static/css/surface_map.css?v=5">
+</head>
+<body>
+    <div class="header-bar">
+        <div>
+            <a href="/" class="back-link">← Back to Tools</a>
+            <h1><span class="header-icon">🛠️</span> Surface Map (Dev)</h1>
+            <p class="subtitle">Local-only road inspector. Pick a world to list every road in its XML, select a road to highlight it and view its raw XML, then click a node or marker to trace that segment on the map.</p>
+        </div>
+    </div>
+
+    <div id="status" class="status"></div>
+
+    <div class="layout">
+        <!-- Sidebar: world selector + road browser -->
+        <aside class="sidebar">
+            <div class="world-select-wrap">
+                <label for="world-select">World</label>
+                <select id="world-select"><option value="">Loading…</option></select>
+            </div>
+            <div class="sidebar-head">
+                <h2>Roads</h2>
+                <span id="road-count" class="route-count"></span>
+            </div>
+            <input id="road-search" type="search" placeholder="Search by id, name or surface…" autocomplete="off">
+            <button id="btn-view-filter" class="btn-sm view-filter" title="Only list roads visible in the current map view">In view only</button>
+            <ul id="road-list" class="route-list dev-road-list"></ul>
+        </aside>
+
+        <!-- Main map + XML inspector -->
+        <main class="main">
+            <div class="map-panel">
+                <div class="map-toolbar">
+                    <div id="legend" class="legend"></div>
+                    <div class="map-actions">
+                        <button id="btn-fit" class="btn-sm" title="Fit view">Reset view</button>
+                        <label class="toggle"><input type="checkbox" id="toggle-network" checked> Show all roads</label>
+                    </div>
+                </div>
+                <div class="canvas-wrap">
+                    <canvas id="map-canvas"></canvas>
+                    <div id="map-hint" class="map-hint">Select a world, then pick a road.</div>
+                </div>
+            </div>
+
+            <div id="road-detail" class="route-detail dev-road-detail" style="display:none;">
+                <div class="route-detail-head">
+                    <h2 id="rd-name">—</h2>
+                    <div id="rd-stats" class="rd-stats"></div>
+                </div>
+                <div class="xml-head">
+                    <span>road.xml</span>
+                    <span id="xml-hint" class="xml-hint">Click a ROADNODE (segment) or ROADMARKER line to highlight it.</span>
+                </div>
+                <pre id="road-xml" class="road-xml"></pre>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/js/surface_map_dev.js?v=4"></script>
+</body>
+</html>

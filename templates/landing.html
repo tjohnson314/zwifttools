@@ -141,6 +141,14 @@
             <p>Explore each world's road network coloured by surface type. Browse routes and inspect their elevation profile and surface breakdown.</p>
         </a>
 
+        {% if dev_tools %}
+        <a href="/surface-map-dev" class="tool-card">
+            <div class="tool-icon">&#x1F6E0;&#xFE0F;</div>
+            <h2>Surface Map (Dev)</h2>
+            <p>Local-only road inspector. Browse every road in a world's XML, highlight it on the map, view its raw XML, and select segments to trace them.</p>
+        </a>
+        {% endif %}
+
         <a href="/my-activities" class="tool-card">
             <div class="tool-icon">&#x1F5D3;&#xFE0F;</div>
             <h2>My Activities</h2>

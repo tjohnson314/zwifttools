@@ -266,6 +266,78 @@ select option {
 
 .elevation-chart { width: 100%; height: 300px; }
 
+/* Dev road inspector */
+.route-list li .swatch {
+    display: inline-block;
+    width: 10px; height: 10px; border-radius: 3px;
+    border: 1px solid rgba(0, 0, 0, 0.4);
+    margin: 0 4px 0 2px;
+    vertical-align: middle;
+}
+.route-list li .road-id {
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    font-size: 0.82rem;
+}
+.route-list li .muted { color: var(--muted); }
+.dev-road-list li { display: block; }
+
+.view-filter {
+    width: 100%;
+    margin: 8px 0 4px;
+    text-align: center;
+}
+.view-filter.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #0d1220;
+    font-weight: 600;
+}
+.view-filter.active:hover { color: #0d1220; }
+
+.dev-road-detail { min-height: 0; }
+.xml-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    margin: 4px 0 6px;
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+.xml-head span:first-child {
+    font-weight: 600;
+    color: var(--text);
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+.xml-hint { font-size: 0.76rem; }
+.road-xml {
+    margin: 0;
+    max-height: 420px;
+    overflow: auto;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 0.76rem;
+    line-height: 1.5;
+    white-space: pre;
+    tab-size: 2;
+}
+.road-xml .xml-line { display: block; border-radius: 3px; }
+.road-xml .xml-line.clickable { cursor: pointer; }
+.road-xml .xml-line.node-line.clickable:hover { background: rgba(46, 196, 255, 0.16); }
+.road-xml .xml-line.marker-line.clickable:hover { background: rgba(247, 147, 30, 0.16); }
+.road-xml .xml-line.selected {
+    background: rgba(46, 196, 255, 0.24);
+    outline: 1px solid rgba(46, 196, 255, 0.5);
+}
+.road-xml .xml-line.marker-line.selected {
+    background: rgba(247, 147, 30, 0.24);
+    outline-color: rgba(247, 147, 30, 0.6);
+}
+
 /* Responsive: stack columns on narrow viewports (must follow base rules). */
 @media (max-width: 900px) {
     .layout { grid-template-columns: 1fr; }

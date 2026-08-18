@@ -83,15 +83,78 @@ def _road_blocks(txt: str):
         yield m.group(1)
 
 
-def _nodes(block: str) -> list[tuple[float, float]]:
-    """ROADNODE positions as local-metre ``(x, z)`` pairs, in spline order."""
+_SPLINE_STEP_M = 2.0  # dense sampling step (m) for Bezier road-spline evaluation.
+
+_NODE_RE = re.compile(r'<ent\b[^>]*type="ENTITY_TYPE_ROADNODE"[^>]*/?>')
+
+
+def _vec_xz(tag: str, attr: str) -> tuple[float, float] | None:
+    """``attr="{x,y,z}"`` -> local-metre ``(x, z)``; ``None`` if absent."""
+    m = re.search(attr + r'="\{([-\d.]+),([-\d.]+),([-\d.]+)\}"', tag)
+    if not m:
+        return None
+    return (float(m.group(1)) / UNITS_PER_METRE,
+            float(m.group(3)) / UNITS_PER_METRE)
+
+
+def _nodes_full(block: str):
+    """ROADNODE ``(pos, tangentIn, tangentOut)`` in local metres, spline order.
+
+    ``m_tangentIn`` / ``m_tangentOut`` are cubic-Bezier control-point offsets
+    (per-node incoming/outgoing handles), not raw Hermite tangents. Missing or
+    absent handles default to zero (straight segment)."""
+    out = []
+    for m in _NODE_RE.finditer(block):
+        tag = m.group(0)
+        pos = _vec_xz(tag, "m_pos")
+        if pos is None:
+            continue
+        ti = _vec_xz(tag, "m_tangentIn") or (0.0, 0.0)
+        to = _vec_xz(tag, "m_tangentOut") or (0.0, 0.0)
+        out.append((pos, ti, to))
+    return out
+
+
+def _bezier(p0, p1, p2, p3, u: float) -> tuple[float, float]:
+    mu = 1.0 - u
+    a, b = mu * mu * mu, 3.0 * mu * mu * u
+    c, d = 3.0 * mu * u * u, u * u * u
+    return (a * p0[0] + b * p1[0] + c * p2[0] + d * p3[0],
+            a * p0[1] + b * p1[1] + c * p2[1] + d * p3[1])
+
+
+def _spline_points(nodes, looped: bool = False,
+                   step: float = _SPLINE_STEP_M) -> list[tuple[float, float]]:
+    """Dense ``(x, z)`` polyline tracing the cubic-Bezier road spline.
+
+    Each node pair ``A -> B`` is a Bezier with controls
+    ``P0=A.pos, P1=A.pos+A.tangentOut, P2=B.pos+B.tangentIn, P3=B.pos``. Segments
+    with zero handles collapse to a straight line (matching the raw chord). When
+    ``looped`` the closing ``lastNode -> firstNode`` segment is emitted too."""
+    if len(nodes) < 2:
+        return [n[0] for n in nodes]
+
+    def emit(i0: int, i1: int) -> None:
+        (a, _ai, ao) = nodes[i0]
+        (b, bi, _bo) = nodes[i1]
+        p0, p3 = a, b
+        p1 = (a[0] + ao[0], a[1] + ao[1])
+        p2 = (b[0] + bi[0], b[1] + bi[1])
+        clen = (math.hypot(p1[0] - p0[0], p1[1] - p0[1])
+                + math.hypot(p2[0] - p1[0], p2[1] - p1[1])
+                + math.hypot(p3[0] - p2[0], p3[1] - p2[1]))
+        n = max(1, int(math.ceil(clen / step)))
+        for k in range(n):
+            pts.append(_bezier(p0, p1, p2, p3, k / n))
+
     pts: list[tuple[float, float]] = []
-    for m in re.finditer(
-        r'<ent\b[^>]*type="ENTITY_TYPE_ROADNODE"[^>]*m_pos="\{([-\d.]+),([-\d.]+),([-\d.]+)\}"',
-        block,
-    ):
-        pts.append((float(m.group(1)) / UNITS_PER_METRE,
-                    float(m.group(3)) / UNITS_PER_METRE))
+    for i in range(len(nodes) - 1):
+        emit(i, i + 1)
+    if looped:
+        emit(len(nodes) - 1, 0)
+        pts.append(nodes[0][0])
+    else:
+        pts.append(nodes[-1][0])
     return pts
 
 
@@ -155,7 +218,11 @@ def _style_at(t: float, base: int, markers: list[tuple[float, float, int]]) -> i
 def resolve_road(block: str, spacing: float, styles: list[str]
                  ) -> list[dict]:
     """Return constant-surface segments for one ``<road>`` block."""
-    pts = _nodes(block)
+    nodes = _nodes_full(block)
+    if len(nodes) < 2:
+        return []
+    looped = re.search(r"<looped>\s*1\s*</looped>", block) is not None
+    pts = _spline_points(nodes, looped=looped)
     if len(pts) < 2:
         return []
     cum = _cumulative(pts)

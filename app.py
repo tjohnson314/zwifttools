@@ -242,7 +242,8 @@ def auth_status():
 def index():
     """Landing page with links to both tools."""
     logged_in = 'tokens' in session
-    return render_template('landing.html', logged_in=logged_in)
+    return render_template('landing.html', logged_in=logged_in,
+                           dev_tools=_surface_map_dev_available())
 
 
 @app.route('/bike-comparison')
@@ -306,6 +307,70 @@ def api_surface_map_route(map_id, name_hash):
         return jsonify({'error': f'No data for world {map_id}'}), 404
     except Exception as e:
         logger.exception("Error loading surface-map route %s/%s", map_id, name_hash)
+        return jsonify({'error': str(e)}), 500
+
+
+# --- Surface Map (developer view) -------------------------------------------
+# Reads road.xml straight from the local Zwift WAD files, so these routes are
+# only reachable on a dev machine with the game client installed.
+
+def _surface_map_dev_available():
+    try:
+        from shared import surface_map_dev
+        return surface_map_dev.is_available()
+    except Exception:
+        logger.exception("surface_map_dev availability check failed")
+        return False
+
+
+@app.route('/surface-map-dev')
+def surface_map_dev_page():
+    """Developer road/XML inspector (local only)."""
+    if not _surface_map_dev_available():
+        return redirect(url_for('surface_map'))
+    return render_template('surface_map_dev.html')
+
+
+@app.route('/api/surface_map_dev/worlds')
+def api_surface_map_dev_worlds():
+    if not _surface_map_dev_available():
+        return jsonify({'error': 'Not available'}), 404
+    try:
+        from shared import surface_map_dev
+        return jsonify({'worlds': surface_map_dev.list_dev_worlds()})
+    except Exception as e:
+        logger.exception("Error listing surface-map-dev worlds")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/surface_map_dev/world/<int:map_id>/roads')
+def api_surface_map_dev_roads(map_id):
+    if not _surface_map_dev_available():
+        return jsonify({'error': 'Not available'}), 404
+    try:
+        from shared import surface_map_dev
+        return jsonify(surface_map_dev.get_world_roads(map_id))
+    except FileNotFoundError:
+        return jsonify({'error': f'No data for world {map_id}'}), 404
+    except Exception as e:
+        logger.exception("Error loading surface-map-dev roads for world %s", map_id)
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/surface_map_dev/world/<int:map_id>/road/<int:road_id>')
+def api_surface_map_dev_road(map_id, road_id):
+    if not _surface_map_dev_available():
+        return jsonify({'error': 'Not available'}), 404
+    try:
+        from shared import surface_map_dev
+        data = surface_map_dev.get_road_detail(map_id, road_id)
+        if data is None:
+            return jsonify({'error': 'Road not found'}), 404
+        return jsonify(data)
+    except FileNotFoundError:
+        return jsonify({'error': f'No data for world {map_id}'}), 404
+    except Exception as e:
+        logger.exception("Error loading surface-map-dev road %s/%s", map_id, road_id)
         return jsonify({'error': str(e)}), 500
 
 

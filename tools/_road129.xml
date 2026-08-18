@@ -1,0 +1,106 @@
+<road>
+            <id>129</id>
+            <splineType>Bezier</splineType>
+            <min>-571347.81250000,13103.85058594,-304371.40625000</min>
+            <max>-495879.31250000,19837.39453125,-213440.40625000</max>
+            <textureSegmentLength>20</textureSegmentLength>
+            <looped>1</looped>
+            <oneWay>0</oneWay>
+            <roadName/>
+            <defaultStyle>4</defaultStyle>
+            <defaultStyleColor>4294902015</defaultStyleColor>
+            <isAvailable>1</isAvailable>
+            <allowedSport>3</allowedSport>
+            <snapToTesselation>0</snapToTesselation>
+            <newTerrainAlign>1</newTerrainAlign>
+            <riderBoundsRatio>0</riderBoundsRatio>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-523760.8125000000,15494.8867187500,-296390.1250000000}" m_bAggresiveBlur="1" m_tangentIn="{-2539.3125000000,-16.2636718750,2787.9375000000}" m_tangentOut="{3577.5383300781,22.9132499695,-3927.8161621094}" m_tangentInAuto="0"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-516442.0625000000,15496.9316406250,-301671.3437500000}" m_bAggresiveBlur="1" m_tangentIn="{-3204.6320800781,-0.0048094490,-70.4488143921}" m_tangentOut="{2602.8125000000,0.0039062500,57.2187500000}" m_tangentInAuto="0"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-511033.9062500000,15494.9169921875,-298649.8750000000}" m_bAggresiveBlur="1" m_tangentIn="{-1949,0.3349609375,-444.2500000000}" m_tangentOut="{1682.8297119141,-0.2892161012,383.5798339844}" m_tangentInAuto="0"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-504544.6250000000,15494.8867187500,-299486.5000000000}" m_bAggresiveBlur="1" m_tangentIn="{-2504.9062500000,0.0048828125,-1446.7500000000}" m_tangentOut="{2954.3669433594,-0.0057589458,1706.3433837891}" m_tangentInAuto="0"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-500798.1250000000,15494.8867187500,-290475.5312500000}" m_bAggresiveBlur="1" m_tangentIn="{303.1271972656,-0,-3354.7995605469}" m_tangentOut="{-335.7187500000,0,3715.5000000000}" m_tangentInAuto="0"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-511401.2500000000,15900,-282988.3437500000}" m_bAggresiveBlur="1" m_tangentIn="{560.9539794922,0,-4301.0537109375}" m_tangentOut="{-474.8005981445,0,3640.4819335938}"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-502638.5000000000,15494.8867187500,-276364.6562500000}" m_bAggresiveBlur="1" m_tangentIn="{-1868.4763183594,-0,-2335.8217773438}" m_tangentOut="{1934.0625000000,0,2417.8125000000}" m_tangentInAuto="0"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-501101.4062500000,15494,-271104.9687500000}" m_bAggresiveBlur="1" m_tangentIn="{-800.2389526367,0.1745171994,-1645.9969482422}" m_tangentOut="{584.6541137695,-0.1275021583,1202.5643310547}"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-498572.5000000000,15494,-268001.3750000000}" m_bAggresiveBlur="1" m_tangentIn="{-290.1346130371,0,-1305.2982177734}" m_tangentOut="{271.0265808105,0,1219.3321533203}" m_tangentInAuto="0"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-499613.1250000000,15494,-264409.2812500000}" m_bAggresiveBlur="1" m_tangentIn="{743.9859008789,0,-1003.3501586914}" m_tangentOut="{-1611.7065429688,0,2173.5710449219}" m_tangentInAuto="0"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-505422.8750000000,15494,-258762.8593750000}" m_bAggresiveBlur="1" m_tangentIn="{2191.0158691406,0,-1587.9095458984}" m_tangentOut="{-813.9464111328,0,589.8967895508}" m_tangentInAuto="0"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-508352.9375000000,15494,-258075.2187500000}" m_bAggresiveBlur="1" m_tangentIn="{968.0148315430,0,270.9879150391}" m_tangentOut="{-1522.5445556641,0,-426.2240295410}" m_tangentInAuto="0"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-512300.2500000000,15494,-260688.1250000000}" m_bAggresiveBlur="1" m_tangentIn="{1822.3437500000,0,311.1093750000}" m_tangentOut="{-2035.2283935547,-0,-347.4529113770}" m_tangentInAuto="0"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-518623.0312500000,15665.2773437500,-258803.3750000000}" m_bAggresiveBlur="1" m_tangentIn="{3265.8774414062,-22.4018840790,1585.7020263672}" m_tangentOut="{-3641.6562500000,24.9794921875,-1768.1562500000}" m_tangentInAuto="0"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-522935.4687500000,15906.8613281250,-268976.2812500000}" m_bAggresiveBlur="1" m_tangentIn="{3286.2187500000,-114.9482421875,272.8125000000}" m_tangentOut="{-5011.2548828125,175.2880554199,-416.0200805664}" m_tangentInAuto="0"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-533139.6875000000,16089.6328125000,-257680.2500000000}" m_bDecoupledFromTerrain="1" m_bAggresiveBlur="1" m_tangentIn="{-1090.0288085938,109.0036087036,-4965.2949218750}" m_tangentOut="{1157.4829101562,-115.7490615845,5272.5610351562}"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-518815.7500000000,15494.8867187500,-250210.1562500000}" m_bAggresiveBlur="1" m_tangentIn="{-3753.8911132812,172.4332580566,-3877.0646972656}" m_tangentOut="{1407.3859863281,-64.6476287842,1453.5655517578}"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-520192,15494.8867187500,-244307.7187500000}" m_bAggresiveBlur="1" m_tangentIn="{124.6884002686,0,-2020.4508056641}" m_tangentOut="{-74.2437973022,0,1203.0463867188}"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-519397.2500000000,15494.8867187500,-240787.5312500000}" m_bAggresiveBlur="1" m_tangentIn="{-790.9591674805,0,-909.5142822266}" m_tangentOut="{2170.4289550781,0,2495.7495117188}"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-511706.0625000000,15494.8867187500,-234549.8437500000}" m_bAggresiveBlur="1" m_tangentIn="{-3149.3171386719,0.0012157097,-1010.6081542969}" m_tangentOut="{2420.6154785156,-0.0009344140,776.7695922852}"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-504218.4375000000,15494.8808593750,-235916.6875000000}" m_bAggresiveBlur="1" m_tangentIn="{-2258.3120117188,0.0007113278,-1167.3800048828}" m_tangentOut="{2729.5969238281,-0.0008597740,1410.9992675781}"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-499304.5625000000,15494.8828125000,-228139.1875000000}" m_bAggresiveBlur="1" m_tangentIn="{-490.2041320801,-0.0008848961,-3033.3674316406}" m_tangentOut="{333.0447692871,0.0006011985,2060.8698730469}"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-502054.5000000000,15494.8847656250,-222526.3125000000}" m_bAggresiveBlur="1" m_tangentIn="{1341.0643310547,0,-1599.8909912109}" m_tangentOut="{-1601.2230224609,0,1910.2606201172}" m_tangentInAuto="0"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-507899.1562500000,15494.8808593750,-217885.8281250000}" m_tangentIn="{2173.4262695312,0,-1220.3394775391}" m_tangentOut="{-1641.6135253906,0,921.7362670898}" m_tangentInAuto="0"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-513284.4375000000,15494.8867187500,-216220.9062500000}" m_tangentIn="{1838.4737548828,0,405.5947875977}" m_tangentOut="{-2672.0021972656,0,-589.4835815430}" m_tangentInAuto="0"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-520207.4375000000,15482.3515625000,-220601.2187500000}" m_bAggresiveBlur="1" m_tangentIn="{1473.4323730469,3.9285721779,2305.6601562500}" m_tangentOut="{-1596.6837158203,-4.2571940422,-2498.5268554688}" m_tangentInAuto="0"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-521678.5000000000,15472.5058593750,-229356.1250000000}" m_bAggresiveBlur="1" m_tangentIn="{2159.6645507812,-57.8354644775,2030.8889160156}" m_tangentOut="{-3088.8146972656,82.7179489136,-2904.6357421875}"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-533734.6250000000,15844.6074218750,-233321.8125000000}" m_bAggresiveBlur="1" m_tangentIn="{3173.4038085938,-41.6302566528,2812.8823242188}" m_tangentOut="{-2508.5043945312,32.9077835083,-2223.5205078125}"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-536897.0625000000,15672.1503906250,-242845.7500000000}" m_bDecoupledFromTerrain="1" m_bAggresiveBlur="1" m_tangentIn="{1565.5031738281,34.4894599915,2964.0734863281}" m_tangentOut="{-526.2948608398,-11.5947532654,-996.4697265625}"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-539731.4375000000,15712.4921875000,-244675.9843750000}" m_tangentIn="{1065.8876953125,-26.1238727570,365.0660705566}" m_tangentOut="{-1037.7163085938,25.4334163666,-355.4174194336}"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-543004.1875000000,15821.8300781250,-244937.4375000000}" m_tangentIn="{1096.4598388672,-38.9446830750,9.1002979279}" m_tangentOut="{-1428.0290527344,50.7215461731,-11.8522272110}"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-547275,15980.4287109375,-244738.5937500000}" m_tangentIn="{1414.0516357422,-55.0830192566,-198.5047912598}" m_tangentOut="{-1380.0104980469,53.7569808960,193.7261047363}"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-551332.6875000000,16146.2587890625,-243768.2812500000}" m_tangentIn="{1128.9943847656,-56.0556106567,-816.7485351562}" m_tangentOut="{-1823.8735351562,90.5569992065,1319.4450683594}"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-555706.1875000000,16399.0449218750,-238639.2187500000}" m_tangentIn="{101.5594482422,-113.8430709839,-2247.7492675781}" m_tangentOut="{-127.7657928467,143.2190551758,2827.7568359375}"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-551906.8125000000,16789.8242187500,-231061.5468750000}" m_tangentIn="{-2618.3884277344,-171.1776275635,-1071.3461914062}" m_tangentOut="{2694.1064453125,176.1276855469,1102.3271484375}"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-543587.3750000000,17191.3144531250,-233680.6562500000}" m_tangentIn="{-1935.5837402344,-160.2289581299,2175.3620605469}" m_tangentOut="{1720.4587402344,142.4207611084,-1933.5874023438}"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-542721.5625000000,17550.1855468750,-241384.6562500000}" m_bStraight="1" m_tangentIn="{374.2500000000,-69.6953125000,2964.4375000000}" m_tangentOut="{-396.8630065918,73.9064559937,-3143.5551757812}" m_tangentInAuto="0"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-543180.6875000000,17556.0429687500,-243418.5000000000}" m_bDecoupledFromTerrain="1" m_tangentOut="{-240.3371887207,3.0661723614,-1064.6519775391}"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-543863.7500000000,17507.6406250000,-246613.7500000000}" m_bDecoupledFromTerrain="1" m_tangentIn="{238.0349426270,-0.0750372410,1065.1734619141}" m_tangentOut="{-279.3778991699,0.0880700350,-1250.1773681641}"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-544729.6250000000,17556.5312500000,-250349.7812500000}" m_tangentIn="{367.0708312988,37.3096466064,1226.7282714844}" m_tangentOut="{-1777.7447509766,-180.6927337646,-5941.1147460938}"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-550281.5625000000,16855.3242187500,-268061.6875000000}" m_bAggresiveBlur="1" m_tangentIn="{3871.9448242188,313.1093139648,4837.3413085938}" m_tangentOut="{-1983.0024414062,-160.3577880859,-2477.4267578125}"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-559725.6250000000,16343.8623046875,-269084.7500000000}" m_bAggresiveBlur="1" m_tangentIn="{3171,170.4248046875,-232.6875000000}" m_tangentOut="{-2321.0175781250,-124.7426605225,170.3159179688}" m_tangentInAuto="0"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-566690.8750000000,15973.4091796875,-269560.4375000000}" m_bAggresiveBlur="1" m_tangentIn="{2046.4451904297,143.7256469727,1115.3760986328}" m_tangentOut="{-1400.8205566406,-98.3822250366,-763.4906005859}"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-568620.1875000000,15719.1806640625,-273932.5625000000}" m_tangentIn="{291.7352294922,77.3081970215,1569.6527099609}" m_tangentOut="{-294.7704162598,-78.1125030518,-1585.9832763672}"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-568400.5000000000,15520.3681640625,-278758.9062500000}" m_tangentIn="{-95.0836791992,29.1866436005,1611.9678955078}" m_tangentOut="{121.3042831421,-37.2352561951,-2056.4897460938}"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-567972.5000000000,15520.3681640625,-284912.9062500000}" m_tangentIn="{-465.5741882324,200.9388275146,5127.3408203125}" m_tangentOut="{195.9932250977,-84.5894165039,-2158.4616699219}" m_tangentInAuto="0"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-564996.9375000000,15520.3681640625,-289300.1875000000}" m_tangentIn="{-2006.0583496094,-5.1456575394,223.2565002441}" m_tangentOut="{2006,5.1455078125,-223.2500000000}" m_tangentInAuto="0"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-559087.9375000000,15522.4003906250,-287145.9375000000}" m_tangentIn="{-1260.4375000000,-30.4345703125,-2344.4062500000}" m_tangentOut="{1260.4169921875,30.4340763092,2344.3681640625}" m_tangentInAuto="0"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-553082.3125000000,15702.3134765625,-284641.4062500000}" m_bAggresiveBlur="1" m_tangentIn="{-2458.2807617188,0.1083246619,-89.4208145142}" m_tangentOut="{6835.3066406250,-0.3011992574,248.6366119385}" m_tangentInAuto="0"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-536399.2500000000,15494.8867187500,-291269}" m_bAggresiveBlur="1" m_tangentIn="{-7019.2060546875,67.8847427368,721.1963500977}" m_tangentOut="{3067.9375000000,-29.6708984375,-315.2187500000}" m_tangentInAuto="0"/>
+            <ent type="ENTITY_TYPE_ROADNODE" m_pos="{-529035.9375000000,15365.3437500000,-289109.9375000000}" m_bAggresiveBlur="1" m_tangentIn="{-4038.1562500000,-0,1379.8154296875}" m_tangentOut="{3527,0,-1205.1562500000}" m_tangentInAuto="0"/>
+            <ent type="ENTITY_TYPE_INTERSECTIONMARKER" m_roadTime1="0.4044351059" m_roadTime2="0.4421578206" m_roadId="129" m_markerId="1290000">
+                <forward>
+                    <option>141,263,UI/WhiteOrangeTheme/HUD/Route_Navigation/Route_Select_Hidden_Reefs.tga,false,0.442157820599999973,0,HIDDEN REEFS,false,-1</option>
+                    <option>129,265,UI/WhiteOrangeTheme/HUD/Route_Navigation/Route_Select_Mech_Isle.tga,true,1000000,0,MECH ISLE SOUTH,false,-1</option>
+                </forward>
+                <reverse/>
+            </ent>
+            <ent type="ENTITY_TYPE_INTERSECTIONMARKER" m_roadTime1="0.4838102305" m_roadTime2="0.5085800406" m_roadId="129" m_markerId="1290001">
+                <forward/>
+                <reverse>
+                    <option>129,265,UI/WhiteOrangeTheme/HUD/Route_Navigation/Route_Select_Mech_Isle.tga,false,1000000,0,MECH ISLE NORTH,false,-1</option>
+                    <option>142,262,UI/WhiteOrangeTheme/HUD/Route_Navigation/Route_Select_Hidden_Reefs.tga,false,0.483810230499999994,0,HIDDEN REEFS,false,-1</option>
+                </reverse>
+            </ent>
+            <ent type="ENTITY_TYPE_ROADMARKER" m_roadTime1="0.5430960977" m_roadTime2="0.5801157068" m_applyWidth="0" m_isInvisible="1" m_style="5" m_markerId="1290000"/>
+            <ent type="ENTITY_TYPE_INTERSECTIONMARKER" m_roadTime1="0.8213099113" m_roadTime2="0.8773308132" m_roadId="129" m_markerId="1290002">
+                <forward>
+                    <option>154,265,UI/WhiteOrangeTheme/HUD/Route_Navigation/Route_Select_Festival_Harbor.tga,true,0.877330813199999948,0,FESTIVAL HARBOR,false,-1</option>
+                    <option>129,262,UI/WhiteOrangeTheme/HUD/Route_Navigation/Route_Select_Mech_Isle.tga,true,1000000,0,MECH ISLE NORTH,false,-1</option>
+                </forward>
+                <reverse/>
+            </ent>
+            <ent type="ENTITY_TYPE_INTERSECTIONMARKER" m_roadTime1="0.9124148959" m_roadTime2="0.9445471680" m_roadId="129" m_markerId="1290003">
+                <forward/>
+                <reverse>
+                    <option>129,263,UI/WhiteOrangeTheme/HUD/Route_Navigation/Route_Select_Mech_Isle.tga,false,1000000,0,MECH ISLE SOUTH,false,-1</option>
+                    <option>144,262,UI/WhiteOrangeTheme/HUD/Route_Navigation/Route_Select_Festival_Harbor.tga,true,0.912414895900000023,0,FESTIVAL HARBOR,false,-1</option>
+                </reverse>
+            </ent>
+            <ent type="ENTITY_TYPE_ROADMARKER" m_roadTime1="0.2919990271" m_roadTime2="0.3194640592" m_applyWidth="0" m_isInvisible="1" m_style="5" m_markerId="1290003"/>
+            <ent type="ENTITY_TYPE_ROADMARKER" m_roadTime1="0.1735453609" m_roadTime2="0.1958914977" m_applyWidth="0" m_isInvisible="1" m_markerId="1290004"/>
+            <ent type="ENTITY_TYPE_ROADMARKER" m_roadTime2="0.2918496621" m_applyWidth="0" m_markerId="1290001"/>
+            <ent type="ENTITY_TYPE_ROADMARKER" m_roadTime1="0.8787248590" m_roadTime2="1.0000000000" m_applyWidth="0" m_markerId="1290002"/>
+            <ent type="ENTITY_TYPE_ROADMARKER" m_roadTime1="0.7080215937" m_roadTime2="0.7545882620" m_applyWidth="0" m_isInvisible="1" m_style="5" m_markerId="1290005"/>
+            <ent type="ENTITY_TYPE_ROADMARKER" m_roadTime1="0.4338383115" m_roadTime2="0.4898291987" m_applyWidth="0" m_isInvisible="1" m_style="10" m_markerId="1290006"/>
+            <ent type="ENTITY_TYPE_ROADMARKER" m_roadTime1="0.8783205966" m_roadTime2="0.9212735393" m_applyWidth="0" m_isInvisible="1" m_markerId="1290007"/>
+            <ent type="ENTITY_TYPE_ROADMARKER" m_roadTime1="0.4884211342" m_roadTime2="0.5426113322" m_applyWidth="0" m_textureUScale="1.1499999762" m_style="2" m_markerId="1290008"/>
+            <ent type="ENTITY_TYPE_ROADMARKER" m_roadTime1="0.3971551346" m_roadTime2="0.4346149132" m_applyWidth="0" m_textureUScale="1.1499999762" m_style="2" m_markerId="1290009"/>
+        </road>
