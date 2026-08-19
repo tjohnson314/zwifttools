@@ -13,7 +13,8 @@
 // bundled data. Sauce's roads remain a FALLBACK for courses we don't ship data
 // for (portal roads, worlds without extractable road XML, etc.).
 //
-// ROAD_STYLES is keyed by courseId (== our mapID for the shipped worlds):
+// ROAD_STYLES is keyed by Sauce courseId (the live `state.courseId`, which
+// differs from the Zwift worldId, e.g. Makuri worldId 9 -> courseId 13):
 //   { courseId: { roadId: { d: defaultStyleName, s: [[start, end, styleName], ...] } } }
 // where start/end are normalised road-percent [0, 1] and the last covering
 // sector wins over the default. The rider state carries `roadId` and the RAW

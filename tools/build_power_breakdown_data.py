@@ -91,9 +91,27 @@ def build_style_map():
 _ROAD_ID_RE = re.compile(r"<id>(\d+)</id>")
 _DEFAULT_STYLE_RE = re.compile(r"<defaultStyle>(\d+)</defaultStyle>")
 
+# Zwift worldId (our world-folder / mapID) -> Sauce courseId (== live state.courseId).
+# Source of truth: SauceLLC/sauce4zwift pages/src/common.mjs worldCourseDescs.
+_WORLD_TO_COURSE = {
+    1: 6,    # Watopia
+    2: 2,    # Richmond
+    3: 7,    # London
+    4: 8,    # New York
+    5: 9,    # Innsbruck
+    6: 10,   # Bologna
+    7: 11,   # Yorkshire
+    8: 12,   # Crit City
+    9: 13,   # Makuri Islands
+    10: 14,  # France
+    11: 15,  # Paris
+    12: 16,  # Gravel Mountain
+    13: 17,  # Scotland
+}
+
 
 def build_road_styles(style_surface):
-    """Per-road resolved style sectors, keyed by Sauce courseId (== our mapID).
+    """Per-road resolved style sectors, keyed by Sauce courseId (live state.courseId).
 
     Reuses the exact authoritative extraction (``_markers`` + last-covering-wins
     resolution) that generates ``zwift_surfaces/world_*.json`` so the mod's
@@ -101,8 +119,10 @@ def build_road_styles(style_surface):
 
     Shape: ``{courseId: {roadId: {"d": defaultStyleName, "s": [[a, b, name], ...]}}}``
     where ``a``/``b`` are normalised road-percent [0, 1] arc positions (last
-    covering sector wins over the default). Pure-tarmac roads with no overrides
-    are omitted; the mod treats a missing road as NORMAL (-> Tarmac).
+    covering sector wins over the default). NOTE: keyed by Sauce courseId, which
+    differs from the Zwift worldId / our world-folder id (e.g. Makuri worldId 9
+    -> courseId 13). Pure-tarmac roads with no overrides are omitted; the mod
+    treats a missing road as NORMAL (-> Tarmac).
     """
     from shared import surface_map_dev as smd  # imported lazily; needs local WADs
 
@@ -112,6 +132,9 @@ def build_road_styles(style_surface):
         return None
     out = {}
     for map_id in sorted(wads):
+        course_id = _WORLD_TO_COURSE.get(map_id)
+        if course_id is None:
+            continue  # no Sauce course for this world (e.g. test/placeholder worlds)
         try:
             road_txt, styles = smd._read_road_style(map_id)
         except Exception as exc:  # noqa: BLE001
@@ -138,7 +161,7 @@ def build_road_styles(style_surface):
                 continue
             roads[rid] = {"d": default_name, "s": sectors}
         if roads:
-            out[map_id] = roads
+            out[course_id] = roads
     return out
 
 
