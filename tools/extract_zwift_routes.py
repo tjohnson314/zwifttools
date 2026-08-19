@@ -172,14 +172,29 @@ def parse_roads(road_xml: str) -> dict:
         markers = []
         for em in re.finditer(r'<ent\b[^>]*type="ENTITY_TYPE_ROADMARKER"[^>]*>', block):
             tag = em.group(0)
-            st = re.search(r'm_style="(\d+)"', tag)
+            # Mirror extract_zwift_surfaces._markers so route surfaces match the
+            # network overlay / mod bundle: a marker with only one road-time
+            # defaults the missing endpoint to the road boundary; a style-less
+            # visible marker is asphalt (style 0); a style-less invisible one is
+            # skipped (base shows through); only a marker with NO road-time at
+            # all is position-less and dropped.
             t1 = re.search(r'm_roadTime1="([-\d.]+)"', tag)
             t2 = re.search(r'm_roadTime2="([-\d.]+)"', tag)
-            if st and t1 and t2:
-                a, b = float(t1.group(1)), float(t2.group(1))
-                if b < a:
-                    a, b = b, a
-                markers.append((a, b, int(st.group(1))))
+            if not (t1 or t2):
+                continue
+            st = re.search(r'm_style="(\d+)"', tag)
+            invisible = re.search(r'm_isInvisible="1"', tag) is not None
+            if st is not None:
+                style = int(st.group(1))
+            elif invisible:
+                continue
+            else:
+                style = 0
+            a = float(t1.group(1)) if t1 else 0.0
+            b = float(t2.group(1)) if t2 else 1.0
+            if b < a:
+                a, b = b, a
+            markers.append((a, b, style))
         roads[int(idm.group(1))] = (base, markers)
     return roads
 

@@ -163,16 +163,18 @@ def _markers(block: str) -> list[tuple[float, float, int]]:
 
     Invisible markers with no ``m_style`` are skipped (the base surface shows
     through); a visible marker with no ``m_style`` defaults to style 0 (asphalt).
-    Markers missing ``m_roadTime1`` or ``m_roadTime2`` are inactive and skipped
-    (verified in-game: Volcano road 51's BEACHPATH marker with a missing
-    ``m_roadTime1`` never renders as sand).
+    A marker with only ONE road-time defaults the missing endpoint to the road
+    boundary (missing ``m_roadTime1`` -> 0, missing ``m_roadTime2`` -> 1); only a
+    marker with NEITHER road-time is position-less and skipped. Verified in-game
+    on Makuri road 129: marker 1290001 (style-less, visible, only
+    ``m_roadTime2=0.2918``) renders asphalt from the road start to 0.2918.
     """
     out: list[tuple[float, float, int]] = []
     for m in re.finditer(r'<ent\b[^>]*type="ENTITY_TYPE_ROADMARKER"[^>]*>', block):
         tag = m.group(0)
         t1 = re.search(r'm_roadTime1="([-\d.]+)"', tag)
         t2 = re.search(r'm_roadTime2="([-\d.]+)"', tag)
-        if not (t1 and t2):
+        if not (t1 or t2):
             continue
         st = re.search(r'm_style="(\d+)"', tag)
         invisible = re.search(r'm_isInvisible="1"', tag) is not None
@@ -182,8 +184,8 @@ def _markers(block: str) -> list[tuple[float, float, int]]:
             continue
         else:
             style = 0
-        a = float(t1.group(1))
-        b = float(t2.group(1))
+        a = float(t1.group(1)) if t1 else 0.0
+        b = float(t2.group(1)) if t2 else 1.0
         if b < a:
             a, b = b, a
         out.append((a, b, style))

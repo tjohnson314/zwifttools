@@ -3,8 +3,9 @@
 // The primary source is `road-styles.mjs` (ROAD_STYLES), generated from the
 // Zwift game client by tools/build_power_breakdown_data.py using the SAME,
 // in-game-validated marker rules that build zwift_surfaces/world_*.json:
-//   - a road marker only applies when it carries both road-times (an inactive
-//     marker missing a road-time never renders);
+//   - a road marker with only one road-time defaults the missing endpoint to
+//     the road boundary (start=0 / end=1); only a marker with NO road-time at
+//     all is position-less and ignored;
 //   - a styled marker (visible OR invisible) applies its style;
 //   - a style-less INVISIBLE marker has no surface effect (base shows through);
 //   - a style-less VISIBLE marker defaults to asphalt (NORMAL / style 0).
