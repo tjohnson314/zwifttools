@@ -1,24 +1,47 @@
-// Surface lookup via Sauce's own road data (coordinate-free, exact).
+// Surface lookup via authoritative road-style data (coordinate-free, exact).
 //
-// Sauce serves per-course roads through Common.getRoads(courseId). Each road has:
-//   - `id`           : matches the live rider state's `roadId`.
-//   - `defaultStyle` : raw Zwift style name for the whole road ("" -> NORMAL).
-//   - `styles`       : [{start, end, style}] sub-ranges in road-percent, where a
-//                      mid-road sector overrides the base (may over-cover with
-//                      start<0 / end>1). Last matching sector wins.
+// The primary source is `road-styles.mjs` (ROAD_STYLES), generated from the
+// Zwift game client by tools/build_power_breakdown_data.py using the SAME,
+// in-game-validated marker rules that build zwift_surfaces/world_*.json:
+//   - a road marker only applies when it carries both road-times (an inactive
+//     marker missing a road-time never renders);
+//   - a styled marker (visible OR invisible) applies its style;
+//   - a style-less INVISIBLE marker has no surface effect (base shows through);
+//   - a style-less VISIBLE marker defaults to asphalt (NORMAL / style 0).
+// Sauce's own `road.styles` projection carries none of the invisible/inactive
+// metadata those rules need, so we cannot derive them from it — hence the
+// bundled data. Sauce's roads remain a FALLBACK for courses we don't ship data
+// for (portal roads, worlds without extractable road XML, etc.).
 //
-// The rider state carries `roadId` and the RAW `roadTime`; Sauce converts that
-// to a road-percent via roadTimeToPercent(rt) = (rt - 5000) / 1e6. We resolve
-// the surface style directly from (roadId, roadTime) with no coordinate maths,
-// so it is immune to any world-origin / axis mismatch.
+// ROAD_STYLES is keyed by courseId (== our mapID for the shipped worlds):
+//   { courseId: { roadId: { d: defaultStyleName, s: [[start, end, styleName], ...] } } }
+// where start/end are normalised road-percent [0, 1] and the last covering
+// sector wins over the default. The rider state carries `roadId` and the RAW
+// `roadTime`, which Sauce maps to road-percent via (rt - 5000) / 1e6.
 
 import * as Common from '/pages/src/common.mjs';
+import {ROAD_STYLES} from './road-styles.mjs';
 
 const roadsCache = new Map();   // courseId -> Map(roadId -> {default, styles}) | null
 const pending = new Map();      // courseId -> Promise
 
 function roadTimeToPercent(rt) {
     return (rt - 5000) / 1e6;
+}
+
+// Resolve a style from a bundled ROAD_STYLES road entry (default + sectors,
+// last covering sector wins). Returns the raw Zwift style name.
+function resolveBundled(road, roadTime) {
+    let style = road.d || 'NORMAL';
+    if (roadTime != null && Number.isFinite(roadTime) && road.s.length) {
+        const rp = roadTimeToPercent(roadTime);
+        for (const s of road.s) {
+            if (rp >= s[0] && rp <= s[1]) {
+                style = s[2];
+            }
+        }
+    }
+    return style;
 }
 
 async function loadRoads(courseId) {
@@ -50,15 +73,27 @@ async function loadRoads(courseId) {
     return p;
 }
 
-// Kick off a background load so the first lookup is warm.
+// Kick off a background load of the Sauce fallback data for courses we don't
+// ship authoritative road styles for, so the first lookup is warm.
 export function preload(courseId) {
-    if (courseId != null) loadRoads(courseId);
+    if (courseId != null && !ROAD_STYLES[courseId]) loadRoads(courseId);
 }
 
 // Returns {style, ready}. `style` is the raw Zwift style name for the rider's
-// current road position; 'NORMAL' when the road/course is unknown or the road
-// data has not loaded yet (ready === false while loading).
+// current road position; 'NORMAL' when the road/course is unknown or the
+// fallback road data has not loaded yet (ready === false while loading).
 export function lookupStyle(courseId, roadId, roadTime) {
+    // Primary: authoritative bundled road styles (matches the surface map).
+    const courseRoads = courseId != null ? ROAD_STYLES[courseId] : null;
+    if (courseRoads) {
+        const road = roadId != null ? courseRoads[roadId] : null;
+        // A road absent from our lean bundle is a plain, override-free tarmac
+        // road (those are omitted at build time) -> NORMAL / Tarmac.
+        return {style: road ? resolveBundled(road, roadTime) : 'NORMAL', ready: true};
+    }
+
+    // Fallback: Sauce's own road-style projection (portal roads, worlds without
+    // extractable road XML, or a courseId we don't ship data for).
     const map = roadsCache.get(courseId);
     if (map === undefined) {          // not loaded yet: trigger + default
         loadRoads(courseId);
