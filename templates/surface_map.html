@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Surface Map - Zwift Tools</title>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-    <link rel="stylesheet" href="/static/css/surface_map.css?v=3">
+    <link rel="stylesheet" href="/static/css/surface_map.css?v=4">
 </head>
 <body>
     <div class="header-bar">
@@ -30,6 +30,11 @@
                 <span id="route-count" class="route-count"></span>
             </div>
             <input id="route-search" type="search" placeholder="Search routes…" autocomplete="off">
+            <div id="sport-filter" class="sport-filter">
+                <button type="button" class="sport-btn active" data-sport="all">All</button>
+                <button type="button" class="sport-btn" data-sport="cycling">Cycling</button>
+                <button type="button" class="sport-btn" data-sport="running">Running</button>
+            </div>
             <ul id="route-list" class="route-list"></ul>
         </aside>
 
@@ -60,6 +65,6 @@
         </main>
     </div>
 
-    <script src="/static/js/surface_map.js?v=6"></script>
+    <script src="/static/js/surface_map.js?v=8"></script>
 </body>
 </html>

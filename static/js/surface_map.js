@@ -12,6 +12,7 @@ const state = {
     world: null,        // { mapID, name, bounds, segments, routes, colors, background }
     route: null,        // route detail from API
     routeFilter: '',
+    sportFilter: 'all', // 'all' | 'cycling' | 'running'
     activeHash: null,
     // Affine transform: screenX = X*scale + offsetX ; screenY = Y*scale + offsetY
     scale: 1,
@@ -134,13 +135,24 @@ async function loadRoute(hash) {
 
 /* ------------------------------------------------------------- sidebar --- */
 
+// Zwift route sportType: 2 = running. Every other value (-1, 0, 1, 3) is a
+// cycling route entry; runnable routes get their own separate value-2 entry.
+function sportIsCycling(v) { return v !== 2; }
+function sportIsRunning(v) { return v === 2; }
+function sportLabel(v) { return v === 2 ? 'Running' : 'Cycling'; }
+
 function renderRouteList() {
     const ul = document.getElementById('route-list');
     ul.innerHTML = '';
     if (!state.world) return;
     const filter = state.routeFilter.toLowerCase();
-    const routes = state.world.routes.filter(
-        r => !filter || r.name.toLowerCase().includes(filter));
+    const sf = state.sportFilter;
+    const routes = state.world.routes.filter(r => {
+        if (filter && !r.name.toLowerCase().includes(filter)) return false;
+        if (sf === 'cycling') return sportIsCycling(r.sport_type);
+        if (sf === 'running') return sportIsRunning(r.sport_type);
+        return true;
+    });
 
     document.getElementById('route-count').textContent =
         `${routes.length}/${state.world.routes.length}`;
@@ -151,8 +163,11 @@ function renderRouteList() {
         const dist = ((r.distance_m + r.leadin_distance_m) / 1000).toFixed(1);
         const asc = Math.round(r.ascent_m + r.leadin_ascent_m);
         const badge = r.event_only ? '<span class="r-badge">Event</span>' : '';
+        const sport = sportLabel(r.sport_type);
+        const sportBadge =
+            `<span class="sport-tag sport-${sport.toLowerCase()}">${sport}</span>`;
         li.innerHTML = `${escapeHtml(r.name)}${badge}` +
-            `<span class="r-meta">${dist} km · ${asc} m ↑</span>`;
+            `<span class="r-meta">${dist} km · ${asc} m ↑${sportBadge}</span>`;
         li.addEventListener('click', () => {
             if (r.nameHash === state.activeHash) clearRoute();
             else loadRoute(r.nameHash);
@@ -452,6 +467,14 @@ function bindEvents() {
     document.getElementById('route-search').addEventListener('input', e => {
         state.routeFilter = e.target.value;
         renderRouteList();
+    });
+    document.querySelectorAll('#sport-filter .sport-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            state.sportFilter = btn.dataset.sport;
+            document.querySelectorAll('#sport-filter .sport-btn').forEach(
+                b => b.classList.toggle('active', b === btn));
+            renderRouteList();
+        });
     });
     document.getElementById('btn-fit').addEventListener('click', () => {
         if (state.route && state.route.bounds) fitToBounds(state.route.bounds, 0.82);

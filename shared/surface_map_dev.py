@@ -286,20 +286,34 @@ def get_road_detail(map_id: int, road_id: int) -> dict | None:
             t1 = re.search(r'm_roadTime1="([-\d.]+)"', tag)
             t2 = re.search(r'm_roadTime2="([-\d.]+)"', tag)
             mid = _MARKER_ID_RE.search(tag)
-            # Some markers omit a road-time (span from road start/to road end) or
-            # carry no m_style (width/other markers with no surface override).
+            invisible = re.search(r'm_isInvisible="1"', tag) is not None
+            # A marker missing either road-time is inactive: verified in-game it
+            # does not render (Volcano road 51 BEACHPATH, missing m_roadTime1).
+            inactive = not (t1 and t2)
             a = float(t1.group(1)) if t1 else 0.0
             b = float(t2.group(1)) if t2 else 1.0
             if b < a:
                 a, b = b, a
-            has_style = st is not None
-            style_idx = int(st.group(1)) if has_style else -1
+            # Effective surface: a styled marker uses its style; a style-less
+            # VISIBLE marker defaults to style 0 (asphalt); a style-less INVISIBLE
+            # marker has no surface effect (base shows through). Inactive markers
+            # (missing a road-time) never apply.
+            if inactive:
+                style_idx = None
+            elif st is not None:
+                style_idx = int(st.group(1))
+            elif invisible:
+                style_idx = None
+            else:
+                style_idx = 0
             sub = _subpath(full_pts, cum, total, a, b)
             mx, my = _project_xy(proj, sub)
             markers.append({
                 "markerId": int(mid.group(1)) if mid else None,
-                "style": _style_name(styles, style_idx) if has_style else None,
-                "surface": _surface_for(styles, style_idx) if has_style else None,
+                "style": _style_name(styles, style_idx) if style_idx is not None else None,
+                "surface": _surface_for(styles, style_idx) if style_idx is not None else None,
+                "invisible": invisible,
+                "inactive": inactive,
                 "t0": round(a, 4),
                 "t1": round(b, 4),
                 "x": mx,

@@ -12,9 +12,9 @@
   "mapID": 1,
   "world": "world1",
   "file": "world_1.json",
-  "segments": 276,
+  "segments": 280,
   "surfaces": {
-   "Tarmac": 174,
+   "Tarmac": 178,
    "Cobbles": 10,
    "Wood": 33,
    "Dirt": 32,
@@ -37,9 +37,9 @@
   "mapID": 3,
   "world": "world3",
   "file": "world_3.json",
-  "segments": 58,
+  "segments": 60,
   "surfaces": {
-   "Tarmac": 56,
+   "Tarmac": 58,
    "Wood": 2
   }
  },
@@ -47,9 +47,9 @@
   "mapID": 4,
   "world": "world4",
   "file": "world_4.json",
-  "segments": 375,
+  "segments": 374,
   "surfaces": {
-   "Tarmac": 375
+   "Tarmac": 374
   }
  },
  {
@@ -96,33 +96,33 @@
   "mapID": 9,
   "world": "world9",
   "file": "world_9.json",
-  "segments": 280,
+  "segments": 287,
   "surfaces": {
-   "Tarmac": 206,
+   "Tarmac": 213,
    "Wood": 37,
-   "Dirt": 9,
-   "Sand": 28
+   "Dirt": 10,
+   "Sand": 27
   }
  },
  {
   "mapID": 10,
   "world": "world10",
   "file": "world_10.json",
-  "segments": 161,
+  "segments": 165,
   "surfaces": {
-   "Tarmac": 62,
+   "Tarmac": 65,
    "Cobbles": 6,
-   "Dirt": 93
+   "Dirt": 94
   }
  },
  {
   "mapID": 11,
   "world": "world11",
   "file": "world_11.json",
-  "segments": 130,
+  "segments": 132,
   "surfaces": {
-   "Tarmac": 74,
-   "Cobbles": 56
+   "Tarmac": 75,
+   "Cobbles": 57
   }
  },
  {
