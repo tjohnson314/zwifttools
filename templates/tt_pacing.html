@@ -17,6 +17,10 @@
             <h1><span class="logo-emoji">📈</span> TT Pacing Planner</h1>
             <p class="subtitle">Optimal power-vs-distance plan for a time trial</p>
         </div>
+        <div class="unit-toggle" id="unitToggle" role="group" aria-label="Units">
+            <button type="button" class="unit-btn active" data-unit="metric" onclick="setUnits('metric')">Metric</button>
+            <button type="button" class="unit-btn" data-unit="imperial" onclick="setUnits('imperial')">Imperial</button>
+        </div>
     </div>
 
     <!-- Input panels -->
@@ -56,12 +60,13 @@
             <h2>🧍 Rider</h2>
 
             <div class="form-group">
-                <label for="riderWeight">Weight (kg)</label>
-                <input type="number" id="riderWeight" value="75" min="30" max="200" step="0.5">
+                <label for="riderWeight" id="weightLabel">Weight (kg)</label>
+                <input type="number" id="riderWeight" value="75" min="30" max="200" step="0.5"
+                       oninput="updateWperKg()">
             </div>
 
             <div class="form-group">
-                <label for="riderHeight">Height (cm)</label>
+                <label for="riderHeight" id="heightLabel">Height (cm)</label>
                 <input type="number" id="riderHeight" value="175" min="140" max="220" step="1">
             </div>
 

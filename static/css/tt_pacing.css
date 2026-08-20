@@ -51,6 +51,35 @@ h1 .logo-emoji {
     font-size: 0.95rem;
 }
 
+/* Unit toggle */
+.unit-toggle {
+    display: inline-flex;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    padding: 3px;
+    flex: none;
+}
+
+.unit-btn {
+    border: none;
+    background: none;
+    color: #aaa;
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+
+.unit-btn:hover { color: #fff; }
+
+.unit-btn.active {
+    background: linear-gradient(90deg, #ff6b35, #f7931e);
+    color: #fff;
+}
+
 /* Panels */
 .panels {
     display: grid;
