@@ -306,6 +306,27 @@ def _pack_leg(map_id: int, leg: dict | None) -> dict | None:
     }
 
 
+def _anchor_leg_alt(leg: dict | None, target_ascent_m: float) -> None:
+    """Scale a packed leg's altitude so its ascent matches Zwift's own figure.
+
+    WAD vertical geometry is not to physical scale (Watopia altitudes read ~2x
+    true metres) while horizontal distance is. Scaling about the first point by
+    ``target_ascent / raw_ascent`` restores physical gradients; a no-op where the
+    geometry already matches the header ascent.
+    """
+    if not leg or not target_ascent_m:
+        return
+    alt = leg.get("alt")
+    if not alt or len(alt) < 2:
+        return
+    a0 = alt[0]
+    raw_ascent = sum(max(0.0, alt[i + 1] - alt[i]) for i in range(len(alt) - 1))
+    if raw_ascent <= 0:
+        return
+    scale = target_ascent_m / raw_ascent
+    leg["alt"] = [round(a0 + (v - a0) * scale, 2) for v in alt]
+
+
 def _surface_breakdown(leg: dict | None) -> dict[str, float]:
     """Distance (metres) spent on each surface across a packed leg."""
     totals: dict[str, float] = {}
@@ -331,6 +352,11 @@ def get_route(map_id: int, name_hash: int) -> dict | None:
 
     leadin = _pack_leg(map_id, route.get("leadin"))
     main = _pack_leg(map_id, route.get("route"))
+
+    # Anchor each leg's altitude to Zwift's authoritative ascent so the elevation
+    # profile is to physical scale (WAD vertical geometry is not — see helper).
+    _anchor_leg_alt(leadin, float(route.get("leadin_ascent_m", 0.0) or 0.0))
+    _anchor_leg_alt(main, float(route.get("ascent_m", 0.0) or 0.0))
 
     breakdown: dict[str, float] = {}
     for leg in (leadin, main):

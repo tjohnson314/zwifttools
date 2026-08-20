@@ -33,9 +33,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from bike_comparison.bike_data import get_bike_database, get_bike_stats
+from bike_comparison.bike_data import get_bike_database, get_bike_stats, BASE_CDA, REF_FRONTAL_AREA
 from bike_comparison.physics import compare_bike_setups, frontal_area_from_rider
 from bike_comparison.ride_simulator import list_routes, load_route_profile, simulate_ride as _simulate_ride
+from bike_comparison.pacing_planner import plan_tt_pacing
 from shared.utils import calculate_normalized_power
 from shared.data_fetcher import (
     fetch_rider_telemetry, convert_telemetry_to_dataframe,
@@ -1207,6 +1208,7 @@ _ERIC_WHEELS = {
     ('PrincetonCarbonWorks', 'Wake6560'): 'Princeton CarbonWorks Wake 6560',
     ('Reserve', 'Reserve34'): 'Reserve 34/37',
     ('Roval', 'RovalAlpinistCLX'): 'Roval Alpinist CLX',
+    ('Shimano', 'ShimanoDuraAceC992026'): 'Shimano Dura-Ace C99 Disc',
     ('SwissSide', 'SwissSideHADRONUltimate650'): 'Swiss Side HADRON Ultimate 650',
     ('Zipp', 'Zipp353'): 'Zipp 353 NSW',
     ('Zipp', 'Zipp454cc'): 'Zipp 454',
@@ -2376,6 +2378,111 @@ def api_simulate_ride():
             'surfaces': result.surfaces,
         },
         'surface_breakdown': result.surface_breakdown,
+    })
+
+
+# ---------------------------------------------------------------------------
+# TT Pacing Planner — optimal power-vs-distance plan for a time trial
+# ---------------------------------------------------------------------------
+
+@app.route('/tt-pacing')
+def tt_pacing():
+    """TT pacing planner tool."""
+    return render_template('tt_pacing.html')
+
+
+@app.route('/api/tt_pacing/routes')
+def api_tt_pacing_routes():
+    """Return all rideable routes for the pacing planner route selector."""
+    try:
+        routes = list_routes()
+        return jsonify({'routes': routes})
+    except Exception as e:
+        logger.exception("Error listing pacing planner routes")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/tt_pacing_plan', methods=['POST'])
+def api_tt_pacing_plan():
+    """
+    Compute an optimal TT pacing plan.
+
+    Expected JSON body:
+        route_id        (str)   — route ID from routes_cache.json
+        route_name      (str)   — route name (used for geometry lookup)
+        world           (str)   — world name
+        include_leadin  (bool)  — include the route lead-in (default true)
+        rider_weight_kg (float)
+        rider_height_cm (float)
+        avg_power_watts (float) — target overall average power
+        bike_weight_kg  (float)
+        cda_effect      (float) — bike CdA bias (m², may be negative)
+    """
+    body = request.get_json(force=True, silent=True) or {}
+
+    try:
+        route_name  = str(body['route_name'])
+        weight_kg   = float(body['rider_weight_kg'])
+        height_cm   = float(body['rider_height_cm'])
+        avg_power_w = float(body['avg_power_watts'])
+        bike_kg     = float(body['bike_weight_kg'])
+        cda_effect  = float(body.get('cda_effect', 0.0))
+    except (KeyError, TypeError, ValueError) as exc:
+        return jsonify({'error': f'Invalid request: {exc}'}), 400
+
+    if avg_power_w <= 0:
+        return jsonify({'error': 'avg_power_watts must be positive'}), 400
+    if weight_kg <= 0 or height_cm <= 0:
+        return jsonify({'error': 'rider_weight_kg and rider_height_cm must be positive'}), 400
+    if bike_kg <= 0:
+        return jsonify({'error': 'bike_weight_kg must be positive'}), 400
+
+    # Absolute CdA for this rider + bike (same model as the ride simulator):
+    # (baseline + bike bias) scaled by the rider's frontal area.
+    height_m = height_cm / 100.0
+    frontal_area = frontal_area_from_rider(height_m, weight_kg)
+    cda = (BASE_CDA + cda_effect) * (frontal_area / REF_FRONTAL_AREA)
+    if cda <= 0:
+        return jsonify({'error': 'Resulting CdA is non-positive; check the CdA effect.'}), 400
+
+    try:
+        route = load_route_profile(
+            body.get('route_id', ''), route_name, world=body.get('world'),
+            include_leadin=bool(body.get('include_leadin', True)),
+        )
+        result = plan_tt_pacing(
+            route=route,
+            rider_weight_kg=weight_kg,
+            rider_height_m=height_m,
+            bike_weight_kg=bike_kg,
+            cda=cda,
+            avg_power_target_w=avg_power_w,
+        )
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception as exc:
+        logger.exception("Pacing plan error")
+        return jsonify({'error': str(exc)}), 500
+
+    return jsonify({
+        'route_name': result.route_name,
+        'total_time_seconds': round(result.total_time_seconds),
+        'total_time_formatted': result.total_time_formatted,
+        'total_distance_km': round(result.total_distance_km, 2),
+        'total_ascent_m': round(result.total_ascent_m),
+        'avg_speed_kph': result.avg_speed_kph,
+        'avg_power_w': result.avg_power_w,
+        'max_power_w': result.max_power_w,
+        'min_power_w': result.min_power_w,
+        'cda': round(cda, 4),
+        'profile': {
+            'distance_km': result.distance_km,
+            'altitude_m': result.altitude_m,
+            'power_w': result.power_w,
+            'speed_kph': result.speed_kph,
+            'gradient_pct': result.gradient_pct,
+        },
+        'sections': result.sections,
     })
 
 

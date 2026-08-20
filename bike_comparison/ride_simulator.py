@@ -164,6 +164,17 @@ def _load_wad_profile(
         source_distance_m += float(data.get("leadin_distance_m") or 0.0)
         source_ascent_m += float(data.get("leadin_ascent_m") or 0.0)
 
+    # WAD vertical geometry is not to physical scale (e.g. Watopia altitudes read
+    # ~2x true metres); horizontal distance is. Anchor the altitude to Zwift's
+    # authoritative ascent by scaling about the start point so gradients — and
+    # thus simulated times — are physical. World-agnostic: a no-op where the
+    # geometry already matches the header ascent.
+    if source_ascent_m and len(altitude) > 1:
+        dalt = np.diff(altitude)
+        raw_ascent = float(np.sum(dalt[dalt > 0]))
+        if raw_ascent > 0:
+            altitude = altitude[0] + (altitude - altitude[0]) * (source_ascent_m / raw_ascent)
+
     return {
         "distance_m": distance,
         "altitude_m": altitude,
