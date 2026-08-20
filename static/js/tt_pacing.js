@@ -8,13 +8,15 @@
 'use strict';
 
 let allRoutes = [];       // full list from /api/tt_pacing/routes
+let bikeDatabase = null;  // { frames, wheels, bikes } from /api/bike_database
 let selectedRoute = null; // currently selected route object
 let planChart = null;     // Chart.js instance
 
 // ── Initialise ───────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-    loadRoutes().then(updatePlanButton)
-        .catch(err => showError('Failed to load routes: ' + err.message));
+    Promise.all([loadRoutes(), loadBikeDatabase()])
+        .then(updatePlanButton)
+        .catch(err => showError('Failed to load data: ' + err.message));
     updateWperKg();
     document.getElementById('includeLeadin')
         .addEventListener('change', () => { if (selectedRoute) showRouteStats(selectedRoute); });
@@ -28,6 +30,13 @@ async function loadRoutes() {
     allRoutes = data.routes || [];
     populateWorldFilter();
     filterRoutes();
+}
+
+async function loadBikeDatabase() {
+    const resp = await fetch('/api/bike_database');
+    if (!resp.ok) throw new Error('Could not load bike database');
+    bikeDatabase = await resp.json();
+    populateFrames();
 }
 
 // ── World filter ─────────────────────────────────────────────────────────────
@@ -96,6 +105,81 @@ function hideRouteStats() {
     document.getElementById('routeStats').style.display = 'none';
 }
 
+// ── Bike database ─────────────────────────────────────────────────────────────
+function populateFrames() {
+    if (!bikeDatabase) return;
+    const sel = document.getElementById('frameSelect');
+    sel.innerHTML = '<option value="">Select a frame…</option>';
+    bikeDatabase.frames.forEach(f => {
+        const opt = document.createElement('option');
+        opt.value = f.frameid;
+        opt.textContent = `${f.framemake} ${f.framemodel}`;
+        sel.appendChild(opt);
+    });
+    onFrameChange();
+}
+
+function onFrameChange() {
+    if (!bikeDatabase) return;
+    const frameId = document.getElementById('frameSelect').value;
+    const wheelSel = document.getElementById('wheelSelect');
+    wheelSel.innerHTML = '';
+
+    if (!frameId) {
+        wheelSel.innerHTML = '<option value="">Select a frame first…</option>';
+        updateBikeStats();
+        return;
+    }
+
+    const combos = bikeDatabase.bikes.filter(b => b.frameid === frameId);
+    const wheelIds = combos.map(b => b.wheelid).filter(Boolean);
+
+    if (wheelIds.length === 0) {
+        wheelSel.innerHTML = '<option value="">(Built-in wheels)</option>';
+    } else {
+        wheelSel.innerHTML = '<option value="">Select wheels…</option>';
+        const seenIds = new Set();
+        wheelIds.forEach(wid => {
+            if (seenIds.has(wid)) return;
+            seenIds.add(wid);
+            const wh = bikeDatabase.wheels.find(w => w.wheelid === wid);
+            if (!wh) return;
+            const opt = document.createElement('option');
+            opt.value = wid;
+            opt.textContent = `${wh.wheelmake} ${wh.wheelmodel}`;
+            wheelSel.appendChild(opt);
+        });
+    }
+    updateBikeStats();
+}
+
+function updateBikeStats() {
+    if (!bikeDatabase) return;
+    const frameId = document.getElementById('frameSelect').value;
+    const wheelId = document.getElementById('wheelSelect').value;
+    const level = parseInt(document.getElementById('upgradeLevel').value, 10);
+
+    if (!frameId) { clearBikeStats(); return; }
+
+    const combo = bikeDatabase.bikes.find(
+        b => b.frameid === frameId && (b.wheelid || '') === (wheelId || '')
+    );
+    if (!combo) { clearBikeStats(); return; }
+
+    const frame = bikeDatabase.frames.find(f => f.frameid === frameId);
+    document.getElementById('bikeCd').textContent = combo.cd[level].toFixed(4);
+    document.getElementById('bikeWeightStat').textContent = combo.weight[level].toFixed(2) + ' kg';
+    document.getElementById('bikeType').textContent = frame ? (frame.frametype || 'Standard') : 'Standard';
+    updatePlanButton();
+}
+
+function clearBikeStats() {
+    ['bikeCd', 'bikeWeightStat', 'bikeType'].forEach(id => {
+        document.getElementById(id).textContent = '—';
+    });
+    updatePlanButton();
+}
+
 // ── UI helpers ────────────────────────────────────────────────────────────────
 function updateWperKg() {
     const power = parseFloat(document.getElementById('avgPower').value) || 0;
@@ -105,11 +189,13 @@ function updateWperKg() {
 }
 
 function updatePlanButton() {
-    const ready = !!selectedRoute;
+    const ready = !!selectedRoute
+        && !!document.getElementById('frameSelect').value
+        && document.getElementById('bikeCd').textContent !== '—';
     const btn = document.getElementById('planBtn');
     btn.disabled = !ready;
     document.getElementById('planHint').textContent =
-        ready ? 'Ready — click to build the plan' : 'Select a route to continue';
+        ready ? 'Ready — click to build the plan' : 'Select a route and bike to continue';
 }
 
 function showError(msg) {
@@ -126,11 +212,11 @@ async function runPlan() {
     const weightKg  = parseFloat(document.getElementById('riderWeight').value);
     const heightCm  = parseFloat(document.getElementById('riderHeight').value);
     const avgPowerW = parseFloat(document.getElementById('avgPower').value);
-    const bikeKg    = parseFloat(document.getElementById('bikeWeight').value);
-    const cdaEffect = parseFloat(document.getElementById('cdaEffect').value);
+    const frameId   = document.getElementById('frameSelect').value;
+    const wheelId   = document.getElementById('wheelSelect').value || null;
+    const level     = parseInt(document.getElementById('upgradeLevel').value, 10);
 
-    if (isNaN(weightKg) || isNaN(heightCm) || isNaN(avgPowerW) || avgPowerW <= 0 ||
-        isNaN(bikeKg) || bikeKg <= 0) {
+    if (!frameId || isNaN(weightKg) || isNaN(heightCm) || isNaN(avgPowerW) || avgPowerW <= 0) {
         showError('Please fill in all fields correctly.');
         return;
     }
@@ -153,8 +239,9 @@ async function runPlan() {
                 rider_weight_kg: weightKg,
                 rider_height_cm: heightCm,
                 avg_power_watts: avgPowerW,
-                bike_weight_kg:  bikeKg,
-                cda_effect:      isNaN(cdaEffect) ? 0 : cdaEffect,
+                frame_id:        frameId,
+                wheel_id:        wheelId,
+                upgrade_level:   level,
             }),
         });
 
@@ -185,6 +272,8 @@ function displayResults(data) {
     document.getElementById('avgSpeed').textContent = data.avg_speed_kph.toFixed(1) + ' km/h';
     document.getElementById('powerRange').textContent =
         `${Math.round(data.min_power_w)}–${Math.round(data.max_power_w)} W`;
+    document.getElementById('normPower').textContent = Math.round(data.normalized_power_w) + ' W';
+    document.getElementById('avgPowerStat').textContent = Math.round(data.avg_power_w) + ' W';
 
     renderChart(data.profile);
     renderTable(data.sections);

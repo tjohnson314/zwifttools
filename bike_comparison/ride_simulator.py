@@ -56,13 +56,15 @@ def _cached_route_file(slug: str) -> Path:
     return ROUTE_DIR / f'{slug.replace("-", "_")}_route.json'
 
 
-def route_has_profile(route_name: str, world: Optional[str] = None) -> bool:
+def route_has_profile(
+    route_name: str, world: Optional[str] = None, route_id: Optional[str] = None
+) -> bool:
     """True if real elevation geometry is available.
 
     Prefers the WAD ``zwift_routes`` geometry (same source as the surface map),
     and falls back to ZwiftMap geometry (cached or fetchable).
     """
-    if _find_wad_route(route_name, world) is not None:
+    if _find_wad_route(route_name, world, route_id) is not None:
         return True
     slug = _route_name_to_slug(route_name)
     return _cached_route_file(slug).exists() or slug in ROUTE_STRAVA_SEGMENTS
@@ -105,8 +107,32 @@ def _wad_route_index() -> dict:
     return by_name
 
 
-def _find_wad_route(route_name: str, world: Optional[str] = None) -> Optional[dict]:
-    """Find the WAD route index entry for a route name (disambiguated by world)."""
+@lru_cache(maxsize=1)
+def _wad_route_by_hash() -> dict:
+    """Map a route's ``nameHash`` (as str) to its ``index.json`` entry.
+
+    The routes_cache.json key is the same nameHash, so this resolves routes
+    whose cache name differs from the WAD name (e.g. "Watopia Hilly Route").
+    """
+    path = ZWIFT_ROUTES_DIR / "index.json"
+    if not path.exists():
+        return {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            entries = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return {str(e["nameHash"]): e for e in entries if e.get("nameHash") is not None}
+
+
+def _find_wad_route(
+    route_name: str, world: Optional[str] = None, route_id: Optional[str] = None
+) -> Optional[dict]:
+    """Find the WAD route index entry, by nameHash (route_id) then by name."""
+    if route_id:
+        entry = _wad_route_by_hash().get(str(route_id).strip())
+        if entry is not None:
+            return entry
     entries = _wad_route_index().get((route_name or "").strip().casefold())
     if not entries:
         return None
@@ -120,7 +146,8 @@ def _find_wad_route(route_name: str, world: Optional[str] = None) -> Optional[di
 
 
 def _load_wad_profile(
-    route_name: str, world: Optional[str], include_leadin: bool
+    route_name: str, world: Optional[str], include_leadin: bool,
+    route_id: Optional[str] = None,
 ) -> Optional[dict]:
     """Build a route profile from WAD ``zwift_routes`` geometry.
 
@@ -128,7 +155,7 @@ def _load_wad_profile(
     page renders, optionally prepending the lead-in leg. Returns ``None`` when
     no WAD geometry is available for the route.
     """
-    entry = _find_wad_route(route_name, world)
+    entry = _find_wad_route(route_name, world, route_id)
     if entry is None:
         return None
     data = surface_map.get_route(entry["mapID"], entry["nameHash"])
@@ -312,8 +339,13 @@ def list_routes() -> list[dict]:
             continue
 
         # Only include routes with real elevation data available
-        if not route_has_profile(name, world):
+        wad = _find_wad_route(name, world, route_id)
+        if wad is None and not route_has_profile(name, world, route_id):
             continue
+        # The WAD index is the authoritative name source; prefer it when the
+        # routes_cache name differs (e.g. "Watopia Hilly Route" -> "Hilly Route").
+        if wad is not None and wad.get("name"):
+            name = wad["name"]
 
         leadin_dist_m = info.get("leadinDistanceInMeters", 0) or 0
         leadin_ascent_m = info.get("leadinAscentInMeters", 0) or 0
@@ -353,7 +385,7 @@ def load_route_profile(
         include_leadin: Include the route's lead-in leg in the profile (WAD
             geometry only).
     """
-    wad = _load_wad_profile(route_name, world, include_leadin)
+    wad = _load_wad_profile(route_name, world, include_leadin, route_id)
     if wad is not None:
         return RouteProfile(
             name=route_name,

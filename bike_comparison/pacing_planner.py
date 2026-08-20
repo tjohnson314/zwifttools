@@ -1,29 +1,36 @@
 """
 Optimal TT pacing planner for Zwift routes.
 
-Given a rider (height, weight, overall average power target), a bike
-configuration (weight, CdA effect), and a route, this computes a pacing plan:
-the power output the rider should hold at each point of the course to minimise
-total time while keeping the *time*-average power (total energy / total time,
-i.e. the figure a bike computer reports) equal to the target.
+Given a rider (height, weight, normalized-power target), a bike configuration
+(weight, CdA effect), and a route, this computes a pacing plan: the power output
+the rider should hold at each point of the course to minimise total time while
+keeping the *normalized* power (NP) equal to the target.
+
+Why normalized power
+--------------------
+A pure *average*-power budget lets the optimiser "bank" energy: it dumps power
+capped hard on every climb and coasts every descent at zero, because that
+bang-bang profile still averages out to the target.  The result is long,
+physiologically infeasible stretches pinned at the power ceiling.  Normalized
+power — NP = (mean over 30 s rolling windows of P⁴)^(1/4) — penalises that
+variability heavily (the 4th power weights surges), so holding the *same* NP
+yields a far smoother, more sustainable plan that still rewards pushing uphill.
 
 Method
 ------
 The route is divided into small chunks (each at most ``max_chunk_m`` metres) so
-every chunk has an essentially constant gradient.  Minimising time for a fixed
-time-average power is a Lagrangian problem whose optimum has a simple form: on
-all terrain that is neither power-capped nor coasting the rider holds a single
-common steady-state speed ``v*`` — i.e. *more* power uphill and *less* downhill
-(the classic "hold your speed" result).  The steady power needed to hold ``v*``
-on a chunk is
+every chunk has an essentially constant gradient.  Because the marginal NP cost
+of a watt grows like P³, minimising time at a fixed NP is a Lagrangian
+water-filling problem: for a price ``μ`` on NP, each chunk independently picks
+the steady speed ``v`` that minimises ``(1/v)·(1 + μ·P(v)⁴)``, where
 
-    P = (F_grav + F_roll + ½·ρ·CdA·v*²)·v* / (1-η)
+    P(v) = clip( (F_grav + F_roll + ½·ρ·CdA·v²)·v / (1-η),  0,  p_max )
 
-clamped to ``[0, p_max]``: chunks that would need more than the per-chunk cap
-``p_max`` are climb-limited (ridden slower at ``p_max``) and chunks whose steady
-power would be negative are coasted at zero power (ridden faster).  The single
-free parameter ``v*`` is found by bisection so that the momentum simulation's
-realised time-average power matches the target.
+is the steady power to hold ``v`` on that chunk.  Small ``μ`` lets power sit at
+the cap (fast, spiky); large ``μ`` flattens it toward constant power.  ``μ`` is
+found by bisection so the momentum simulation's realised NP equals the target.
+The result shifts effort off the climbs and onto the flats/descents until the
+time saved per unit of NP-cost is equal everywhere — a smooth, feasible plan.
 
 The final per-chunk times and speeds come from a *momentum* integrator: the
 surplus speed carried out of one chunk becomes the entry speed of the next, so
@@ -88,6 +95,29 @@ def _traverse(v0, drive, f_grav, f_roll, aero_k, inv_mass, length):
     return v, t
 
 
+def _normalized_power(power, times, window_s: float = 30.0) -> float:
+    """Normalized power (W) for a per-chunk power/time profile.
+
+    Resamples the distance-chunk profile onto a 1-second time grid, takes the
+    30-second rolling average, then NP = (mean(rolling_avg⁴))^(1/4).
+    """
+    total_t = float(np.sum(times))
+    if total_t <= 0.0:
+        return 0.0
+    n_sec = max(1, int(math.ceil(total_t)))
+    cum_t = np.cumsum(times)
+    # Sample each 1-second slot at its midpoint and map it to the chunk it falls in.
+    sample_t = np.arange(n_sec) + 0.5
+    idx = np.clip(np.searchsorted(cum_t, sample_t, side="right"), 0, len(power) - 1)
+    p_sec = np.asarray(power, dtype=float)[idx]
+    w = int(window_s)
+    if n_sec >= w > 0:
+        ravg = np.convolve(p_sec, np.ones(w) / w, mode="valid")
+    else:
+        ravg = np.array([float(np.mean(p_sec))])
+    return float(np.mean(ravg ** 4) ** 0.25)
+
+
 @dataclass
 class PacingPlanResult:
     """Result of a pacing optimisation."""
@@ -97,6 +127,7 @@ class PacingPlanResult:
     total_ascent_m: float
     avg_speed_kph: float
     avg_power_w: float
+    normalized_power_w: float
     max_power_w: float
     min_power_w: float
 
@@ -164,7 +195,7 @@ def plan_tt_pacing(
     rider_height_m: float,
     bike_weight_kg: float,
     cda: float,
-    avg_power_target_w: float,
+    power_target_w: float,
     *,
     crr: float = 0.004,
     max_chunk_m: float = 10.0,
@@ -181,8 +212,8 @@ def plan_tt_pacing(
             the caller supplies the already-computed ``cda``.
         bike_weight_kg: Bike mass (kg).
         cda: Absolute CdA (m²) for this rider + bike.
-        avg_power_target_w: Target *time-average* power (W) — total energy divided
-            by total time, i.e. the average a bike computer reports.
+        power_target_w: Target *normalized* power (NP, W) — the effort budget the
+            plan is optimised against (30 s rolling, 4th-power weighted).
         crr: Rolling-resistance coefficient.
         max_chunk_m: Maximum chunk length (m).
         max_power_mult: Cap on each chunk's power as a multiple of the target,
@@ -204,7 +235,7 @@ def plan_tt_pacing(
     f_roll = crr * total_mass * GRAVITY * cos_slope
 
     one_minus_eta = 1.0 - DRIVETRAIN_LOSS
-    p_max = max_power_mult * avg_power_target_w
+    p_max = max_power_mult * power_target_w
     f_sum = f_grav + f_roll  # speed-independent resistive force per chunk (N)
 
     def step(c, v_in, p):
@@ -212,25 +243,45 @@ def plan_tt_pacing(
         return _traverse(v_in, p * one_minus_eta, float(f_grav[c]),
                          float(f_roll[c]), aero_k, inv_mass, float(length[c]))
 
-    # ── Direct (water-filling) allocation under a time-average power budget ──
-    # At the optimum every chunk that is neither power-capped nor coasting is
-    # ridden at one common steady-state speed v* — the classic result that on
-    # moderate terrain you hold a constant speed, which means *more* power uphill
-    # and *less* downhill.  The steady power that holds v* on chunk c is
-    #     P_c = (f_grav_c + f_roll_c + aero_k·v*²)·v* / (1-η)
-    # clamped to [0, p_max]: chunks needing more than the cap are climb-limited
-    # (ridden slower at p_max) and chunks whose steady power would be negative are
-    # coasted at P=0 (ridden faster).  v* is found by bisection so the momentum
-    # simulation's time-average power ΣP·t / Σt equals the target.  This lands on
-    # the same optimum the greedy converged toward, in O(n) per bisection step
-    # instead of hundreds of thousands of increments.
+    # ── NP-optimal power allocation (Lagrangian water-filling) ─────────────
+    # Under a *normalized*-power budget the marginal cost of a watt scales as P³
+    # (because NP⁴ = mean(P⁴)): a watt added to a 0 W section is almost free, while
+    # a watt added to a 600 W section is hugely expensive.  The optimum therefore
+    # shifts effort *off* the climbs and *onto* the flats/descents until the time
+    # saved per unit of NP-cost is equal on every chunk — a far smoother profile
+    # than the constant-speed (energy-optimal) plan.
+    #
+    # Minimising total time at a fixed NP is, via a Lagrange multiplier μ ≥ 0,
+    # separable: each chunk independently minimises
+    #     h_c(v) = (1/v)·(1 + μ·P_c(v)⁴),   P_c(v) = clip(φ_c(v), 0, p_max)
+    # where φ_c(v) = (f_grav_c + f_roll_c + aero_k·v²)·v/(1-η) is the steady power to
+    # hold speed v on chunk c.  μ prices NP against time and is found by bisection
+    # so the momentum simulation's realised NP equals the target.  Each chunk's
+    # optimum v is read off a shared speed grid (h_c is unimodal in v).
+    v_grid = np.linspace(V_FLOOR, 35.0, 400)
+    aero_term = aero_k * v_grid * v_grid                     # ½·ρ·CdA·v²   (G,)
+    # Steady power to hold each grid speed on each chunk (n, G), *unclipped*.  A
+    # (chunk, speed) pair is infeasible when that power exceeds the cap — you
+    # physically cannot hold that speed within the power ceiling — so it is
+    # excluded.  Clipping it to p_max instead would let the optimiser "buy" a
+    # high speed while paying only the (now constant) capped power, whose 1/v
+    # cost keeps falling with v; that spurious branch produces scattered
+    # full-power spikes on chunks that aren't actually steep enough to need them.
+    p_raw = (f_sum[:, None] + aero_term[None, :]) * v_grid[None, :] / one_minus_eta
+    feasible = p_raw <= p_max
+    p_eff = np.clip(p_raw, 0.0, None)                        # coast (P=0) on descents
+    p_eff4 = p_eff ** 4
+    inv_v = (1.0 / v_grid)[None, :]                          # time weight per speed
+    chunk_idx = np.arange(n)
+
     v_enter = np.empty(n)
     time_arr = np.empty(n)
 
-    def powers_for_vstar(vstar):
-        """Steady-state power per chunk to hold ``vstar``, clamped to [0, p_max]."""
-        p_int = (f_sum + aero_k * vstar * vstar) * vstar / one_minus_eta
-        return np.clip(p_int, 0.0, p_max)
+    def optimal_power(mu):
+        """NP-optimal per-chunk power for Lagrange price ``mu`` (≥ 0)."""
+        cost = np.where(feasible, inv_v * (1.0 + mu * p_eff4), np.inf)
+        gi = np.argmin(cost, axis=1)
+        return p_eff[chunk_idx, gi]
 
     def forward_sim(pw):
         """Momentum forward pass for power profile ``pw``; fills v_enter/time_arr."""
@@ -241,38 +292,41 @@ def plan_tt_pacing(
             v, dt = step(c, v, float(pw[c]))
             time_arr[c] = dt
 
-    def avg_power_for(vstar):
-        """Realised time-average power (and power profile) for target speed ``vstar``."""
-        pw = powers_for_vstar(vstar)
+    def np_for(mu):
+        """Realised NP (and power profile) for Lagrange price ``mu``."""
+        pw = optimal_power(mu)
         forward_sim(pw)
-        st = float(np.sum(time_arr))
-        return ((float(np.sum(pw * time_arr)) / st) if st > 0.0 else 0.0), pw
+        return _normalized_power(pw, time_arr), pw
 
-    # Bisect the common target speed v* so the realised time-average power hits
-    # the target.  Higher v* ⇒ more interior power ⇒ higher average, so the map
-    # v* → average power is monotonic and a root exists below the cap.
-    lo, hi = V_FLOOR, 30.0
-    avg_hi, _ = avg_power_for(hi)
-    if avg_hi <= avg_power_target_w:
-        vstar = hi  # target unreachable even flat-out — ride as hard as possible
-    else:
-        for _ in range(60):
-            mid = 0.5 * (lo + hi)
-            avg_mid, _ = avg_power_for(mid)
-            if avg_mid < avg_power_target_w:
-                lo = mid
+    # μ = 0 ignores NP entirely → power pinned at the cap → maximum NP.  Raising μ
+    # lowers every chunk's power, so NP decreases monotonically in μ; bracket then
+    # bisect μ to land on the target NP.
+    np_lo, power = np_for(0.0)              # μ = 0 → highest NP the plan allows
+    if np_lo > power_target_w:              # else target unreachable — ride flat out
+        mu_lo, mu_hi = 0.0, 1e-12
+        np_hi, _ = np_for(mu_hi)
+        expand = 0
+        while np_hi > power_target_w and expand < 80:
+            mu_hi *= 4.0
+            np_hi, _ = np_for(mu_hi)
+            expand += 1
+        for _ in range(50):
+            mu_mid = 0.5 * (mu_lo + mu_hi)
+            np_mid, _ = np_for(mu_mid)
+            if np_mid > power_target_w:
+                mu_lo = mu_mid
             else:
-                hi = mid
-        vstar = 0.5 * (lo + hi)
-
-    _, power = avg_power_for(vstar)  # leaves v_enter/time_arr set to final profile
-    sum_t = float(np.sum(time_arr))
-    sum_pt = float(np.sum(power * time_arr))
+                mu_hi = mu_mid
+        power = optimal_power(0.5 * (mu_lo + mu_hi))
+        forward_sim(power)
 
     times = time_arr
     total_time = float(np.sum(times))
     speed_mps = np.where(times > 0, length / times, 0.0)
+    sum_t = float(np.sum(times))
+    sum_pt = float(np.sum(power * times))
     avg_power_time = (sum_pt / sum_t) if sum_t > 0.0 else 0.0
+    normalized_power = _normalized_power(power, times)
 
 
     display_dist_km = route.display_distance_km
@@ -295,6 +349,7 @@ def plan_tt_pacing(
         total_ascent_m=route.display_ascent_m,
         avg_speed_kph=round(avg_speed_kph, 1),
         avg_power_w=round(avg_power_time, 1),
+        normalized_power_w=round(normalized_power, 1),
         max_power_w=round(float(np.max(power)), 1),
         min_power_w=round(float(np.min(power)), 1),
         distance_km=[round(float(mid_dist[i]) / 1000.0, 3) for i in idx],

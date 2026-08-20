@@ -14,7 +14,7 @@
     <div class="header-bar">
         <div>
             <a href="/" class="back-link">← Back to Tools</a>
-            <h1>📈 TT Pacing Planner</h1>
+            <h1><span class="logo-emoji">📈</span> TT Pacing Planner</h1>
             <p class="subtitle">Optimal power-vs-distance plan for a time trial</p>
         </div>
     </div>
@@ -66,9 +66,10 @@
             </div>
 
             <div class="form-group">
-                <label for="avgPower">Average Power Target (W)</label>
+                <label for="avgPower">Normalized Power Target (W)</label>
                 <input type="number" id="avgPower" value="250" min="50" max="2000" step="5"
                        oninput="updateWperKg()">
+                <p class="field-hint">The plan holds this NP (30 s rolling, 4th-power weighted).</p>
             </div>
 
             <div class="wpkg-display" id="wpkgDisplay">— W/kg</div>
@@ -79,14 +80,35 @@
             <h2>🚲 Bike</h2>
 
             <div class="form-group">
-                <label for="bikeWeight">Weight (kg)</label>
-                <input type="number" id="bikeWeight" value="8.0" min="4" max="20" step="0.1">
+                <label for="frameSelect">Frame</label>
+                <select id="frameSelect" onchange="onFrameChange()">
+                    <option value="">Loading…</option>
+                </select>
             </div>
 
             <div class="form-group">
-                <label for="cdaEffect">CdA Effect (m²)</label>
-                <input type="number" id="cdaEffect" value="0.000" min="-0.1" max="0.1" step="0.001">
-                <p class="field-hint">Bike's CdA bias vs a baseline frame. Negative = more aero.</p>
+                <label for="wheelSelect">Wheels</label>
+                <select id="wheelSelect" onchange="updateBikeStats()">
+                    <option value="">Loading…</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="upgradeLevel">Upgrade Level</label>
+                <select id="upgradeLevel" onchange="updateBikeStats()">
+                    <option value="0">0 — Stock</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5 — Max</option>
+                </select>
+            </div>
+
+            <div class="bike-stats" id="bikeStats">
+                <div class="stat-pill"><span class="stat-label">Cd</span><span class="stat-value" id="bikeCd">—</span></div>
+                <div class="stat-pill"><span class="stat-label">Weight</span><span class="stat-value" id="bikeWeightStat">—</span></div>
+                <div class="stat-pill"><span class="stat-label">Type</span><span class="stat-value" id="bikeType">—</span></div>
             </div>
         </div>
     </div>
@@ -130,6 +152,16 @@
                 <div class="card-icon">⚡</div>
                 <div class="card-value" id="powerRange">—</div>
                 <div class="card-label">Power (min–max)</div>
+            </div>
+            <div class="summary-card">
+                <div class="card-icon">📊</div>
+                <div class="card-value" id="normPower">—</div>
+                <div class="card-label">Normalized Power</div>
+            </div>
+            <div class="summary-card">
+                <div class="card-icon">🔋</div>
+                <div class="card-value" id="avgPowerStat">—</div>
+                <div class="card-label">Avg Power</div>
             </div>
         </div>
 

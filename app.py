@@ -2415,8 +2415,9 @@ def api_tt_pacing_plan():
         rider_weight_kg (float)
         rider_height_cm (float)
         avg_power_watts (float) — target overall average power
-        bike_weight_kg  (float)
-        cda_effect      (float) — bike CdA bias (m², may be negative)
+        frame_id        (str)
+        wheel_id        (str or null)
+        upgrade_level   (int, 0-5)
     """
     body = request.get_json(force=True, silent=True) or {}
 
@@ -2425,8 +2426,9 @@ def api_tt_pacing_plan():
         weight_kg   = float(body['rider_weight_kg'])
         height_cm   = float(body['rider_height_cm'])
         avg_power_w = float(body['avg_power_watts'])
-        bike_kg     = float(body['bike_weight_kg'])
-        cda_effect  = float(body.get('cda_effect', 0.0))
+        frame_id    = str(body['frame_id'])
+        wheel_id    = body.get('wheel_id') or None
+        level       = int(body.get('upgrade_level', 0))
     except (KeyError, TypeError, ValueError) as exc:
         return jsonify({'error': f'Invalid request: {exc}'}), 400
 
@@ -2434,16 +2436,20 @@ def api_tt_pacing_plan():
         return jsonify({'error': 'avg_power_watts must be positive'}), 400
     if weight_kg <= 0 or height_cm <= 0:
         return jsonify({'error': 'rider_weight_kg and rider_height_cm must be positive'}), 400
-    if bike_kg <= 0:
-        return jsonify({'error': 'bike_weight_kg must be positive'}), 400
+
+    db = get_db()
+    bike_setup = db.get_bike_stats(frame_id, wheel_id, level)
+    if bike_setup is None:
+        return jsonify({'error': f'Unknown frame/wheel combination: {frame_id}/{wheel_id}'}), 400
 
     # Absolute CdA for this rider + bike (same model as the ride simulator):
-    # (baseline + bike bias) scaled by the rider's frontal area.
+    # the bike's equivalent cd scaled by the rider's frontal area.
     height_m = height_cm / 100.0
     frontal_area = frontal_area_from_rider(height_m, weight_kg)
-    cda = (BASE_CDA + cda_effect) * (frontal_area / REF_FRONTAL_AREA)
+    cda = bike_setup.cd * frontal_area
+    bike_kg = bike_setup.weight_kg
     if cda <= 0:
-        return jsonify({'error': 'Resulting CdA is non-positive; check the CdA effect.'}), 400
+        return jsonify({'error': 'Resulting CdA is non-positive.'}), 400
 
     try:
         route = load_route_profile(
@@ -2456,7 +2462,7 @@ def api_tt_pacing_plan():
             rider_height_m=height_m,
             bike_weight_kg=bike_kg,
             cda=cda,
-            avg_power_target_w=avg_power_w,
+            power_target_w=avg_power_w,
         )
     except ValueError as exc:
         return jsonify({'error': str(exc)}), 400
@@ -2472,6 +2478,7 @@ def api_tt_pacing_plan():
         'total_ascent_m': round(result.total_ascent_m),
         'avg_speed_kph': result.avg_speed_kph,
         'avg_power_w': result.avg_power_w,
+        'normalized_power_w': result.normalized_power_w,
         'max_power_w': result.max_power_w,
         'min_power_w': result.min_power_w,
         'cda': round(cda, 4),
