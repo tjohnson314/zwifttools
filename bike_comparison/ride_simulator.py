@@ -145,9 +145,26 @@ def _find_wad_route(
     return entries[0]
 
 
+def route_is_loop(
+    route_name: str, world: Optional[str] = None, route_id: Optional[str] = None
+) -> bool:
+    """True if the route is a loop (start/end coincide) and can be lapped.
+
+    Only WAD ``zwift_routes`` geometry carries the coordinates needed to detect
+    a loop; routes without WAD data are treated as non-loops.
+    """
+    entry = _find_wad_route(route_name, world, route_id)
+    if entry is None:
+        return False
+    try:
+        return surface_map.route_is_loop(entry["mapID"], entry["nameHash"])
+    except (KeyError, OSError, ValueError):
+        return False
+
+
 def _load_wad_profile(
     route_name: str, world: Optional[str], include_leadin: bool,
-    route_id: Optional[str] = None,
+    route_id: Optional[str] = None, laps: int = 1,
 ) -> Optional[dict]:
     """Build a route profile from WAD ``zwift_routes`` geometry.
 
@@ -170,6 +187,26 @@ def _load_wad_profile(
     surfaces = np.asarray(main["surface"], dtype=object)
     source_distance_m = float(data.get("distance_m") or 0.0)
     source_ascent_m = float(data.get("ascent_m") or 0.0)
+
+    # Repeat the main (non-lead-in) leg for multi-lap plans on looped routes.
+    n_laps = max(1, int(laps or 1))
+    if n_laps > 1 and len(distance) >= 2:
+        lap_len = float(distance[-1] - distance[0])
+        rel = distance - distance[0]  # 0 .. lap_len
+        d_parts = [distance]
+        alt_parts = [altitude]
+        surf_parts = [surfaces]
+        for k in range(1, n_laps):
+            # Drop each lap's first point (a duplicate of the previous lap's
+            # end) so the concatenated axis is strictly increasing.
+            d_parts.append(distance[0] + rel[1:] + lap_len * k)
+            alt_parts.append(altitude[1:])
+            surf_parts.append(surfaces[1:])
+        distance = np.concatenate(d_parts)
+        altitude = np.concatenate(alt_parts)
+        surfaces = np.concatenate(surf_parts)
+        source_distance_m *= n_laps
+        source_ascent_m *= n_laps
 
     leadin = data.get("leadin")
     if include_leadin and leadin and leadin.get("d"):
@@ -357,6 +394,7 @@ def list_routes() -> list[dict]:
             "ascent_m": round(ascent_m),
             "leadin_distance_km": round(leadin_dist_m / 1000, 1),
             "leadin_ascent_m": round(leadin_ascent_m),
+            "is_loop": route_is_loop(name, world, route_id),
         })
 
     return sorted(routes, key=lambda r: (r["world"], r["name"]))
@@ -367,6 +405,7 @@ def load_route_profile(
     route_name: str,
     world: Optional[str] = None,
     include_leadin: bool = True,
+    laps: int = 1,
 ) -> RouteProfile:
     """
     Load the real elevation profile for a route.
@@ -384,8 +423,10 @@ def load_route_profile(
             to disambiguate WAD routes that share a name.
         include_leadin: Include the route's lead-in leg in the profile (WAD
             geometry only).
+        laps: Number of laps to ride. For looped routes the main (non-lead-in)
+            leg is repeated this many times; the lead-in is ridden once.
     """
-    wad = _load_wad_profile(route_name, world, include_leadin, route_id)
+    wad = _load_wad_profile(route_name, world, include_leadin, route_id, laps)
     if wad is not None:
         return RouteProfile(
             name=route_name,

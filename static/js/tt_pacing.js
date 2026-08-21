@@ -14,6 +14,8 @@ let planChart = null;     // Chart.js instance
 let lastPlanData = null;  // most recent plan response, for re-rendering on unit change
 let serverDividerIdx = []; // profile-point indices of the current buckets' dividers
 let bucketSliderTimer = null;
+let laps = 1;             // number of laps for looped routes
+let routeSlugMap = {};    // slug → route object, for URL deep-linking
 
 // ── Units ────────────────────────────────────────────────────────────────────
 // The API always works in metric; imperial is a display/input-only conversion.
@@ -141,6 +143,7 @@ function saveSettings() {
         wheelId: document.getElementById('wheelSelect').value,
         upgradeLevel: document.getElementById('upgradeLevel').value,
         includeLeadin: document.getElementById('includeLeadin').checked,
+        laps: laps,
     };
     try { localStorage.setItem(TT_SETTINGS_KEY, JSON.stringify(data)); } catch (e) { /* ignore */ }
 }
@@ -149,13 +152,22 @@ function saveSettings() {
 function restoreSelections(settings) {
     const hasOption = (el, val) => [...el.options].some(o => o.value === val);
 
-    if (settings.world) {
+    // A ?route= URL param takes precedence over the saved route.
+    const fromUrl = selectRouteFromUrl();
+
+    if (settings.world && !fromUrl) {
         const wf = document.getElementById('worldFilter');
         if (hasOption(wf, settings.world)) { wf.value = settings.world; filterRoutes(); }
     }
-    if (settings.routeId) {
+    if (settings.routeId && !fromUrl) {
         const rs = document.getElementById('routeSelect');
         if (hasOption(rs, settings.routeId)) { rs.value = settings.routeId; onRouteChange(); }
+    }
+    // Restore the saved lap count for a looped route (onRouteChange reset it).
+    if (settings.laps && selectedRoute && selectedRoute.is_loop) {
+        laps = Math.max(1, parseInt(settings.laps, 10) || 1);
+        updateLapUI();
+        showRouteStats(selectedRoute);
     }
     if (settings.frameId) {
         const fs = document.getElementById('frameSelect');
@@ -214,8 +226,32 @@ async function loadRoutes() {
     if (!resp.ok) throw new Error('Could not load routes');
     const data = await resp.json();
     allRoutes = data.routes || [];
+    buildRouteSlugMap();
     populateWorldFilter();
     filterRoutes();
+}
+
+// Normalise a route name into a URL-safe slug (must match the shared convention).
+function convertToSlug(routeName) {
+    return routeName
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim()
+        .replace(/[^\w\s-]/g, '')
+        .replace(/\s+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+}
+
+// Map each route's slug back to the route object so a ?route= param resolves to
+// the original route. First match wins when two worlds share a slug.
+function buildRouteSlugMap() {
+    routeSlugMap = {};
+    allRoutes.forEach(r => {
+        const slug = convertToSlug(r.name);
+        if (slug && !(slug in routeSlugMap)) routeSlugMap[slug] = r;
+    });
 }
 
 async function loadBikeDatabase() {
@@ -266,6 +302,7 @@ function filterRoutes() {
     } else {
         selectedRoute = null;
         hideRouteStats();
+        updateLapUI();
     }
     updatePlanButton();
 }
@@ -273,16 +310,82 @@ function filterRoutes() {
 function onRouteChange() {
     const id = document.getElementById('routeSelect').value;
     selectedRoute = allRoutes.find(r => r.id === id) || null;
-    if (selectedRoute) showRouteStats(selectedRoute);
-    else hideRouteStats();
+    laps = 1;
+    updateLapUI();
+    if (selectedRoute) {
+        showRouteStats(selectedRoute);
+        setRouteUrlParam(selectedRoute);
+    } else {
+        hideRouteStats();
+        clearRouteUrlParam();
+    }
     updatePlanButton();
+}
+
+// ── Laps (looped routes only) ─────────────────────────────────────────────────
+function updateLapUI() {
+    const group = document.getElementById('lapGroup');
+    const isLoop = !!(selectedRoute && selectedRoute.is_loop);
+    group.style.display = isLoop ? 'block' : 'none';
+    if (!isLoop) laps = 1;
+    document.getElementById('lapCount').textContent = laps;
+    document.getElementById('lapMinus').disabled = laps <= 1;
+}
+
+function changeLaps(delta) {
+    laps = Math.max(1, laps + delta);
+    updateLapUI();
+    if (selectedRoute) showRouteStats(selectedRoute);
+    saveSettings();
+}
+
+// ── URL deep-linking ──────────────────────────────────────────────────────────
+function setRouteUrlParam(route) {
+    try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('route', convertToSlug(route.name));
+        window.history.replaceState(null, '', url);
+    } catch (e) { /* ignore */ }
+}
+
+function clearRouteUrlParam() {
+    try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('route');
+        window.history.replaceState(null, '', url);
+    } catch (e) { /* ignore */ }
+}
+
+// Resolve a ?route= slug to a route and select it. Returns true on success.
+function selectRouteFromUrl() {
+    let slug = null;
+    try { slug = new URL(window.location.href).searchParams.get('route'); }
+    catch (e) { return false; }
+    if (!slug) return false;
+    const route = routeSlugMap[slug];
+    if (!route) return false;
+
+    const wf = document.getElementById('worldFilter');
+    if ([...wf.options].some(o => o.value === route.world)) {
+        wf.value = route.world;
+        filterRoutes();
+    }
+    const rs = document.getElementById('routeSelect');
+    if ([...rs.options].some(o => o.value === route.id)) {
+        rs.value = route.id;
+        onRouteChange();
+        return true;
+    }
+    return false;
 }
 
 function showRouteStats(route) {
     document.getElementById('routeStats').style.display = 'flex';
     const includeLeadin = document.getElementById('includeLeadin').checked;
-    const dist = route.distance_km + (includeLeadin ? (route.leadin_distance_km || 0) : 0);
-    const ascent = route.ascent_m + (includeLeadin ? (route.leadin_ascent_m || 0) : 0);
+    const dist = (includeLeadin ? (route.leadin_distance_km || 0) : 0)
+        + route.distance_km * laps;
+    const ascent = (includeLeadin ? (route.leadin_ascent_m || 0) : 0)
+        + route.ascent_m * laps;
     document.getElementById('statDist').textContent = fmtDistance(dist);
     document.getElementById('statAscent').textContent = fmtElevation(ascent);
 }
@@ -446,6 +549,7 @@ async function requestPlan({ numBuckets = null, isBuild = false } = {}) {
                 frame_id:        frameId,
                 wheel_id:        wheelId,
                 upgrade_level:   level,
+                laps:            (selectedRoute.is_loop ? laps : 1),
                 num_buckets:     numBuckets != null ? numBuckets : undefined,
             }),
         });

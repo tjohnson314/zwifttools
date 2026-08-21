@@ -49,6 +49,15 @@
                 <label for="includeLeadin">Include lead-in</label>
             </div>
 
+            <div class="form-group lap-group" id="lapGroup" style="display:none;">
+                <label>Laps</label>
+                <div class="lap-counter">
+                    <button type="button" class="lap-btn" id="lapMinus" onclick="changeLaps(-1)" aria-label="Fewer laps">−</button>
+                    <span class="lap-count" id="lapCount">1</span>
+                    <button type="button" class="lap-btn" id="lapPlus" onclick="changeLaps(1)" aria-label="More laps">+</button>
+                </div>
+            </div>
+
             <div class="route-stats" id="routeStats" style="display:none;">
                 <div class="stat-pill"><span class="stat-label">Distance</span><span class="stat-value" id="statDist">—</span></div>
                 <div class="stat-pill"><span class="stat-label">Ascent</span><span class="stat-value" id="statAscent">—</span></div>

@@ -2539,6 +2539,8 @@ def api_tt_pacing_plan():
                         split the course into constant-power buckets
         num_buckets     (int, optional) — number of automatic "smart" buckets;
                         dividers are placed optimally and this wins over dividers_km
+        laps            (int, optional) — number of laps for looped routes; the
+                        main leg is repeated this many times (lead-in ridden once)
     """
     body = request.get_json(force=True, silent=True) or {}
 
@@ -2570,6 +2572,13 @@ def api_tt_pacing_plan():
         if num_buckets < 1:
             return jsonify({'error': 'num_buckets must be >= 1'}), 400
 
+    try:
+        laps = int(body.get('laps', 1) or 1)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'laps must be an integer'}), 400
+    if laps < 1:
+        return jsonify({'error': 'laps must be >= 1'}), 400
+
     if avg_power_w <= 0:
         return jsonify({'error': 'avg_power_watts must be positive'}), 400
     if weight_kg <= 0 or height_cm <= 0:
@@ -2593,6 +2602,7 @@ def api_tt_pacing_plan():
         route = load_route_profile(
             body.get('route_id', ''), route_name, world=body.get('world'),
             include_leadin=bool(body.get('include_leadin', True)),
+            laps=laps,
         )
         result = plan_tt_pacing(
             route=route,

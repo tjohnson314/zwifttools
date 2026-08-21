@@ -190,6 +190,47 @@ h1 .logo-emoji {
     margin-top: 6px;
 }
 
+/* Lap counter */
+.lap-counter {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.lap-btn {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid rgba(247,147,30,0.4);
+    border-radius: 6px;
+    background: rgba(247,147,30,0.12);
+    color: #f7931e;
+    font-size: 1.2rem;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.lap-btn:hover:not(:disabled) {
+    background: rgba(247,147,30,0.25);
+}
+
+.lap-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.lap-count {
+    min-width: 28px;
+    text-align: center;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #f7931e;
+}
+
 .bike-stats {
     display: flex;
     gap: 8px;

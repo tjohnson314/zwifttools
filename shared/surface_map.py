@@ -343,6 +343,30 @@ def _surface_breakdown(leg: dict | None) -> dict[str, float]:
     return totals
 
 
+def route_is_loop(map_id: int, name_hash: int, threshold_m: float = 100.0) -> bool:
+    """True if the main route leg starts and ends at (nearly) the same point.
+
+    Uses the raw ``x``/``z`` game-local coordinates (metres) of the route leg,
+    matching the loop test used by the race-replay tool (start/end < 100 m).
+    Note: Zwift's own ``supported_laps`` flag marks more routes as lappable
+    (e.g. Hilly Route, whose start banner is offset ~350 m from the lap seam),
+    but we only enable multi-lap where the geometry actually closes so the
+    repeated profile joins without an inferred connector.
+    """
+    routes = _load_route_world(map_id).get("routes", [])
+    route = next((r for r in routes if r.get("nameHash") == name_hash), None)
+    if route is None:
+        return False
+    leg = route.get("route") or {}
+    xs = leg.get("x", [])
+    zs = leg.get("z", [])
+    if len(xs) < 2 or len(zs) < 2:
+        return False
+    dx = float(xs[0]) - float(xs[-1])
+    dz = float(zs[0]) - float(zs[-1])
+    return (dx * dx + dz * dz) ** 0.5 < threshold_m
+
+
 def get_route(map_id: int, name_hash: int) -> dict | None:
     """Return full geometry + elevation + per-point surface for one route."""
     routes = _load_route_world(map_id).get("routes", [])
