@@ -13,18 +13,15 @@
             <div>
                 <a href="/" class="back-link">&#8592; Back to Tools</a>
                 <h1>Power Dashboard</h1>
-                <p class="subtitle">Best power curve from your last 90 days, compared with your latest activity.</p>
+                <p class="subtitle">Best power curve from your last 90 days. Add dividers in the activity list to compare power across date ranges.</p>
             </div>
-            <div class="legend-chip-row">
-                <span class="chip chip-all">Last 90 Days</span>
-                <span class="chip chip-latest">Latest Activity</span>
-            </div>
+            <div id="loadSummary" class="load-summary" style="display:none;"></div>
         </header>
 
         <div id="loadingState" class="state-card loading">
             <div class="spinner"></div>
             <div class="loading-copy">
-                <div>Building power dashboard from your recent activities...</div>
+                <div>Fetching your recent activities...</div>
                 <div id="loadingProgress" class="loading-progress">Starting...</div>
             </div>
         </div>
@@ -37,11 +34,7 @@
                     <h2>Peak Power Curve</h2>
                     <span id="pinState" class="pin-state">Hover to inspect</span>
                 </div>
-                <div class="chart-legend" aria-hidden="true">
-                    <span class="legend-item"><span class="legend-line legend-line-all"></span>Last 90 Days</span>
-                    <span class="legend-item"><span class="legend-line legend-line-latest"></span>Latest Activity</span>
-                    <span class="legend-item"><span class="legend-line legend-line-range"></span>Custom Range</span>
-                </div>
+                <div id="partitionLegend" class="partition-legend"></div>
                 <div class="chart-wrap line-wrap">
                     <canvas id="powerCurveChart"></canvas>
                 </div>
@@ -53,58 +46,9 @@
                         <h3 id="selectedInterval">00:00:00</h3>
                         <span id="selectedIntervalLabel" class="duration-label">0s</span>
                     </div>
-
-                    <div class="metric-row">
-                        <div class="metric-value" id="bestPowerValue">—</div>
-                        <div class="metric-context">
-                            <div class="metric-label">Last 90 days best</div>
-                            <a id="bestActivityLink" class="activity-link" href="#" target="_blank" rel="noopener">—</a>
-                            <div id="bestActivityDate" class="activity-date">—</div>
-                            <div id="bestActivityLinks" class="activity-actions"></div>
-                        </div>
+                    <div id="partitionMetrics" class="partition-metrics">
+                        <div class="partition-metrics-empty">Hover the chart to inspect an interval.</div>
                     </div>
-
-                    <div class="metric-row latest-row">
-                        <div class="metric-value" id="latestPowerValue">—</div>
-                        <div class="metric-context">
-                            <div class="metric-label">Latest activity</div>
-                            <a id="latestActivityLink" class="activity-link" href="#" target="_blank" rel="noopener">—</a>
-                            <div id="latestActivityDate" class="activity-date">—</div>
-                            <div id="latestActivityLinks" class="activity-actions"></div>
-                        </div>
-                    </div>
-
-                    <div class="metric-row range-row">
-                        <div class="metric-value" id="rangePowerValue">—</div>
-                        <div class="metric-context">
-                            <div class="metric-label">Custom range best</div>
-                            <a id="rangeActivityLink" class="activity-link" href="#" target="_blank" rel="noopener">—</a>
-                            <div id="rangeActivityDate" class="activity-date">—</div>
-                            <div id="rangeActivityLinks" class="activity-actions"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="range-panel">
-                    <div class="range-panel-title-row">
-                        <h3>Custom Range</h3>
-                        <span class="range-panel-hint">Within the last 90 days</span>
-                    </div>
-                    <div class="range-grid">
-                        <label class="range-field">
-                            <span>Start</span>
-                            <input id="rangeStartInput" type="datetime-local">
-                        </label>
-                        <label class="range-field">
-                            <span>End</span>
-                            <input id="rangeEndInput" type="datetime-local">
-                        </label>
-                    </div>
-                    <div class="range-actions-row">
-                        <button id="applyRangeBtn" class="range-btn primary" type="button">Apply Range</button>
-                        <button id="clearRangeBtn" class="range-btn" type="button">Clear</button>
-                    </div>
-                    <div id="rangeStatus" class="range-status">No custom range selected.</div>
                 </div>
 
                 <div class="bars-panel">
@@ -129,6 +73,34 @@
                 </div>
             </section>
         </main>
+
+        <section id="activityListPanel" class="panel activity-list-panel" style="display:none;">
+            <div class="activity-list-header">
+                <h2>Activities</h2>
+                <div class="activity-list-tools">
+                    <span id="dividerHint" class="divider-hint">Use the &ldquo;+ divider&rdquo; buttons between rows to split activities into power-curve groups.</span>
+                    <button id="clearDividersBtn" class="range-btn" type="button" style="display:none;">Clear dividers</button>
+                </div>
+            </div>
+            <div class="activity-table-wrap">
+                <table class="activity-table">
+                    <thead>
+                        <tr>
+                            <th class="col-group">Group</th>
+                            <th>Date</th>
+                            <th>Name</th>
+                            <th class="num">Distance</th>
+                            <th class="num">Time</th>
+                            <th class="num">Avg Power</th>
+                            <th class="num">Avg HR</th>
+                            <th class="col-status">Power data</th>
+                            <th>Links</th>
+                        </tr>
+                    </thead>
+                    <tbody id="activityListBody"></tbody>
+                </table>
+            </div>
+        </section>
     </div>
 
     <script src="/static/js/power_dashboard.js"></script>

@@ -745,6 +745,7 @@ def _fetch_recent_activities_for_profile(headers, profile_id, days=90, page_size
                 'start_date': start_date_raw,
                 'start_dt': start_dt,
                 'duration_sec': duration_sec,
+                'distance_km': round(act.get('distanceInMeters', 0) / 1000, 2) if act.get('distanceInMeters') else 0,
                 'end_dt': start_dt + timedelta(seconds=duration_sec) if duration_sec else start_dt,
             })
 
@@ -753,6 +754,122 @@ def _fetch_recent_activities_for_profile(headers, profile_id, days=90, page_size
         start += page_size
 
     return recent
+
+
+@app.route('/api/power_dashboard/activities')
+def api_power_dashboard_activities():
+    """List recent activities (last 90 days) for the progressive power dashboard.
+
+    Lightweight: only the activity metadata is returned. Telemetry (and the peak
+    power curve) is loaded per-activity via /api/power_dashboard/activity/<id>.
+    """
+    headers = get_headers()
+    if not headers:
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    try:
+        profile_resp = _request_with_retry(
+            'GET',
+            f'{BASE_URL}/profiles/me',
+            headers=headers,
+            timeout=15,
+        )
+        if profile_resp.status_code != 200:
+            return jsonify({'error': 'Failed to fetch profile'}), profile_resp.status_code
+
+        profile = profile_resp.json()
+        profile_id = profile.get('id')
+        if not profile_id:
+            return jsonify({'error': 'Could not determine profile ID'}), 500
+
+        lookback_days = 90
+        recent = _fetch_recent_activities_for_profile(
+            headers,
+            profile_id,
+            days=lookback_days,
+            page_size=50,
+        )
+        recent = sorted(recent, key=lambda a: a['start_dt'], reverse=True)
+
+        intervals = _build_power_intervals_seconds()
+        return jsonify({
+            'durations_sec': intervals,
+            'durations_label': [_format_interval_label(s) for s in intervals],
+            'lookback_days': lookback_days,
+            'activities': [
+                {
+                    'activity_id': a['id'],
+                    'name': a['name'],
+                    'start_date': a['start_dt'].isoformat(),
+                    'end_date': a['end_dt'].isoformat() if a.get('end_dt') else a['start_dt'].isoformat(),
+                    'duration_sec': a['duration_sec'],
+                    'distance_km': a.get('distance_km', 0),
+                }
+                for a in recent
+            ],
+        })
+    except Exception as e:
+        logger.exception("Error listing power dashboard activities")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/power_dashboard/activity/<activity_id>')
+def api_power_dashboard_activity(activity_id):
+    """Return the peak-power curve for a single activity.
+
+    Always responds 200 when reachable — activities without power telemetry return
+    has_power=false so the frontend can mark them as "no data" rather than erroring.
+    """
+    headers = get_headers()
+    if not headers:
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    intervals = _build_power_intervals_seconds()
+    empty_curve = [None for _ in intervals]
+
+    try:
+        telem_data, activity_data, error = fetch_rider_telemetry(activity_id, headers)
+        if error or not telem_data:
+            return jsonify({
+                'activity_id': str(activity_id),
+                'has_power': False,
+                'peak_watts': empty_curve,
+            })
+
+        power_values = telem_data.get('powerInWatts') or []
+        if not power_values:
+            return jsonify({
+                'activity_id': str(activity_id),
+                'has_power': False,
+                'peak_watts': empty_curve,
+            })
+
+        peaks = _compute_peak_power_curve(power_values, intervals)
+        event_info = (activity_data or {}).get('eventInfo') or {}
+        event_subgroup_id = event_info.get('eventSubGroupId') or event_info.get('eventSubgroupId')
+        event_id = event_info.get('id') or event_info.get('eventId')
+
+        power_arr = np.asarray(power_values, dtype=np.float64)
+        power_arr = np.nan_to_num(power_arr, nan=0.0, posinf=0.0, neginf=0.0)
+        avg_power = round(float(np.mean(power_arr)), 1) if power_arr.size else None
+
+        hr_values = telem_data.get('heartRate') or []
+        hr_arr = np.asarray(hr_values, dtype=np.float64)
+        hr_arr = hr_arr[hr_arr > 0] if hr_arr.size else hr_arr
+        avg_hr = round(float(np.mean(hr_arr)), 0) if hr_arr.size else None
+
+        return jsonify({
+            'activity_id': str(activity_id),
+            'has_power': True,
+            'is_race': bool(event_subgroup_id),
+            'event_id': event_id,
+            'avg_power': avg_power,
+            'avg_hr': avg_hr,
+            'peak_watts': [round(peaks.get(sec), 1) if peaks.get(sec) is not None else None for sec in intervals],
+        })
+    except Exception as e:
+        logger.exception("Error building single-activity power curve")
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/power_dashboard')
