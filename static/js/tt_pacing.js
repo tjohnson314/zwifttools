@@ -12,6 +12,8 @@ let bikeDatabase = null;  // { frames, wheels, bikes } from /api/bike_database
 let selectedRoute = null; // currently selected route object
 let planChart = null;     // Chart.js instance
 let lastPlanData = null;  // most recent plan response, for re-rendering on unit change
+let serverDividerIdx = []; // profile-point indices of the current buckets' dividers
+let bucketSliderTimer = null;
 
 // ── Units ────────────────────────────────────────────────────────────────────
 // The API always works in metric; imperial is a display/input-only conversion.
@@ -115,11 +117,75 @@ function applyUnitToUI() {
     if (lastPlanData) displayResults(lastPlanData);
 }
 
+// ── Persisted settings ────────────────────────────────────────────────────────
+// Rider/bike/route choices are saved to localStorage so they survive reloads.
+// Rider weight/height are stored in canonical metric regardless of display unit.
+const TT_SETTINGS_KEY = 'ttSettings';
+
+function loadSettings() {
+    try { return JSON.parse(localStorage.getItem(TT_SETTINGS_KEY)) || {}; }
+    catch (e) { return {}; }
+}
+
+function saveSettings() {
+    const w = getWeightKg();
+    const h = getHeightCm();
+    const np = parseFloat(document.getElementById('avgPower').value);
+    const data = {
+        weightKg: isNaN(w) ? null : +w.toFixed(2),
+        heightCm: isNaN(h) ? null : +h.toFixed(1),
+        npTarget: isNaN(np) ? null : np,
+        world: document.getElementById('worldFilter').value,
+        routeId: document.getElementById('routeSelect').value,
+        frameId: document.getElementById('frameSelect').value,
+        wheelId: document.getElementById('wheelSelect').value,
+        upgradeLevel: document.getElementById('upgradeLevel').value,
+        includeLeadin: document.getElementById('includeLeadin').checked,
+    };
+    try { localStorage.setItem(TT_SETTINGS_KEY, JSON.stringify(data)); } catch (e) { /* ignore */ }
+}
+
+// Restore the saved dropdown choices once routes + bike database are populated.
+function restoreSelections(settings) {
+    const hasOption = (el, val) => [...el.options].some(o => o.value === val);
+
+    if (settings.world) {
+        const wf = document.getElementById('worldFilter');
+        if (hasOption(wf, settings.world)) { wf.value = settings.world; filterRoutes(); }
+    }
+    if (settings.routeId) {
+        const rs = document.getElementById('routeSelect');
+        if (hasOption(rs, settings.routeId)) { rs.value = settings.routeId; onRouteChange(); }
+    }
+    if (settings.frameId) {
+        const fs = document.getElementById('frameSelect');
+        if (hasOption(fs, settings.frameId)) { fs.value = settings.frameId; onFrameChange(); }
+    }
+    if (settings.wheelId) {
+        const ws = document.getElementById('wheelSelect');
+        if (hasOption(ws, settings.wheelId)) ws.value = settings.wheelId;
+    }
+    if (settings.upgradeLevel != null) {
+        const ul = document.getElementById('upgradeLevel');
+        if (hasOption(ul, String(settings.upgradeLevel))) ul.value = settings.upgradeLevel;
+    }
+    updateBikeStats();
+    updatePlanButton();
+}
+
 // ── Initialise ───────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-    let saved = null;
-    try { saved = localStorage.getItem('ttUnit'); } catch (e) { /* ignore */ }
-    if (saved === 'imperial') {
+    const settings = loadSettings();
+
+    // Restore rider inputs (canonical metric) before any unit conversion.
+    if (settings.weightKg != null) document.getElementById('riderWeight').value = settings.weightKg;
+    if (settings.heightCm != null) document.getElementById('riderHeight').value = settings.heightCm;
+    if (settings.npTarget != null) document.getElementById('avgPower').value = settings.npTarget;
+    if (settings.includeLeadin != null) document.getElementById('includeLeadin').checked = settings.includeLeadin;
+
+    let savedUnit = null;
+    try { savedUnit = localStorage.getItem('ttUnit'); } catch (e) { /* ignore */ }
+    if (savedUnit === 'imperial') {
         convertInputs('imperial');
         currentUnit = 'imperial';
     }
@@ -127,11 +193,19 @@ document.addEventListener('DOMContentLoaded', () => {
     updateUnitToggleUI();
 
     Promise.all([loadRoutes(), loadBikeDatabase()])
-        .then(updatePlanButton)
+        .then(() => { restoreSelections(settings); updatePlanButton(); })
         .catch(err => showError('Failed to load data: ' + err.message));
     updateWperKg();
     document.getElementById('includeLeadin')
         .addEventListener('change', () => { if (selectedRoute) showRouteStats(selectedRoute); });
+
+    // Persist choices whenever the user changes them.
+    ['riderWeight', 'riderHeight', 'avgPower', 'worldFilter', 'routeSelect',
+     'frameSelect', 'wheelSelect', 'upgradeLevel', 'includeLeadin'].forEach(id => {
+        const el = document.getElementById(id);
+        el.addEventListener('change', saveSettings);
+        if (el.type === 'number') el.addEventListener('input', saveSettings);
+    });
 });
 
 // ── Data loading ─────────────────────────────────────────────────────────────
@@ -319,6 +393,23 @@ function showError(msg) {
 
 // ── Plan request ──────────────────────────────────────────────────────────────
 async function runPlan() {
+    serverDividerIdx = [];        // a fresh build starts from the full optimal plan
+    await requestPlan({ numBuckets: null, isBuild: true });
+}
+
+// Slider moved: request that many "smart" buckets (max = the full optimal plan).
+function onBucketSliderInput() {
+    const slider = document.getElementById('bucketSlider');
+    const k = parseInt(slider.value, 10);
+    const max = parseInt(slider.max, 10);
+    document.getElementById('bucketCount').textContent = k >= max ? `${k} · max detail` : k;
+    clearTimeout(bucketSliderTimer);
+    bucketSliderTimer = setTimeout(() => {
+        requestPlan({ numBuckets: k >= max ? null : k, isBuild: false });
+    }, 220);
+}
+
+async function requestPlan({ numBuckets = null, isBuild = false } = {}) {
     if (!selectedRoute) return;
 
     const weightKg  = getWeightKg();
@@ -336,7 +427,8 @@ async function runPlan() {
     const btn = document.getElementById('planBtn');
     btn.disabled = true;
     btn.classList.add('loading');
-    btn.textContent = '⏳ Optimising…';
+    if (isBuild) btn.textContent = '⏳ Optimising…';
+    document.getElementById('bucketSlider').disabled = true;
     document.getElementById('planHint').textContent = '';
 
     try {
@@ -354,6 +446,7 @@ async function runPlan() {
                 frame_id:        frameId,
                 wheel_id:        wheelId,
                 upgrade_level:   level,
+                num_buckets:     numBuckets != null ? numBuckets : undefined,
             }),
         });
 
@@ -362,19 +455,20 @@ async function runPlan() {
             showError(data.error || 'Planning failed');
             return;
         }
-        displayResults(data);
+        displayResults(data, isBuild);
     } catch (err) {
         showError('Network error: ' + err.message);
     } finally {
         btn.disabled = false;
         btn.classList.remove('loading');
         btn.textContent = '▶ Build Pacing Plan';
+        document.getElementById('bucketSlider').disabled = false;
         updatePlanButton();
     }
 }
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
-function displayResults(data) {
+function displayResults(data, isBuild = false) {
     lastPlanData = data;
     document.getElementById('resultsSection').style.display = 'block';
     document.getElementById('resultsRouteName').textContent = data.route_name;
@@ -388,11 +482,84 @@ function displayResults(data) {
     document.getElementById('normPower').textContent = Math.round(data.normalized_power_w) + ' W';
     document.getElementById('avgPowerStat').textContent = Math.round(data.avg_power_w) + ' W';
 
+    // Divider distances (km) → nearest profile index for drawing the lines.
+    serverDividerIdx = (data.dividers_km || [])
+        .map(km => nearestProfileIndex(data.profile, km));
+
     renderChart(data.profile);
     renderTable(data.sections);
+    if (isBuild) configureBucketSlider(data.max_buckets);
+    updateBucketHint(data);
 
     document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
+
+// ── Smart buckets ─────────────────────────────────────────────────────────────
+// The server places the dividers (best step-fit of the optimal power curve) and
+// returns their distances; we draw them and drive everything from the slider.
+
+function nearestProfileIndex(profile, km) {
+    const arr = profile.distance_km;
+    let best = 0, bd = Infinity;
+    for (let i = 0; i < arr.length; i++) {
+        const d = Math.abs(arr[i] - km);
+        if (d < bd) { bd = d; best = i; }
+    }
+    return best;
+}
+
+function configureBucketSlider(maxBuckets) {
+    const slider = document.getElementById('bucketSlider');
+    const max = Math.max(1, maxBuckets || 1);
+    slider.max = max;
+    slider.value = max;
+    slider.disabled = false;
+    document.getElementById('bucketCount').textContent = `${max} · max detail`;
+}
+
+function updateBucketHint(data) {
+    const hint = document.getElementById('bucketHint');
+    if (!hint) return;
+    if (data.bucketed) {
+        const nb = (data.dividers_km ? data.dividers_km.length : 0) + 1;
+        hint.textContent =
+            `Holding ${nb} constant-power bucket${nb > 1 ? 's' : ''} — dividers placed automatically. ` +
+            `Drag the slider for more or fewer.`;
+        hint.classList.add('active');
+    } else {
+        hint.textContent =
+            'Full optimal plan. Drag the slider left to simplify it into a few constant-power buckets.';
+        hint.classList.remove('active');
+    }
+}
+
+function dividerPixelForIndex(chart, idx) {
+    const area = chart.chartArea;
+    const n = chart.data.labels.length;
+    if (n <= 1) return area.left;
+    return area.left + (area.right - area.left) * (idx / (n - 1));
+}
+
+// Custom plugin: draw a dashed vertical line at each bucket divider.
+const dividerPlugin = {
+    id: 'ttDividers',
+    afterDatasetsDraw(chart) {
+        if (!serverDividerIdx.length) return;
+        const { ctx, chartArea: area } = chart;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 4]);
+        serverDividerIdx.forEach(idx => {
+            const x = dividerPixelForIndex(chart, idx);
+            ctx.beginPath();
+            ctx.moveTo(x, area.top);
+            ctx.lineTo(x, area.bottom);
+            ctx.stroke();
+        });
+        ctx.restore();
+    },
+};
 
 function renderChart(p) {
     const ctx = document.getElementById('planChart').getContext('2d');
@@ -435,6 +602,7 @@ function renderChart(p) {
                 },
             ],
         },
+        plugins: [dividerPlugin],
         options: {
             responsive: true,
             maintainAspectRatio: false,

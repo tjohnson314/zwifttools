@@ -141,6 +141,10 @@ class PacingPlanResult:
     # Aggregated pacing table (one row per display section).
     sections: list = field(default_factory=list)
 
+    # Bucketing: the largest useful bucket count and the chosen divider distances.
+    max_buckets: int = 0
+    dividers_km: list = field(default_factory=list)
+
     @property
     def total_time_formatted(self) -> str:
         s = int(round(self.total_time_seconds))
@@ -189,6 +193,100 @@ def _build_chunks(route, max_chunk_m, crr):
     return length_arr, grad_arr, mid_arr, end_arr
 
 
+MAX_BUCKETS_CAP = 40       # largest bucket count the slider ever offers
+
+
+def _optimal_segmentation(values, weights, k):
+    """Best ``k``-segment piecewise-constant fit of a 1-D series.
+
+    Returns the internal split indices (``k-1`` of them) that partition
+    ``values`` into ``k`` contiguous segments minimising the total
+    weight-weighted squared error ``Σ_seg Σ_i w_i·(v_i − v̄_seg)²`` — i.e. the
+    best step-function approximation, where each step is the weighted mean of the
+    points under it.  Solved exactly by dynamic programming in ``O(k·n²)``:
+    prefix sums make every segment's error ``O(1)`` and the inner search over the
+    previous cut is vectorised over candidate positions.
+    """
+    v = np.asarray(values, dtype=float)
+    w = np.asarray(weights, dtype=float)
+    n = len(v)
+    k = max(1, min(k, n))
+    if k <= 1:
+        return []
+
+    # Prefix sums for constant-time weighted mean / SSE of any segment [a, b).
+    W = np.concatenate(([0.0], np.cumsum(w)))
+    WV = np.concatenate(([0.0], np.cumsum(w * v)))
+    WV2 = np.concatenate(([0.0], np.cumsum(w * v * v)))
+
+    def sse(a, b):
+        sw = W[b] - W[a]
+        swv = WV[b] - WV[a]
+        return (WV2[b] - WV2[a]) - (swv * swv / sw if sw > 0 else 0.0)
+
+    # dp_prev[i] = min cost to split the first i points into (s-1) segments.
+    dp_prev = np.array([0.0 if i == 0 else sse(0, i) for i in range(n + 1)])
+    back = np.zeros((k + 1, n + 1), dtype=int)
+
+    for s in range(2, k + 1):
+        dp_cur = np.full(n + 1, np.inf)
+        for i in range(s, n + 1):
+            j = np.arange(s - 1, i)
+            sw = W[i] - W[j]
+            swv = WV[i] - WV[j]
+            with np.errstate(divide="ignore", invalid="ignore"):
+                seg = (WV2[i] - WV2[j]) - np.where(sw > 0, swv * swv / sw, 0.0)
+            tot = dp_prev[j] + seg
+            m = int(np.argmin(tot))
+            dp_cur[i] = tot[m]
+            back[s][i] = int(j[m])
+        dp_prev = dp_cur
+
+    bounds = []
+    i = n
+    for s in range(k, 1, -1):
+        j = int(back[s][i])
+        bounds.append(j)
+        i = j
+    bounds.sort()
+    return bounds
+
+
+def _optimal_bucket_edges(end_dist, power, time_arr, k, max_groups=240):
+    """Divider distances (m) for the best ``k``-bucket step fit of ``power``.
+
+    Aggregates the (possibly thousands of) chunks into ``≤max_groups`` contiguous
+    groups so the segmentation DP stays fast, fits the optimal power series with a
+    ``k``-step function (time-weighted, since NP is time-based), then maps the
+    chosen group boundaries back to course distances.
+    """
+    n = len(power)
+    k = max(1, min(k, n))
+    if k <= 1:
+        return []
+
+    m_groups = min(n, max_groups)
+    cut = np.linspace(0, n, m_groups + 1).astype(int)
+    vals, wts, g_end = [], [], []
+    for g in range(m_groups):
+        a, b = int(cut[g]), int(cut[g + 1])
+        if b <= a:
+            continue
+        tw = float(np.sum(time_arr[a:b]))
+        val = (float(np.sum(power[a:b] * time_arr[a:b]) / tw)
+               if tw > 0 else float(np.mean(power[a:b])))
+        vals.append(val)
+        wts.append(max(tw, 1e-9))
+        g_end.append(float(end_dist[b - 1]))
+
+    g_end = np.asarray(g_end)
+    k = min(k, len(vals))
+    if k <= 1:
+        return []
+    splits = _optimal_segmentation(np.asarray(vals), np.asarray(wts), k)
+    return [float(g_end[j - 1]) for j in splits]
+
+
 def plan_tt_pacing(
     route,
     rider_weight_kg: float,
@@ -202,6 +300,8 @@ def plan_tt_pacing(
     max_power_mult: float = 2.5,
     downsample_points: int = 400,
     n_sections: int = 40,
+    bucket_edges_m: list | None = None,
+    num_buckets: int | None = None,
 ) -> PacingPlanResult:
     """Compute the optimal pacing plan for a route.
 
@@ -221,6 +321,13 @@ def plan_tt_pacing(
             ceiling (e.g. 2.5 × 250 W = 625 W).
         downsample_points: Number of points in the returned chart series.
         n_sections: Number of rows in the aggregated pacing table.
+        bucket_edges_m: Optional sorted internal divider distances (m).  When
+            given, the finely-varying optimal plan is collapsed into constant-
+            power "buckets" between consecutive dividers — a coarse, simpler
+            plan — while still matching the normalized-power target overall.
+        num_buckets: Optional number of "smart" buckets.  The dividers are placed
+            automatically (DP-optimal step-fit of the optimal power curve); takes
+            precedence over ``bucket_edges_m``.
     """
     length, grad, mid_dist, end_dist = _build_chunks(route, max_chunk_m, crr)
     n = len(length)
@@ -320,6 +427,103 @@ def plan_tt_pacing(
         power = optimal_power(0.5 * (mu_lo + mu_hi))
         forward_sim(power)
 
+    # ── Optional: collapse the plan into constant-power buckets ───────────
+    # A coarse alternative to the finely-varying optimal plan: hold *one* constant
+    # power per bucket.  "Smart buckets" place the dividers automatically — the
+    # best k-step approximation of the optimal power curve (segmentation DP) — or
+    # explicit dividers may be supplied.  Each bucket is seeded with the time-
+    # weighted mean of the optimal power over its chunks (so climbing buckets keep
+    # more effort), then every bucket is scaled by a single factor — tuned by
+    # bisection — so the realised NP still equals the target.
+    bucket_sections = None
+    dividers_km_out: list = []
+    max_buckets = int(min(MAX_BUCKETS_CAP, n))
+
+    if num_buckets is not None:
+        k = max(1, min(int(num_buckets), max_buckets))
+        edges_source = _optimal_bucket_edges(end_dist, power, time_arr, k)
+        do_bucket = True
+    elif bucket_edges_m is not None:
+        edges_source = list(bucket_edges_m)
+        do_bucket = True
+    else:
+        edges_source = []
+        do_bucket = False
+
+    if do_bucket:
+        total_m = float(end_dist[-1])
+        edges = sorted({round(float(e), 3) for e in edges_source
+                        if 0.0 < float(e) < total_m})
+        boundaries = np.array([0.0] + edges + [total_m], dtype=float)
+        b_idx = np.clip(np.searchsorted(boundaries, mid_dist, side="right") - 1,
+                        0, len(boundaries) - 2)
+
+        bucket_power = np.empty_like(power)
+        for b in range(len(boundaries) - 1):
+            m = b_idx == b
+            if not np.any(m):
+                continue
+            tw = float(np.sum(time_arr[m]))
+            bucket_power[m] = (float(np.sum(power[m] * time_arr[m])) / tw
+                               if tw > 0 else float(np.mean(power[m])))
+
+        def np_for_scale(s):
+            pw = bucket_power * s
+            forward_sim(pw)
+            return _normalized_power(pw, time_arr), pw
+
+        np_base, _ = np_for_scale(1.0)
+        if np_base > 0.0:
+            # NP rises monotonically with the scale, so bracket then bisect.
+            s_lo, s_hi = 0.1, 1.0
+            np_hi, _ = np_for_scale(s_hi)
+            expand = 0
+            while np_hi < power_target_w and expand < 40:
+                s_hi *= 1.5
+                np_hi, _ = np_for_scale(s_hi)
+                expand += 1
+            np_low, _ = np_for_scale(s_lo)
+            while np_low > power_target_w and expand < 80:
+                s_lo *= 0.5
+                np_low, _ = np_for_scale(s_lo)
+                expand += 1
+            for _ in range(50):
+                s_mid = 0.5 * (s_lo + s_hi)
+                np_mid, _ = np_for_scale(s_mid)
+                if np_mid < power_target_w:
+                    s_lo = s_mid
+                else:
+                    s_hi = s_mid
+            power = bucket_power * (0.5 * (s_lo + s_hi))
+        else:
+            power = bucket_power
+        forward_sim(power)
+
+        # One table row per bucket (power is constant within each).
+        bucket_sections = []
+        for b in range(len(boundaries) - 1):
+            m = b_idx == b
+            if not np.any(m):
+                continue
+            idxs = np.nonzero(m)[0]
+            sl = length[m]
+            seg_len = float(np.sum(sl))
+            if seg_len <= 0:
+                continue
+            seg_time = float(np.sum(time_arr[m]))
+            avg_grad = float(np.sum(grad[m] * sl) / seg_len)
+            start_dist = float(end_dist[idxs[0]] - length[idxs[0]])
+            bucket_sections.append({
+                "start_km": round(start_dist / 1000.0, 2),
+                "end_km": round(float(end_dist[idxs[-1]]) / 1000.0, 2),
+                "distance_m": round(seg_len, 1),
+                "avg_gradient_pct": round(avg_grad * 100.0, 1),
+                "power_w": round(float(power[idxs[0]])),
+                "time_seconds": round(seg_time, 1),
+                "avg_speed_kph": round((seg_len / seg_time) * 3.6, 1) if seg_time > 0 else 0.0,
+            })
+        dividers_km_out = [round(e / 1000.0, 3) for e in edges]
+
     times = time_arr
     total_time = float(np.sum(times))
     speed_mps = np.where(times > 0, length / times, 0.0)
@@ -360,9 +564,14 @@ def plan_tt_pacing(
     )
 
     # ── Aggregated pacing table (contiguous sections of ~equal distance) ──
-    result.sections = _build_sections(
-        length, grad, power, times, end_dist, n_sections
-    )
+    if bucket_sections is not None:
+        result.sections = bucket_sections
+    else:
+        result.sections = _build_sections(
+            length, grad, power, times, end_dist, n_sections
+        )
+    result.max_buckets = max_buckets
+    result.dividers_km = dividers_km_out
     return result
 
 

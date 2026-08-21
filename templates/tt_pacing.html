@@ -171,6 +171,16 @@
         </div>
 
         <!-- Chart -->
+        <div class="bucket-controls">
+            <div class="bucket-slider-wrap">
+                <label for="bucketSlider">Smart buckets: <span id="bucketCount">—</span></label>
+                <input type="range" id="bucketSlider" min="1" max="40" value="40" step="1"
+                       oninput="onBucketSliderInput()" disabled>
+            </div>
+            <span class="bucket-hint" id="bucketHint">
+                Build a plan, then drag the slider to simplify it into a few constant-power buckets.
+            </span>
+        </div>
         <div class="chart-container">
             <canvas id="planChart"></canvas>
         </div>

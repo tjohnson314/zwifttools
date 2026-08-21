@@ -2535,6 +2535,10 @@ def api_tt_pacing_plan():
         frame_id        (str)
         wheel_id        (str or null)
         upgrade_level   (int, 0-5)
+        dividers_km     (list[float], optional) — internal divider distances that
+                        split the course into constant-power buckets
+        num_buckets     (int, optional) — number of automatic "smart" buckets;
+                        dividers are placed optimally and this wins over dividers_km
     """
     body = request.get_json(force=True, silent=True) or {}
 
@@ -2548,6 +2552,23 @@ def api_tt_pacing_plan():
         level       = int(body.get('upgrade_level', 0))
     except (KeyError, TypeError, ValueError) as exc:
         return jsonify({'error': f'Invalid request: {exc}'}), 400
+
+    bucket_edges_m = None
+    dividers = body.get('dividers_km')
+    if dividers:
+        try:
+            bucket_edges_m = [float(d) * 1000.0 for d in dividers]
+        except (TypeError, ValueError):
+            return jsonify({'error': 'dividers_km must be a list of numbers'}), 400
+
+    num_buckets = body.get('num_buckets')
+    if num_buckets is not None:
+        try:
+            num_buckets = int(num_buckets)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'num_buckets must be an integer'}), 400
+        if num_buckets < 1:
+            return jsonify({'error': 'num_buckets must be >= 1'}), 400
 
     if avg_power_w <= 0:
         return jsonify({'error': 'avg_power_watts must be positive'}), 400
@@ -2580,6 +2601,8 @@ def api_tt_pacing_plan():
             bike_weight_kg=bike_kg,
             cda=cda,
             power_target_w=avg_power_w,
+            bucket_edges_m=bucket_edges_m,
+            num_buckets=num_buckets,
         )
     except ValueError as exc:
         return jsonify({'error': str(exc)}), 400
@@ -2599,6 +2622,9 @@ def api_tt_pacing_plan():
         'max_power_w': result.max_power_w,
         'min_power_w': result.min_power_w,
         'cda': round(cda, 4),
+        'bucketed': bool(num_buckets is not None or bucket_edges_m),
+        'max_buckets': result.max_buckets,
+        'dividers_km': result.dividers_km,
         'profile': {
             'distance_km': result.distance_km,
             'altitude_m': result.altitude_m,

@@ -344,6 +344,55 @@ h1 .logo-emoji {
     margin-bottom: 28px;
 }
 
+/* Bucket / divider controls */
+.bucket-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+
+.bucket-hint {
+    font-size: 0.85rem;
+    color: #888;
+    flex: 1 1 240px;
+}
+
+.bucket-hint.active {
+    color: #f7931e;
+}
+
+.bucket-slider-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.85rem;
+    color: #ccc;
+    white-space: nowrap;
+}
+
+.bucket-slider-wrap label {
+    font-weight: 600;
+}
+
+.bucket-slider-wrap #bucketCount {
+    color: #f7931e;
+    font-weight: 700;
+}
+
+#bucketSlider {
+    width: 180px;
+    accent-color: #f7931e;
+    cursor: pointer;
+}
+
+#bucketSlider:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
 /* Pacing table */
 .table-wrap h3 {
     font-size: 1.05rem;
