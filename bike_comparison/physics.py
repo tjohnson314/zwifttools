@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from dataclasses import dataclass
 
-from bike_comparison.bike_data import BikeSetup, get_bike_stats, get_bike_database
+from bike_comparison.bike_data import BikeSetup, get_bike_stats, get_bike_database, BASE_CDA
 from shared.utils import calculate_normalized_power
 
 
@@ -159,9 +159,11 @@ def compare_bike_setups(
     if alt_frontal_area is None:
         alt_frontal_area = frontal_area
     
-    # Convert Cd to CdA by multiplying by frontal area
-    actual_cda = actual_setup.cd * frontal_area
-    alternative_cda = alternative_setup.cd * alt_frontal_area
+    # Absolute CdA = the rider's own (frontal-area-scaled) CdA plus the bike's
+    # CdA bias, which Zwift applies as an additive delta (not scaled by rider
+    # size).
+    actual_cda = _RIDER_BASELINE_CD * frontal_area + actual_setup.cda_bias
+    alternative_cda = _RIDER_BASELINE_CD * alt_frontal_area + alternative_setup.cda_bias
     
     # Extract required columns
     time_sec = telemetry['time_sec'].values if 'time_sec' in telemetry.columns else telemetry.index.values
@@ -520,6 +522,21 @@ def frontal_area_from_rider(height_m: float, weight_kg: float) -> float:
         * (height_m / _REF_HEIGHT_M) ** _HEIGHT_EXPONENT
         * (weight_kg / _REF_WEIGHT_KG) ** _WEIGHT_EXPONENT
     )
+
+
+# Rider drag coefficient for a zero-bias bike.  The rider's CdA scales with
+# frontal area, while a bike's CdA bias is an absolute delta added on top (this
+# matches how Zwift stores per-frame/per-wheel CdA offsets).  Anchored so that a
+# reference rider (183 cm / 75 kg) on a zero-bias bike keeps CdA == BASE_CDA.
+_RIDER_BASELINE_CD = BASE_CDA / _REF_FRONTAL_AREA
+
+
+def rider_cda(height_m: float, weight_kg: float) -> float:
+    """Rider-only CdA (m²) on a zero-bias bike, from height and weight.
+
+    Add the bike's ``cda_bias`` to this to get the absolute CdA for a setup.
+    """
+    return _RIDER_BASELINE_CD * frontal_area_from_rider(height_m, weight_kg)
 
 
 if __name__ == "__main__":

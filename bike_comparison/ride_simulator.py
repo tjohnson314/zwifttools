@@ -25,6 +25,7 @@ from bike_comparison.bike_data import BikeSetup
 from bike_comparison.physics import (
     speed_from_power,
     frontal_area_from_rider,
+    rider_cda,
     AIR_DENSITY,
     GRAVITY,
     DRIVETRAIN_LOSS,
@@ -185,7 +186,6 @@ def _load_wad_profile(
     distance = np.asarray(main["d"], dtype=float)
     altitude = np.asarray(main["alt"], dtype=float)
     surfaces = np.asarray(main["surface"], dtype=object)
-    source_distance_m = float(data.get("distance_m") or 0.0)
     source_ascent_m = float(data.get("ascent_m") or 0.0)
 
     # Repeat the main (non-lead-in) leg for multi-lap plans on looped routes.
@@ -205,12 +205,13 @@ def _load_wad_profile(
         distance = np.concatenate(d_parts)
         altitude = np.concatenate(alt_parts)
         surfaces = np.concatenate(surf_parts)
-        source_distance_m *= n_laps
         source_ascent_m *= n_laps
 
     leadin = data.get("leadin")
     if include_leadin and leadin and leadin.get("d"):
-        leadin_len = float(data.get("leadin_distance_m") or leadin["d"][-1])
+        # Offset by the lead-in's own geometry length (its last d), so the join
+        # is seamless now that d is summed from geometry rather than the header.
+        leadin_len = float(leadin["d"][-1])
         # Offset the route leg so it follows the lead-in on a single axis
         # (mirrors the surface map, which draws the route at +leadin_distance_m).
         distance = np.concatenate([
@@ -225,7 +226,6 @@ def _load_wad_profile(
             np.asarray(leadin["surface"], dtype=object),
             surfaces,
         ])
-        source_distance_m += float(data.get("leadin_distance_m") or 0.0)
         source_ascent_m += float(data.get("leadin_ascent_m") or 0.0)
 
     # WAD vertical geometry is not to physical scale (e.g. Watopia altitudes read
@@ -238,6 +238,10 @@ def _load_wad_profile(
         raw_ascent = float(np.sum(dalt[dalt > 0]))
         if raw_ascent > 0:
             altitude = altitude[0] + (altitude - altitude[0]) * (source_ascent_m / raw_ascent)
+
+    # Display distance follows the physical geometry (matches the in-game
+    # odometer), not Zwift's inflated header figure.
+    source_distance_m = float(distance[-1]) if len(distance) else None
 
     return {
         "distance_m": distance,
@@ -524,9 +528,8 @@ def simulate_ride(
     if n < 2:
         raise ValueError("Route profile must have at least 2 points")
 
-    # Rider frontal area and CdA
-    frontal_area = frontal_area_from_rider(rider_height_m, rider_weight_kg)
-    cda = bike_setup.cd * frontal_area
+    # Absolute CdA = rider's frontal-area-scaled CdA plus the bike's CdA bias.
+    cda = rider_cda(rider_height_m, rider_weight_kg) + bike_setup.cda_bias
     total_mass = rider_weight_kg + bike_setup.weight_kg
 
     # Per-point CRR: prefer WAD per-point surface tags (same surfaces the

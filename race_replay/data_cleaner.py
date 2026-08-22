@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # Bump this version when data cleaning logic changes in a way that invalidates
 # previously cached results.  The cache loader will discard stale caches.
-CLEANING_VERSION = 24
+CLEANING_VERSION = 27
 
 # Grace period after the official race start before a rider is treated as a
 # "late joiner".  Riders routinely begin recording / cross the start banner a
@@ -418,6 +418,18 @@ def load_game_route_profile(
 
         leadin = route.get('leadin') or {'d': [], 'alt': [], 'x': [], 'z': []}
         main = route.get('route') or {'d': [], 'alt': [], 'x': [], 'z': []}
+
+        # WAD vertical geometry is not always physical (Watopia altitudes read
+        # ~2x true metres, New York ~1.32x) while horizontal distance is. Scale
+        # altitude to physical metres by this world's stored WAD->physical factor
+        # so every downstream consumer (world-cal alignment, elevation profile)
+        # is to physical scale. The ZwiftMap-calibrate path re-fits altitude and
+        # is unaffected; the surface map applies the same factor. A no-op for
+        # worlds already at physical scale (factor 1.0).
+        from shared.world_config import get_world_altitude_scale
+        world_scale = get_world_altitude_scale(int(route['mapID']))
+        leadin_alt = np.asarray(leadin['alt'], dtype=float) * world_scale
+        route_alt = np.asarray(main['alt'], dtype=float) * world_scale
         return GameRouteProfile(
             name_hash=int(route['nameHash']),
             route_name=route['name'],
@@ -425,11 +437,11 @@ def load_game_route_profile(
             distance_m=float(route['distance_m']),
             leadin_distance_m=float(route['leadin_distance_m']),
             leadin_distance=np.asarray(leadin['d'], dtype=float),
-            leadin_altitude=np.asarray(leadin['alt'], dtype=float),
+            leadin_altitude=leadin_alt,
             leadin_x=np.asarray(leadin.get('x', []), dtype=float),
             leadin_z=np.asarray(leadin.get('z', []), dtype=float),
             route_distance=np.asarray(main['d'], dtype=float),
-            route_altitude=np.asarray(main['alt'], dtype=float),
+            route_altitude=route_alt,
             route_x=np.asarray(main.get('x', []), dtype=float),
             route_z=np.asarray(main.get('z', []), dtype=float),
         )
@@ -989,6 +1001,20 @@ def align_profile_distance_to_riders(
         )
         return adjusted
 
+    return elevation_profile
+
+
+def anchor_profile_altitude(
+    elevation_profile: pd.DataFrame,
+    route_id: Optional[int],
+    riders: List[Dict],
+    min_scale_error: float = 0.15,
+) -> pd.DataFrame:
+    """Deprecated: superseded by applying the per-world WAD->physical altitude
+    scale at the source (``load_game_route_profile`` +
+    ``shared.world_config.get_world_altitude_scale``). Kept as a no-op pass-through
+    for backward compatibility.
+    """
     return elevation_profile
 
 
@@ -2431,7 +2457,7 @@ def clean_race_data(
             })
     else:
         elevation_profile = build_elevation_profile(ref_rider['data'])
-    
+
     # Extract source activity ID from race metadata
     source_activity_id = None
     meta_path = data_path / 'race_meta.json'

@@ -34,7 +34,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 from bike_comparison.bike_data import get_bike_database, get_bike_stats, BASE_CDA, REF_FRONTAL_AREA
-from bike_comparison.physics import compare_bike_setups, frontal_area_from_rider
+from bike_comparison.physics import compare_bike_setups, frontal_area_from_rider, rider_cda
 from bike_comparison.ride_simulator import list_routes, load_route_profile, simulate_ride as _simulate_ride
 from bike_comparison.pacing_planner import plan_tt_pacing
 from shared.utils import calculate_normalized_power
@@ -2590,10 +2590,9 @@ def api_tt_pacing_plan():
         return jsonify({'error': f'Unknown frame/wheel combination: {frame_id}/{wheel_id}'}), 400
 
     # Absolute CdA for this rider + bike (same model as the ride simulator):
-    # the bike's equivalent cd scaled by the rider's frontal area.
+    # the rider's frontal-area-scaled CdA plus the bike's CdA bias.
     height_m = height_cm / 100.0
-    frontal_area = frontal_area_from_rider(height_m, weight_kg)
-    cda = bike_setup.cd * frontal_area
+    cda = rider_cda(height_m, weight_kg) + bike_setup.cda_bias
     bike_kg = bike_setup.weight_kg
     if cda <= 0:
         return jsonify({'error': 'Resulting CdA is non-positive.'}), 400
@@ -2643,6 +2642,59 @@ def api_tt_pacing_plan():
             'gradient_pct': result.gradient_pct,
         },
         'sections': result.sections,
+    })
+
+
+@app.route('/api/tt_pacing/route_geometry')
+def api_tt_pacing_route_geometry():
+    """Return the stitched map geometry (lead-in + route) for a planner route.
+
+    Used by the planner's map view to visualise how the lead-in leg joins the
+    main route. Returns each leg's plot-space x/y coordinates and cumulative
+    distance on the SAME axis the pacing plan uses (lead-in first, then the
+    route offset by the lead-in length), plus the world's background image.
+    """
+    from bike_comparison.ride_simulator import _find_wad_route
+    from shared import surface_map
+
+    route_id   = request.args.get('route_id', '')
+    route_name = request.args.get('route_name', '')
+    world      = request.args.get('world') or None
+    include_leadin = request.args.get('include_leadin', 'true').lower() != 'false'
+
+    entry = _find_wad_route(route_name, world, route_id)
+    if entry is None:
+        return jsonify({'error': 'No map geometry available for this route'}), 404
+
+    data = surface_map.get_route(entry['mapID'], entry['nameHash'])
+    if data is None:
+        return jsonify({'error': 'Route geometry not found'}), 404
+
+    bg = surface_map.get_world_background(entry['mapID'])
+    # Offset by the lead-in's own geometry length (its last d) to match the
+    # geometry-derived distance axis used by the pacing plan.
+    leadin_d = (data.get('leadin') or {}).get('d') or []
+    leadin_len_m = float(leadin_d[-1]) if leadin_d else 0.0
+    if not include_leadin:
+        leadin_len_m = 0.0
+
+    def _leg(leg, d_offset):
+        """Serialise a leg with distance shifted onto the shared plan axis."""
+        if not leg or not leg.get('x'):
+            return None
+        return {
+            'd': [round(v + d_offset, 1) for v in leg.get('d', [])],
+            'x': leg['x'],
+            'y': leg['y'],
+        }
+
+    return jsonify({
+        'route_name': data.get('name', route_name),
+        'background': bg['background'],
+        'bounds': bg['bounds'],
+        'leadin_distance_m': round(leadin_len_m, 1),
+        'leadin': _leg(data.get('leadin'), 0.0) if include_leadin else None,
+        'route': _leg(data.get('route'), leadin_len_m),
     })
 
 
@@ -4037,8 +4089,7 @@ def api_ttt_fetch():
 
         weight_kg = r.get('weight_kg', 75.0)
         height_cm = r.get('height_cm', 175)
-        frontal_area = frontal_area_from_rider(height_cm / 100, weight_kg)
-        cda = ttt_setup.cd * frontal_area
+        cda = rider_cda(height_cm / 100.0, weight_kg) + ttt_setup.cda_bias
 
         time_sec = df['time_sec'].values.astype(float)
         speed_mps = (df['speed_kmh'].values / 3.6).astype(float)

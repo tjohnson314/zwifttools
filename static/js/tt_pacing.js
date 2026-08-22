@@ -17,6 +17,11 @@ let bucketSliderTimer = null;
 let laps = 1;             // number of laps for looped routes
 let routeSlugMap = {};    // slug → route object, for URL deep-linking
 
+let routeGeometry = null; // { key, leadin, route, combined, background, bounds, stitchGap }
+let mapView = null;       // { canvas, ctx, dpr, project() } cached map transform
+let mapSelectionKm = null;// currently highlighted distance (km) on the map
+let mapDividerKm = [];    // smart-bucket divider distances (km) to mark on the map
+
 // ── Units ────────────────────────────────────────────────────────────────────
 // The API always works in metric; imperial is a display/input-only conversion.
 const KG_TO_LB = 2.2046226;
@@ -589,11 +594,14 @@ function displayResults(data, isBuild = false) {
     // Divider distances (km) → nearest profile index for drawing the lines.
     serverDividerIdx = (data.dividers_km || [])
         .map(km => nearestProfileIndex(data.profile, km));
+    mapDividerKm = data.bucketed ? (data.dividers_km || []) : [];
 
     renderChart(data.profile);
     renderTable(data.sections);
     if (isBuild) configureBucketSlider(data.max_buckets);
     updateBucketHint(data);
+
+    loadRouteMap();
 
     document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
@@ -711,6 +719,12 @@ function renderChart(p) {
             responsive: true,
             maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
+            onHover: (evt, els) => {
+                if (els && els.length) highlightMapAtKm(p.distance_km[els[0].index]);
+            },
+            onClick: (evt, els) => {
+                if (els && els.length) highlightMapAtKm(p.distance_km[els[0].index], true);
+            },
             plugins: {
                 legend: { labels: { color: '#ccc' } },
                 tooltip: {
@@ -756,19 +770,22 @@ function renderTable(sections) {
     tbody.innerHTML = '';
     const imp = isImperial();
     const distUnit = imp ? 'mi' : 'km';
+    let cumTime = 0;
     sections.forEach((s, i) => {
         const tr = document.createElement('tr');
         const gradeCls = s.avg_gradient_pct > 0.2 ? 'grade-up'
             : s.avg_gradient_pct < -0.2 ? 'grade-down' : '';
         const startD = imp ? (s.start_km * KM_TO_MI).toFixed(1) : s.start_km;
         const endD   = imp ? (s.end_km * KM_TO_MI).toFixed(1) : s.end_km;
+        cumTime += s.time_seconds;
         tr.innerHTML =
             `<td>${i + 1} &nbsp;<small style="color:#777">${startD}–${endD} ${distUnit}</small></td>` +
             `<td>${fmtDistance(s.distance_m / 1000, 2)}</td>` +
             `<td class="${gradeCls}">${s.avg_gradient_pct.toFixed(1)}%</td>` +
             `<td class="power">${s.power_w} W</td>` +
             `<td>${fmtSpeed(s.avg_speed_kph)}</td>` +
-            `<td>${formatTime(s.time_seconds)}</td>`;
+            `<td>${formatTime(s.time_seconds)}</td>` +
+            `<td>${formatTime(cumTime)}</td>`;
         tbody.appendChild(tr);
     });
 }
@@ -779,3 +796,175 @@ function formatTime(sec) {
     const r = s % 60;
     return m > 0 ? `${m}:${String(r).padStart(2, '0')}` : `${r}s`;
 }
+
+// ── Route map (lead-in + route) ───────────────────────────────────────────────
+
+// Fetch the lead-in + route geometry for the current route and draw it.
+async function loadRouteMap() {
+    if (!selectedRoute) return;
+    const includeLeadin = document.getElementById('includeLeadin').checked;
+    const key = `${selectedRoute.id}|${selectedRoute.name}|${selectedRoute.world}|${includeLeadin}`;
+
+    if (!routeGeometry || routeGeometry.key !== key) {
+        const params = new URLSearchParams({
+            route_id: selectedRoute.id || '',
+            route_name: selectedRoute.name || '',
+            world: selectedRoute.world || '',
+            include_leadin: includeLeadin ? 'true' : 'false',
+        });
+        try {
+            const res = await fetch('/api/tt_pacing/route_geometry?' + params.toString());
+            const data = await res.json();
+            if (!res.ok) { hideRouteMap(data.error); return; }
+            routeGeometry = buildGeometry(key, data);
+        } catch (e) {
+            hideRouteMap('Map unavailable: ' + e.message);
+            return;
+        }
+    }
+    document.getElementById('mapSection').style.display = 'block';
+    drawRouteMap();
+}
+
+function hideRouteMap() {
+    routeGeometry = null;
+    document.getElementById('mapSection').style.display = 'none';
+}
+
+// Combine the two legs into one ordered point list.
+function buildGeometry(key, data) {
+    const legs = [];
+    const push = (leg, name) => {
+        if (!leg || !leg.x || !leg.x.length) return;
+        const pts = leg.x.map((x, i) => ({ x, y: leg.y[i], d: leg.d[i], leg: name }));
+        legs.push({ name, pts });
+    };
+    push(data.leadin, 'leadin');
+    push(data.route, 'route');
+
+    const combined = legs.flatMap(l => l.pts);
+
+    // Bounds across all drawn points.
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    combined.forEach(p => {
+        if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+    });
+
+    return {
+        key, legs, combined,
+        background: data.background,
+        bounds: { minX, maxX, minY, maxY },
+        bgImg: null,
+    };
+}
+
+function drawRouteMap() {
+    const geo = routeGeometry;
+    if (!geo) return;
+    const canvas = document.getElementById('routeMap');
+    const wrap = canvas.parentElement;
+    const dpr = window.devicePixelRatio || 1;
+    const cw = wrap.clientWidth, ch = wrap.clientHeight;
+    canvas.width = Math.round(cw * dpr);
+    canvas.height = Math.round(ch * dpr);
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cw, ch);
+
+    // Fit transform (plot space → CSS pixels); plot y already increases downward.
+    const b = geo.bounds;
+    const bw = Math.max(b.maxX - b.minX, 1);
+    const bh = Math.max(b.maxY - b.minY, 1);
+    const pad = 0.07;
+    const scale = Math.min(cw / bw, ch / bh) * (1 - pad * 2);
+    const offX = (cw - bw * scale) / 2 - b.minX * scale;
+    const offY = (ch - bh * scale) / 2 - b.minY * scale;
+    const project = (x, y) => [x * scale + offX, y * scale + offY];
+    mapView = { scale, offX, offY, project };
+
+    // Background world image (drawn in the same plot space), if available.
+    if (geo.background && geo.background.image) {
+        if (!geo.bgImg) {
+            const img = new Image();
+            img.onload = () => { if (routeGeometry === geo) drawRouteMap(); };
+            img.src = geo.background.image;
+            geo.bgImg = img;
+        }
+        if (geo.bgImg.complete && geo.bgImg.naturalWidth) {
+            const [ix, iy] = project(0, 0);
+            ctx.globalAlpha = 0.5;
+            ctx.drawImage(geo.bgImg, ix, iy,
+                geo.background.width * scale, geo.background.height * scale);
+            ctx.globalAlpha = 1;
+        }
+    }
+
+    const drawLeg = (pts, color, width) => {
+        if (!pts || !pts.length) return;
+        ctx.beginPath();
+        pts.forEach((p, i) => {
+            const [sx, sy] = project(p.x, p.y);
+            if (i === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
+        });
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+    };
+
+    const leadin = geo.legs.find(l => l.name === 'leadin');
+    const route  = geo.legs.find(l => l.name === 'route');
+    drawLeg(route && route.pts, '#35d0ff', 3);
+    drawLeg(leadin && leadin.pts, '#f7931e', 3);
+
+    // Smart-bucket dividers: gray dots where each constant-power bucket begins.
+    for (const km of mapDividerKm) {
+        const p = nearestGeometryPoint(km * 1000);
+        if (!p) continue;
+        const [sx, sy] = project(p.x, p.y);
+        ctx.beginPath();
+        ctx.arc(sx, sy, 6, 0, Math.PI * 2);
+        ctx.fillStyle = '#9aa3b2';
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+        ctx.stroke();
+    }
+
+    // Selection marker linked to the chart.
+    if (mapSelectionKm != null) {
+        const p = nearestGeometryPoint(mapSelectionKm * 1000);
+        if (p) {
+            const [sx, sy] = project(p.x, p.y);
+            ctx.beginPath();
+            ctx.arc(sx, sy, 6, 0, Math.PI * 2);
+            ctx.fillStyle = '#fff';
+            ctx.fill();
+            ctx.lineWidth = 2.5;
+            ctx.strokeStyle = '#111';
+            ctx.stroke();
+        }
+    }
+}
+
+// Nearest stitched-geometry point to a cumulative distance (metres).
+function nearestGeometryPoint(targetM) {
+    if (!routeGeometry) return null;
+    const arr = routeGeometry.combined;
+    let best = null, bd = Infinity;
+    for (const p of arr) {
+        const d = Math.abs(p.d - targetM);
+        if (d < bd) { bd = d; best = p; }
+    }
+    return best;
+}
+
+// Called from the chart's hover/click to mark a distance on the map.
+function highlightMapAtKm(km) {
+    if (km == null || !routeGeometry) return;
+    mapSelectionKm = km;
+    drawRouteMap();
+}
+
+window.addEventListener('resize', () => { if (routeGeometry) drawRouteMap(); });

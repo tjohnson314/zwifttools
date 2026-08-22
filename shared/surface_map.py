@@ -24,7 +24,7 @@ from functools import lru_cache
 import numpy as np
 from scipy.spatial import cKDTree
 
-from shared.world_config import WORLD_CONFIG
+from shared.world_config import WORLD_CONFIG, get_world_altitude_scale
 
 _BASE = Path(__file__).parent.parent
 SURFACE_DIR = _BASE / "zwift_surfaces"
@@ -232,6 +232,20 @@ def list_worlds() -> list[dict]:
     return worlds
 
 
+def get_world_background(map_id: int) -> dict:
+    """Return just the map background image + full-world plot bounds for a world.
+
+    Lightweight companion to :func:`get_world_surfaces` for callers that only
+    need the base image to draw a single route over (no road network).
+    """
+    proj = _projection(map_id)
+    return {
+        "mode": proj["mode"],
+        "background": proj["background"],
+        "bounds": proj["bounds"],
+    }
+
+
 def get_world_surfaces(map_id: int) -> dict:
     """Return the road network for a world plus its route list (metadata only)."""
     world = _load_surface_world(map_id)
@@ -306,24 +320,22 @@ def _pack_leg(map_id: int, leg: dict | None) -> dict | None:
     }
 
 
-def _anchor_leg_alt(leg: dict | None, target_ascent_m: float) -> None:
-    """Scale a packed leg's altitude so its ascent matches Zwift's own figure.
+def _anchor_leg_alt(leg: dict | None, scale: float) -> None:
+    """Scale a packed leg's altitude to physical metres by a per-world factor.
 
-    WAD vertical geometry is not to physical scale (Watopia altitudes read ~2x
-    true metres) while horizontal distance is. Scaling about the first point by
-    ``target_ascent / raw_ascent`` restores physical gradients; a no-op where the
-    geometry already matches the header ascent.
+    WAD vertical geometry is not always to physical scale (Watopia altitudes
+    read ~2x true metres, New York ~1.32x) while horizontal distance is. The
+    factor is the stored per-world WAD->physical scale
+    (:func:`get_world_altitude_scale`); scaling about the first point restores
+    physical gradients and is a no-op for worlds already at physical scale
+    (``scale == 1``).
     """
-    if not leg or not target_ascent_m:
+    if not leg or not scale or scale == 1.0:
         return
     alt = leg.get("alt")
     if not alt or len(alt) < 2:
         return
     a0 = alt[0]
-    raw_ascent = sum(max(0.0, alt[i + 1] - alt[i]) for i in range(len(alt) - 1))
-    if raw_ascent <= 0:
-        return
-    scale = target_ascent_m / raw_ascent
     leg["alt"] = [round(a0 + (v - a0) * scale, 2) for v in alt]
 
 
@@ -377,10 +389,12 @@ def get_route(map_id: int, name_hash: int) -> dict | None:
     leadin = _pack_leg(map_id, route.get("leadin"))
     main = _pack_leg(map_id, route.get("route"))
 
-    # Anchor each leg's altitude to Zwift's authoritative ascent so the elevation
-    # profile is to physical scale (WAD vertical geometry is not — see helper).
-    _anchor_leg_alt(leadin, float(route.get("leadin_ascent_m", 0.0) or 0.0))
-    _anchor_leg_alt(main, float(route.get("ascent_m", 0.0) or 0.0))
+    # Scale each leg's altitude to physical metres by this world's stored
+    # WAD->physical factor so the elevation profile and gradients are correct
+    # (WAD vertical geometry is not always physical — see helper).
+    world_scale = get_world_altitude_scale(map_id)
+    _anchor_leg_alt(leadin, world_scale)
+    _anchor_leg_alt(main, world_scale)
 
     breakdown: dict[str, float] = {}
     for leg in (leadin, main):

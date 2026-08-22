@@ -385,6 +385,62 @@ h1 .logo-emoji {
     margin-bottom: 28px;
 }
 
+/* Route map (lead-in + route) */
+.map-section {
+    margin-bottom: 28px;
+}
+.map-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+.map-header h3 {
+    font-size: 1.1rem;
+    color: #ddd;
+}
+.map-legend {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    font-size: 0.82rem;
+    color: #aaa;
+}
+.map-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.map-legend .swatch {
+    width: 14px;
+    height: 3px;
+    border-radius: 2px;
+    display: inline-block;
+}
+.swatch-leadin { background: #f7931e; }
+.swatch-route  { background: #35d0ff; }
+.map-container {
+    position: relative;
+    height: 460px;
+    background: #10162b;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    overflow: hidden;
+}
+.map-container canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+.map-hint {
+    font-size: 0.82rem;
+    color: #777;
+    margin-top: 8px;
+}
+
 /* Bucket / divider controls */
 .bucket-controls {
     display: flex;

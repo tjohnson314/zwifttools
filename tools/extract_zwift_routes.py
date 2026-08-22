@@ -9,10 +9,12 @@ For each ``assets/Worlds/world*/data_1.wad`` this tool:
    ``<highrescheckpoint>`` polylines.
 4. Converts the raw world geometry (game units, 100 units == 1 metre) into
     metre-based ``(distance, altitude, x, z)`` profiles. Coordinates are the raw
-    values divided by 100 (no clamping). Cumulative planar distance is anchored
-    to Zwift's authoritative header distances (``leadinDistanceInMeters`` /
-    ``distanceInMeters``) so total distances match the game exactly while the
-    checkpoint geometry provides the shape.
+    values divided by 100 (no clamping). Cumulative planar distance is summed
+    directly from the checkpoint geometry (game units -> metres). Zwift's header
+    ``distanceInMeters`` over-states the ridden path (mean ~3% across Watopia,
+    up to ~13% on pretzel routes); the in-game odometer tracks the geometry, so
+    the geometry is the physical distance. Header distances are still stored as
+    metadata for reference.
 
 The decompression algorithm is a faithful in-memory port of r3dey3's
 ``decode_wad.py`` (https://gitlab.com/r3dey3/zwift-utils).
@@ -315,22 +317,21 @@ def _resample(dist_m: list[float], pts: list[tuple[float, float, float]], n: int
     return res
 
 
-def build_profile(pts: list[tuple[float, float, float]], header_distance_m: float,
+def build_profile(pts: list[tuple[float, float, float]],
                   max_points: int, surfaces: list[str] | None = None) -> dict | None:
-    """Convert a checkpoint polyline into a metre-based route geometry profile."""
+    """Convert a checkpoint polyline into a metre-based route geometry profile.
+
+    Distance is summed from the actual checkpoint geometry (game units -> metres)
+    at full resolution before resampling. Zwift's header ``distanceInMeters``
+    over-states the ridden path; the in-game odometer tracks this geometry.
+    """
     if len(pts) < 2:
         return None
     cum = _cumulative_planar(pts)
     raw_total = cum[-1]
     if raw_total <= 0:
         return None
-    # Anchor total distance to the authoritative header value; fall back to the
-    # geometry-derived length when the header distance is missing/zero.
-    if header_distance_m and header_distance_m > 0:
-        scale = header_distance_m / raw_total
-    else:
-        scale = 1.0 / UNITS_PER_METRE
-    dist_m = [u * scale for u in cum]
+    dist_m = [u / UNITS_PER_METRE for u in cum]
     return _resample(dist_m, pts, max_points, surfaces)
 
 
@@ -370,9 +371,8 @@ def parse_route(data: bytes, map_id: int, max_points: int,
         return [surface_map.get(_resolve_style_name(rid, t, roads, styles), "Unknown")
                 for rid, t in rt]
 
-    route_profile = build_profile(main_pts, distance_m, max_points, _surfaces(main_rt))
-    leadin_profile = build_profile(leadin_pts, leadin_distance_m, max_points,
-                                   _surfaces(leadin_rt))
+    route_profile = build_profile(main_pts, max_points, _surfaces(main_rt))
+    leadin_profile = build_profile(leadin_pts, max_points, _surfaces(leadin_rt))
 
     return {
         "name": name,

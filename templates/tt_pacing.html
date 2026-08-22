@@ -194,6 +194,21 @@
             <canvas id="planChart"></canvas>
         </div>
 
+        <!-- Route map (lead-in + route) -->
+        <div class="map-section" id="mapSection" style="display:none;">
+            <div class="map-header">
+                <h3>Route map</h3>
+                <div class="map-legend">
+                    <span class="map-legend-item"><i class="swatch swatch-leadin"></i>Lead-in</span>
+                    <span class="map-legend-item"><i class="swatch swatch-route"></i>Route</span>
+                </div>
+            </div>
+            <div class="map-container">
+                <canvas id="routeMap"></canvas>
+            </div>
+            <p class="map-hint">Hover or click the chart above to mark that point on the map.</p>
+        </div>
+
         <!-- Pacing table -->
         <div class="table-wrap">
             <h3>Pacing plan by section</h3>
@@ -206,6 +221,7 @@
                         <th>Power</th>
                         <th>Speed</th>
                         <th>Time</th>
+                        <th>Cumulative</th>
                     </tr>
                 </thead>
                 <tbody></tbody>

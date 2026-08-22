@@ -7,6 +7,9 @@ Maps each Zwift world to its map image and GPS coordinate bounds
   - lat_min / lng_max = SE corner (bottom-right of image)
 """
 
+import json
+from pathlib import Path
+
 WORLD_CONFIG = {
     'WATOPIA': {
         'slug': 'watopia',
@@ -124,3 +127,44 @@ def get_world_map_config(world_name: str) -> dict | None:
     if world_name and world_name in WORLD_CONFIG:
         return WORLD_CONFIG[world_name]
     return None
+
+
+_ALTITUDE_SCALE_PATH = (
+    Path(__file__).resolve().parent.parent
+    / 'zwift_routes' / 'world_altitude_scale.json'
+)
+_altitude_scale_cache: dict | None = None
+
+
+def _load_altitude_scale() -> dict:
+    """Load and cache the per-world WAD->physical altitude scale config."""
+    global _altitude_scale_cache
+    if _altitude_scale_cache is None:
+        try:
+            with open(_ALTITUDE_SCALE_PATH, encoding='utf-8') as f:
+                _altitude_scale_cache = json.load(f)
+        except (OSError, ValueError):
+            _altitude_scale_cache = {'default_scale': 1.0, 'worlds': {}}
+    return _altitude_scale_cache
+
+
+def get_world_altitude_scale(map_id: int | None) -> float:
+    """Return the factor that converts a world's raw WAD ``alt`` to physical metres.
+
+    Zwift's WAD route geometry stores altitude in a world-specific vertical unit
+    (Watopia/Paris/Scotland read ~2x true metres, New York ~1.32x, most worlds
+    are already physical). Multiply raw WAD altitude by this factor to get
+    physical metres. Defaults to 1.0 for unknown worlds. The table is generated
+    by ``tools/compute_world_altitude_scale.py``.
+    """
+    config = _load_altitude_scale()
+    default = float(config.get('default_scale', 1.0))
+    if map_id is None:
+        return default
+    entry = config.get('worlds', {}).get(str(int(map_id)))
+    if not entry:
+        return default
+    try:
+        return float(entry.get('scale', default))
+    except (TypeError, ValueError):
+        return default
