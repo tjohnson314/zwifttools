@@ -16,7 +16,7 @@ import csv, json, os, math, importlib.util
 from statistics import mean, pstdev, median
 
 ROOT = r"C:\Users\timjo\Documents\Coding\Zwift\zwifttools"
-spec = importlib.util.spec_from_file_location("zc", os.path.join(ROOT, "tools", "_zi_compare.py"))
+spec = importlib.util.spec_from_file_location("zc", os.path.join(ROOT, "tools", "zi_compare.py"))
 zc = importlib.util.module_from_spec(spec); spec.loader.exec_module(zc)
 
 RHO, G, DL, CRR, MPH, RIDER_KG, WHEELS_KG = 1.225, 9.8067, 0.025, 0.004, 0.44704, 75.0, 1.5

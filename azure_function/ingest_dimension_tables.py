@@ -98,9 +98,17 @@ def clear_table(table_name: str, query_client):
 # Data loaders — one per dimension table
 # ---------------------------------------------------------------------------
 
+# LEGACY: frames.json / wheels.json / bikes.json are the original ZwifterBikes
+# dataset. They are NOT fully accurate and are no longer used by the web app
+# (bike stats now come from zwiftdata/game_frames.json + game_wheels.json,
+# extracted directly from the game). They live here only to feed the ADX
+# Frames/Wheels/BikeConfigs dimension tables and are kept alongside this script.
+_LEGACY_DIR = os.path.dirname(__file__)
+
+
 def load_frames() -> pd.DataFrame:
-    """Load Frames from zwiftdata/frames.json."""
-    path = os.path.join(WORKSPACE, "zwiftdata", "frames.json")
+    """Load Frames from the legacy ZwifterBikes frames.json (see note above)."""
+    path = os.path.join(_LEGACY_DIR, "frames.json")
     with open(path) as f:
         data = json.load(f)
 
@@ -126,8 +134,8 @@ def load_frames() -> pd.DataFrame:
 
 
 def load_wheels() -> pd.DataFrame:
-    """Load Wheels from zwiftdata/wheels.json."""
-    path = os.path.join(WORKSPACE, "zwiftdata", "wheels.json")
+    """Load Wheels from the legacy ZwifterBikes wheels.json (see note above)."""
+    path = os.path.join(_LEGACY_DIR, "wheels.json")
     with open(path) as f:
         data = json.load(f)
 
@@ -156,8 +164,8 @@ def load_wheels() -> pd.DataFrame:
 
 
 def load_bike_configs() -> pd.DataFrame:
-    """Load BikeConfigs from zwiftdata/bikes.json."""
-    path = os.path.join(WORKSPACE, "zwiftdata", "bikes.json")
+    """Load BikeConfigs from the legacy ZwifterBikes bikes.json (see note above)."""
+    path = os.path.join(_LEGACY_DIR, "bikes.json")
     with open(path) as f:
         data = json.load(f)
 

@@ -1,5 +1,5 @@
 {
-  "//": "Hardcoded game-frame-folder -> ZwiftInsider sheet bike name. null = no ZI test (frame stays estimated). Seed by tools/build_zi_match_map.py; hand-edit thereafter. The solver (_zi_stage_solve.build) reads 'matches' as authoritative and ignores 'review_manually'.",
+  "//": "Hardcoded game-frame-folder -> ZwiftInsider sheet bike name. null = no ZI test (frame stays estimated). Seed by tools/build_zi_match_map.py; hand-edit thereafter. The solver (zi_stage_solve.build) reads 'matches' as authoritative and ignores 'review_manually'.",
   "review_manually": [
     "Zwift_BW"
   ],

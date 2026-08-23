@@ -159,6 +159,7 @@ azure_function/
     host.json                # Function runtime config
     requirements.txt         # Python dependencies
     local.settings.json      # Local dev settings
+    ZWIFTGAMES.md            # This document
 
 infra/
     main.bicep               # ARM/Bicep template (Function App, Storage, App Insights)

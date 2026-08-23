@@ -1,8 +1,7 @@
 """Export the full per-frame per-stage audit stats (weight + CdA, ZI-solved vs our
 game-extracted) to a CSV. One row per matched frame, with all six upgrade stages
-(0 = un-upgraded ... 5 = fully upgraded). Reuses the shared matcher (_zi_compare)
-and the 2x2 stage-0 solver (_zi_stage_solve) so numbers stay consistent with
-_zi_master_audit.py."""
+(0 = un-upgraded ... 5 = fully upgraded). Reuses the shared matcher (zi_compare)
+and the 2x2 stage-0 solver (zi_stage_solve)."""
 import os, json, csv, importlib.util, math
 from statistics import mean
 
@@ -16,8 +15,8 @@ def _load(mod, path):
     return m
 
 
-zc = _load("zc", "_zi_compare.py")
-zs = _load("zs", "_zi_stage_solve.py")
+zc = _load("zc", "zi_compare.py")
+zs = _load("zs", "zi_stage_solve.py")
 
 frames = {f["folder"]: f for f in json.load(
     open(os.path.join(ROOT, "zwiftdata", "game_frames.json"), encoding="utf-8-sig"))

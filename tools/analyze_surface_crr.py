@@ -34,7 +34,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from extract_zwift_routes import read_wad_entries, load_multiroot  # noqa: E402
 from extract_zwift_surfaces import parse_roadstyles, UNSET_STYLE  # noqa: E402
-from _probe_route_surface_exact import parse_roads  # noqa: E402
+from route_surface_exact import parse_roads  # noqa: E402
 from bike_comparison.bike_data import get_bike_stats  # noqa: E402
 from bike_comparison.physics import (  # noqa: E402
     frontal_area_from_rider, AIR_DENSITY, GRAVITY, DRIVETRAIN_LOSS,

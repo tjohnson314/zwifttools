@@ -14,7 +14,7 @@ import importlib.util, json, os, re
 ROOT = r"C:\Users\timjo\Documents\Coding\Zwift\zwifttools"
 OUT = os.path.join(ROOT, "zwiftdata", "frame_zi_match.json")
 
-_spec = importlib.util.spec_from_file_location("zs", os.path.join(ROOT, "tools", "_zi_stage_solve.py"))
+_spec = importlib.util.spec_from_file_location("zs", os.path.join(ROOT, "tools", "zi_stage_solve.py"))
 zs = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(zs)
 zc = zs.zc
 
@@ -64,7 +64,7 @@ def main():
         "//": ("Hardcoded game-frame-folder -> ZwiftInsider sheet bike name. "
                "null = no ZI test (frame stays estimated). Seed by "
                "tools/build_zi_match_map.py; hand-edit thereafter. The solver "
-               "(_zi_stage_solve.build) reads 'matches' as authoritative and "
+               "(zi_stage_solve.build) reads 'matches' as authoritative and "
                "ignores 'review_manually'."),
         "review_manually": [f for f, *_ in check],
         "matches": matches,

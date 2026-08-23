@@ -79,7 +79,7 @@ Standalone browser overlays for [Sauce4Zwift](https://www.sauce.llc/), installed
 - **Data processing**: NumPy, Pandas, SciPy (KD-tree route alignment)
 - **Auth**: Zwift OAuth 2.0
 - **Hosting**: Azure App Service (Linux, Python 3.12, Gunicorn)
-- **Analytics pipeline**: Azure Function + Azure Data Explorer (see [ZWIFTGAMES.md](ZWIFTGAMES.md))
+- **Analytics pipeline**: Azure Function + Azure Data Explorer (see [ZWIFTGAMES.md](azure_function/ZWIFTGAMES.md))
 
 ## Local Development
 

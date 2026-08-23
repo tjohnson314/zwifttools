@@ -201,7 +201,7 @@ def _upgrade_path(level_up: str | None) -> str | None:
 # delivered by the server ("BikeLevels" config) and are absent from the game
 # WADs. They were recovered empirically by inverting the ZwiftInsider flat +
 # climb speed tests: at each level the two average speeds give a 2x2 linear
-# system in (CdA, mass) which is solved directly (see tools/_zi_stage_solve.py).
+# system in (CdA, mass) which is solved directly (see tools/zi_stage_solve.py).
 #
 # The solved per-level changes cluster tightly by (upgrade_path, class), so the
 # model below stores the mean incremental change for each such group as a tuple
@@ -278,7 +278,7 @@ WEIGHT_NOISE_FLOOR_G = 50.0   # g
 
 def _load_upgrade_measurements() -> dict[str, list[list[float]]]:
     """Per-bike measured per-stage (dCdA, dWeight_g) deltas keyed by frame
-    folder, produced by tools/_zi_stage_solve.py. Preferred over the group
+    folder, produced by tools/zi_stage_solve.py. Preferred over the group
     averages for bikes that were individually speed-tested. Missing file ->
     empty (every frame then falls back to the group model)."""
     path = os.path.join(
