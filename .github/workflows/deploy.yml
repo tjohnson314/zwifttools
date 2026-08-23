@@ -5,7 +5,6 @@ on:
     branches: [main]
     paths-ignore:
       - "azure_function/**"
-      - "infra/**"
       - "*.md"
   workflow_dispatch: # Allow manual triggers
 

@@ -159,14 +159,11 @@ azure_function/
     host.json                # Function runtime config
     requirements.txt         # Python dependencies
     local.settings.json      # Local dev settings
-    ZWIFTGAMES.md            # This document
-
-infra/
+    create_tables.kql        # ADX table + function definitions (applied by deploy.ps1)
+    deploy.ps1               # End-to-end deployment script
     main.bicep               # ARM/Bicep template (Function App, Storage, App Insights)
     parameters.json          # Deployment parameters
-    deploy.ps1               # End-to-end deployment script
-    kql/
-        create_tables.kql    # All table + function definitions
+    ZWIFTGAMES.md            # This document
 ```
 
 ## Utility Scripts
@@ -198,7 +195,7 @@ The Azure Function is automatically deployed via **GitHub Actions** when changes
 ### Infrastructure (one-time)
 
 ```powershell
-cd infra
+cd azure_function
 .\deploy.ps1
 ```
 

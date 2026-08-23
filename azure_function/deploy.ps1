@@ -186,7 +186,7 @@ else {
 
 Write-Step "Creating KQL tables and policies..."
 
-$kqlFile = Get-Content "$PSScriptRoot\kql\create_tables.kql" -Raw
+$kqlFile = Get-Content "$PSScriptRoot\create_tables.kql" -Raw
 
 # Split on double-newline, strip comments, and filter for blocks starting with '.'
 $commands = @()

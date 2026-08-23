@@ -118,5 +118,5 @@ Deployed to **Azure App Service** via GitHub Actions. The **Azure Function** (Zw
    - `AZURE_FUNCTIONAPP_PUBLISH_PROFILE` — the full XML publish profile for the Function App
 
 Pushes to `main` trigger automatic deployment:
-- **Web app** changes → `deploy.yml` (ignores `azure_function/` and `infra/`)
+- **Web app** changes → `deploy.yml` (ignores `azure_function/`)
 - **Azure Function** changes → `deploy-function.yml` (triggers on `azure_function/` changes only)
