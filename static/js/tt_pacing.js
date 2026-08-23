@@ -8,7 +8,7 @@
 'use strict';
 
 let allRoutes = [];       // full list from /api/tt_pacing/routes
-let bikeDatabase = null;  // { frames, wheels, bikes } from /api/bike_database
+let bikeSelector = null;  // shared BikeSelector instance (frame/wheels/level)
 let selectedRoute = null; // currently selected route object
 let planChart = null;     // Chart.js instance
 let lastPlanData = null;  // most recent plan response, for re-rendering on unit change
@@ -119,7 +119,7 @@ function applyUnitToUI() {
     updateUnitToggleUI();
     filterRoutes();                                   // rebuilds route option labels
     if (selectedRoute) showRouteStats(selectedRoute);
-    updateBikeStats();
+    if (bikeSelector) bikeSelector.renderStats();     // weight follows the unit toggle
     updateWperKg();
     if (lastPlanData) displayResults(lastPlanData);
 }
@@ -174,19 +174,11 @@ function restoreSelections(settings) {
         updateLapUI();
         showRouteStats(selectedRoute);
     }
-    if (settings.frameId) {
-        const fs = document.getElementById('frameSelect');
-        if (hasOption(fs, settings.frameId)) { fs.value = settings.frameId; onFrameChange(); }
-    }
-    if (settings.wheelId) {
-        const ws = document.getElementById('wheelSelect');
-        if (hasOption(ws, settings.wheelId)) ws.value = settings.wheelId;
-    }
-    if (settings.upgradeLevel != null) {
-        const ul = document.getElementById('upgradeLevel');
-        if (hasOption(ul, String(settings.upgradeLevel))) ul.value = settings.upgradeLevel;
-    }
-    updateBikeStats();
+    bikeSelector.setConfig({
+        frameId: settings.frameId,
+        wheelId: settings.wheelId,
+        level: settings.upgradeLevel,
+    });
     updatePlanButton();
 }
 
@@ -209,16 +201,28 @@ document.addEventListener('DOMContentLoaded', () => {
     updateInputConstraints();
     updateUnitToggleUI();
 
-    Promise.all([loadRoutes(), loadBikeDatabase()])
+    bikeSelector = new BikeSelector({
+        frameSelect: 'frameSelect',
+        wheelSelect: 'wheelSelect',
+        levelSelect: 'upgradeLevel',
+        weightOut: 'bikeWeightStat',
+        cdaOut: 'bikeCda',
+        framePlaceholder: 'Select a frame…',
+        formatWeight: fmtWeight,
+        onChange: onBikeChange,
+    });
+
+    Promise.all([loadRoutes(), bikeSelector.load()])
         .then(() => { restoreSelections(settings); updatePlanButton(); })
         .catch(err => showError('Failed to load data: ' + err.message));
     updateWperKg();
     document.getElementById('includeLeadin')
         .addEventListener('change', () => { if (selectedRoute) showRouteStats(selectedRoute); });
 
-    // Persist choices whenever the user changes them.
+    // Persist choices whenever the user changes them. Bike selections persist
+    // via the BikeSelector onChange handler.
     ['riderWeight', 'riderHeight', 'avgPower', 'worldFilter', 'routeSelect',
-     'frameSelect', 'wheelSelect', 'upgradeLevel', 'includeLeadin'].forEach(id => {
+     'includeLeadin'].forEach(id => {
         const el = document.getElementById(id);
         el.addEventListener('change', saveSettings);
         if (el.type === 'number') el.addEventListener('input', saveSettings);
@@ -257,13 +261,6 @@ function buildRouteSlugMap() {
         const slug = convertToSlug(r.name);
         if (slug && !(slug in routeSlugMap)) routeSlugMap[slug] = r;
     });
-}
-
-async function loadBikeDatabase() {
-    const resp = await fetch('/api/bike_database');
-    if (!resp.ok) throw new Error('Could not load bike database');
-    bikeDatabase = await resp.json();
-    populateFrames();
 }
 
 // ── World filter ─────────────────────────────────────────────────────────────
@@ -389,79 +386,13 @@ function hideRouteStats() {
     document.getElementById('routeStats').style.display = 'none';
 }
 
-// ── Bike database ─────────────────────────────────────────────────────────────
-function populateFrames() {
-    if (!bikeDatabase) return;
-    const sel = document.getElementById('frameSelect');
-    sel.innerHTML = '<option value="">Select a frame…</option>';
-    bikeDatabase.frames.forEach(f => {
-        const opt = document.createElement('option');
-        opt.value = f.frameid;
-        opt.textContent = `${f.framemake} ${f.framemodel}`;
-        sel.appendChild(opt);
-    });
-    onFrameChange();
-}
-
-function onFrameChange() {
-    if (!bikeDatabase) return;
-    const frameId = document.getElementById('frameSelect').value;
-    const wheelSel = document.getElementById('wheelSelect');
-    wheelSel.innerHTML = '';
-
-    if (!frameId) {
-        wheelSel.innerHTML = '<option value="">Select a frame first…</option>';
-        updateBikeStats();
-        return;
-    }
-
-    const combos = bikeDatabase.bikes.filter(b => b.frameid === frameId);
-    const wheelIds = combos.map(b => b.wheelid).filter(Boolean);
-
-    if (wheelIds.length === 0) {
-        wheelSel.innerHTML = '<option value="">(Built-in wheels)</option>';
-    } else {
-        wheelSel.innerHTML = '<option value="">Select wheels…</option>';
-        const seenIds = new Set();
-        wheelIds.forEach(wid => {
-            if (seenIds.has(wid)) return;
-            seenIds.add(wid);
-            const wh = bikeDatabase.wheels.find(w => w.wheelid === wid);
-            if (!wh) return;
-            const opt = document.createElement('option');
-            opt.value = wid;
-            opt.textContent = `${wh.wheelmake} ${wh.wheelmodel}`;
-            wheelSel.appendChild(opt);
-        });
-    }
-    updateBikeStats();
-}
-
-function updateBikeStats() {
-    if (!bikeDatabase) return;
-    const frameId = document.getElementById('frameSelect').value;
-    const wheelId = document.getElementById('wheelSelect').value;
-    const level = parseInt(document.getElementById('upgradeLevel').value, 10);
-
-    if (!frameId) { clearBikeStats(); return; }
-
-    const combo = bikeDatabase.bikes.find(
-        b => b.frameid === frameId && (b.wheelid || '') === (wheelId || '')
-    );
-    if (!combo) { clearBikeStats(); return; }
-
-    const frame = bikeDatabase.frames.find(f => f.frameid === frameId);
-    document.getElementById('bikeCda').textContent = combo.cda[level].toFixed(4);
-    document.getElementById('bikeWeightStat').textContent = fmtWeight(combo.weight[level]);
-    document.getElementById('bikeType').textContent = frame ? (frame.frametype || 'Standard') : 'Standard';
+// ── Bike selection ────────────────────────────────────────────────────────────
+// The frame / wheels / upgrade-level dropdowns and the weight + CdA-bias summary
+// are managed by the shared BikeSelector (see bike_selector.js). This callback
+// keeps the plan button and persisted settings in sync with the user's choice.
+function onBikeChange() {
     updatePlanButton();
-}
-
-function clearBikeStats() {
-    ['bikeCda', 'bikeWeightStat', 'bikeType'].forEach(id => {
-        document.getElementById(id).textContent = '—';
-    });
-    updatePlanButton();
+    saveSettings();
 }
 
 // ── UI helpers ────────────────────────────────────────────────────────────────
@@ -473,9 +404,7 @@ function updateWperKg() {
 }
 
 function updatePlanButton() {
-    const ready = !!selectedRoute
-        && !!document.getElementById('frameSelect').value
-        && document.getElementById('bikeCda').textContent !== '—';
+    const ready = !!selectedRoute && !!bikeSelector && bikeSelector.isReady();
     const btn = document.getElementById('planBtn');
     btn.disabled = !ready;
     document.getElementById('planHint').textContent =
@@ -513,9 +442,7 @@ async function requestPlan({ numBuckets = null, isBuild = false } = {}) {
     const weightKg  = getWeightKg();
     const heightCm  = getHeightCm();
     const avgPowerW = parseFloat(document.getElementById('avgPower').value);
-    const frameId   = document.getElementById('frameSelect').value;
-    const wheelId   = document.getElementById('wheelSelect').value || null;
-    const level     = parseInt(document.getElementById('upgradeLevel').value, 10);
+    const { frameId, wheelId, level } = bikeSelector.getConfig();
 
     if (!frameId || isNaN(weightKg) || isNaN(heightCm) || isNaN(avgPowerW) || avgPowerW <= 0) {
         showError('Please fill in all fields correctly.');

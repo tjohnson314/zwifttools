@@ -95,34 +95,34 @@
 
             <div class="form-group">
                 <label for="frameSelect">Frame</label>
-                <select id="frameSelect" onchange="onFrameChange()">
+                <select id="frameSelect">
                     <option value="">Loading…</option>
                 </select>
             </div>
 
             <div class="form-group">
                 <label for="wheelSelect">Wheels</label>
-                <select id="wheelSelect" onchange="updateBikeStats()">
+                <select id="wheelSelect">
                     <option value="">Loading…</option>
                 </select>
             </div>
 
             <div class="form-group">
                 <label for="upgradeLevel">Upgrade Level</label>
-                <select id="upgradeLevel" onchange="updateBikeStats()">
-                    <option value="0">0 — Stock</option>
-                    <option value="1">1</option>
-                    <option value="2">2</option>
-                    <option value="3">3</option>
-                    <option value="4">4</option>
-                    <option value="5">5 — Max</option>
+                <select id="upgradeLevel">
+                    <option value="0">Level 0 (Stock)</option>
                 </select>
             </div>
 
-            <div class="bike-stats" id="bikeStats">
-                <div class="stat-pill"><span class="stat-label no-uppercase">CdA</span><span class="stat-value" id="bikeCda">—</span></div>
-                <div class="stat-pill"><span class="stat-label">Weight</span><span class="stat-value" id="bikeWeightStat">—</span></div>
-                <div class="stat-pill"><span class="stat-label">Type</span><span class="stat-value" id="bikeType">—</span></div>
+            <div class="bike-summary" id="bikeStats">
+                <div class="bike-summary-row">
+                    <span class="bike-summary-label">Total weight</span>
+                    <span class="bike-summary-value weight" id="bikeWeightStat">—</span>
+                </div>
+                <div class="bike-summary-row">
+                    <span class="bike-summary-label">Total CdA bias</span>
+                    <span class="bike-summary-value cda" id="bikeCda">—</span>
+                </div>
             </div>
         </div>
     </div>
@@ -234,6 +234,7 @@
 
 </div>
 
+<script src="/static/js/bike_selector.js"></script>
 <script src="/static/js/tt_pacing.js"></script>
 </body>
 </html>

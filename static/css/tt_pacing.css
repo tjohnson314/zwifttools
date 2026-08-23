@@ -238,6 +238,42 @@ h1 .logo-emoji {
     margin-top: 6px;
 }
 
+/* Bike config summary (Total weight + Total CdA bias) */
+.bike-summary {
+    background: rgba(0,0,0,0.25);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 4px 14px;
+    margin-top: 12px;
+}
+
+.bike-summary-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 9px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.bike-summary-row:last-child {
+    border-bottom: none;
+}
+
+.bike-summary-label {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #aaa;
+}
+
+.bike-summary-value {
+    font-family: monospace;
+    font-weight: 700;
+    font-size: 1.05rem;
+}
+
+.bike-summary-value.weight { color: #81c784; }
+.bike-summary-value.cda { color: #4fc3f7; }
+
 .stat-pill {
     background: rgba(247,147,30,0.1);
     border: 1px solid rgba(247,147,30,0.25);

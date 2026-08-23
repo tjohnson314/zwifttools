@@ -84,21 +84,21 @@
                 
                 <div class="form-group">
                     <label>Frame</label>
-                    <select id="actualFrame" onchange="updateBikeStats('actual')">
+                    <select id="actualFrame">
                         <option value="">Loading frames...</option>
                     </select>
                 </div>
                 
                 <div class="form-group">
                     <label>Wheels</label>
-                    <select id="actualWheels" onchange="updateBikeStats('actual')">
+                    <select id="actualWheels">
                         <option value="">Loading wheels...</option>
                     </select>
                 </div>
                 
                 <div class="form-group">
                     <label>Upgrade Level</label>
-                    <select id="actualLevel" onchange="updateBikeStats('actual')">
+                    <select id="actualLevel">
                         <option value="0" selected>Level 0 (Stock)</option>
                         <option value="1">Level 1</option>
                         <option value="2">Level 2</option>
@@ -132,21 +132,21 @@
                 
                 <div class="form-group">
                     <label>Frame</label>
-                    <select id="altFrame" onchange="updateBikeStats('alt')">
+                    <select id="altFrame">
                         <option value="">Loading frames...</option>
                     </select>
                 </div>
                 
                 <div class="form-group">
                     <label>Wheels</label>
-                    <select id="altWheels" onchange="updateBikeStats('alt')">
+                    <select id="altWheels">
                         <option value="">Loading wheels...</option>
                     </select>
                 </div>
                 
                 <div class="form-group">
                     <label>Upgrade Level</label>
-                    <select id="altLevel" onchange="updateBikeStats('alt')">
+                    <select id="altLevel">
                         <option value="0" selected>Level 0 (Stock)</option>
                         <option value="1">Level 1</option>
                         <option value="2">Level 2</option>
@@ -359,6 +359,7 @@
 
     {% include 'bike_comparison_faq.html' %}
     
+    <script src="/static/js/bike_selector.js"></script>
     <script>
         // Global state
         let frames = [];
@@ -371,6 +372,8 @@
         let myProfile = null;  // {height_cm, weight_kg, name}
         let excludedFrames = new Set();  // Frame IDs excluded from best bikes search
         let lastComparisonData = null;  // Stored for ZWO export
+        let actualBike = null;  // BikeSelector for the "actual" panel
+        let altBike = null;     // BikeSelector for the "alternative" panel
         
         // Authentication functions
         async function checkAuthStatus() {
@@ -431,8 +434,36 @@
             
             await checkAuthStatus();
             await loadMyProfile();
-            await loadFrames();
-            await loadWheels();
+
+            // Capture saved bike selections before the selectors mount, since
+            // mounting fires onChange (which persists) before we can restore.
+            const savedBikes = {
+                actualFrame: localStorage.getItem('zwift_actualFrame'),
+                actualWheels: localStorage.getItem('zwift_actualWheels'),
+                actualLevel: localStorage.getItem('zwift_actualLevel'),
+                altFrame: localStorage.getItem('zwift_altFrame'),
+                altWheels: localStorage.getItem('zwift_altWheels'),
+                altLevel: localStorage.getItem('zwift_altLevel'),
+            };
+
+            const data = await BikeSelector.loadData();
+            frames = data.frames;
+            wheels = data.wheels;
+
+            actualBike = new BikeSelector({
+                frameSelect: 'actualFrame', wheelSelect: 'actualWheels', levelSelect: 'actualLevel',
+                weightOut: 'actualWeight', cdaOut: 'actualCda',
+                onChange: () => onBikeChanged('actual'),
+            });
+            altBike = new BikeSelector({
+                frameSelect: 'altFrame', wheelSelect: 'altWheels', levelSelect: 'altLevel',
+                weightOut: 'altWeight', cdaOut: 'altCda',
+                onChange: () => onBikeChanged('alt'),
+            });
+            await actualBike.load();
+            await altBike.load();
+            restoreBikeSelection('actual', actualBike, savedBikes, 'F089');  // default: Tron
+            restoreBikeSelection('alt', altBike, savedBikes, 'F122');        // default: Tarmac
             
             // Populate max rider level dropdown from frame and wheel unlock levels
             const levelSet = new Set([
@@ -454,176 +485,34 @@
             }
         });
         
-        function frameHasBuiltInWheels(frameId) {
-            const frame = frames.find(f => f.id === frameId);
-            return frame ? frame.hasBuiltInWheels : false;
+        function onBikeChanged(prefix) {
+            persistBike(prefix);
+            if (telemetryData) runComparison();
+            if (prefix === 'actual' && telemetryData &&
+                !document.getElementById('bestBikesContainer').classList.contains('hidden')) {
+                findBestBikes();
+            }
         }
         
-        function getFrameType(frameId) {
-            const frame = frames.find(f => f.id === frameId);
-            return frame ? (frame.frameType || 'Standard') : 'Standard';
+        function persistBike(prefix) {
+            const cfg = (prefix === 'actual' ? actualBike : altBike).getConfig();
+            localStorage.setItem('zwift_' + prefix + 'Frame', cfg.frameId || '');
+            localStorage.setItem('zwift_' + prefix + 'Wheels', cfg.wheelId || '');
+            localStorage.setItem('zwift_' + prefix + 'Level', String(cfg.level));
         }
         
-        function getCompatibleWheels(frameType) {
-            // Filter wheels to only those compatible with the selected frame type
-            return wheels.filter(w => {
-                if (w.id === '') return false;  // Skip built-in placeholder
-                const fits = (w.fitsFrame || 'Standard,TT').split(',').map(s => s.trim());
-                return fits.includes(frameType);
+        function restoreBikeSelection(prefix, selector, savedBikes, defaultFrameId) {
+            const savedFrame = savedBikes[prefix + 'Frame'];
+            const frameId = (savedFrame && frames.some(f => f.id === savedFrame))
+                ? savedFrame
+                : (frames.some(f => f.id === defaultFrameId) ? defaultFrameId : (frames[0] && frames[0].id));
+            const savedWheels = savedBikes[prefix + 'Wheels'];
+            const savedLevel = savedBikes[prefix + 'Level'];
+            selector.setConfig({
+                frameId: frameId,
+                wheelId: savedWheels || undefined,
+                level: savedLevel != null ? parseInt(savedLevel, 10) : undefined,
             });
-        }
-        
-        function syncWheelDropdownState(prefix) {
-            const frameId = document.getElementById(prefix + 'Frame').value;
-            const wheelSelect = document.getElementById(prefix + 'Wheels');
-            const previousValue = wheelSelect.value;
-            
-            if (frameHasBuiltInWheels(frameId)) {
-                wheelSelect.innerHTML = '<option value="">(Built-in wheels)</option>';
-                wheelSelect.value = '';
-                wheelSelect.disabled = true;
-            } else {
-                // Filter wheels by frame type compatibility
-                const frameType = getFrameType(frameId);
-                const compatible = getCompatibleWheels(frameType);
-                const isTT = frameType === 'TT';
-
-                wheelSelect.innerHTML = compatible
-                    .map(w => {
-                        // TT frames get the wheel's TT-specific (more aero) bias.
-                        const bias = (isTT && w.cdaBiasTt != null) ? w.cdaBiasTt : w.cdaBias;
-                        return `<option value="${w.id}">${w.name}${bias != null ? ` (CdA ${bias >= 0 ? '+' : ''}${bias} · ${Math.round(w.weightG)}g)` : ''}</option>`;
-                    })
-                    .join('');
-                wheelSelect.disabled = false;
-                
-                // Try to restore previous selection if still compatible
-                if (compatible.some(w => w.id === previousValue)) {
-                    wheelSelect.value = previousValue;
-                }
-            }
-        }
-        
-        function syncLevelDropdown(prefix) {
-            // Rebuild the upgrade-level options for the selected frame, showing
-            // the cumulative weight/CdA effect of each stage vs stock (level 0).
-            const frameId = document.getElementById(prefix + 'Frame').value;
-            const levelSelect = document.getElementById(prefix + 'Level');
-            if (!levelSelect) return;
-            const frame = frames.find(f => f.id === frameId);
-            const stages = frame && frame.upgradeStages;
-            const previousValue = levelSelect.value;
-            const labelFor = (lvl) => {
-                if (lvl === 0) return 'Level 0 (Stock)';
-                if (!stages || !stages[lvl] || !stages[0]) return `Level ${lvl}`;
-                const dW = Math.round((stages[lvl].weightG || 0) - (stages[0].weightG || 0));
-                const dCda = (stages[lvl].cdaBias || 0) - (stages[0].cdaBias || 0);
-                const wStr = `${dW > 0 ? '+' : ''}${dW} g`;
-                const cStr = `CdA ${dCda >= 0 ? '+' : ''}${dCda.toFixed(4)}`;
-                return `Level ${lvl} (${cStr} · ${wStr})`;
-            };
-            levelSelect.innerHTML = [0, 1, 2, 3, 4, 5]
-                .map(l => `<option value="${l}">${labelFor(l)}</option>`)
-                .join('');
-            if ([...levelSelect.options].some(o => o.value === previousValue)) {
-                levelSelect.value = previousValue;
-            }
-        }
-        
-        async function loadFrames() {
-            try {
-                const resp = await fetch('/api/frames');
-                if (!resp.ok) {
-                    throw new Error(`Failed to fetch frames (${resp.status})`);
-                }
-                const contentType = resp.headers.get('content-type') || '';
-                if (!contentType.includes('application/json')) {
-                    const body = await resp.text();
-                    throw new Error(`Frames API returned non-JSON (${contentType}): ${body.slice(0, 200)}`);
-                }
-                frames = await resp.json();
-                
-                const html = frames.map(f => 
-                    `<option value="${f.id}">${f.name}${f.cdaBias != null ? ` (CdA ${f.cdaBias >= 0 ? '+' : ''}${f.cdaBias} · ${Math.round(f.weightG)}g)` : ''}</option>`
-                ).join('');
-                
-                document.getElementById('actualFrame').innerHTML = html;
-                document.getElementById('altFrame').innerHTML = html;
-                
-                // Restore from cache or use defaults
-                const savedActualFrame = localStorage.getItem('zwift_actualFrame');
-                const savedAltFrame = localStorage.getItem('zwift_altFrame');
-                
-                if (savedActualFrame && frames.some(f => f.id === savedActualFrame)) {
-                    document.getElementById('actualFrame').value = savedActualFrame;
-                } else {
-                    const tronIdx = frames.findIndex(f => f.id === 'F089');
-                    document.getElementById('actualFrame').selectedIndex = tronIdx >= 0 ? tronIdx : 0;
-                }
-                
-                if (savedAltFrame && frames.some(f => f.id === savedAltFrame)) {
-                    document.getElementById('altFrame').value = savedAltFrame;
-                } else {
-                    const tarmacIdx = frames.findIndex(f => f.id === 'F122');
-                    document.getElementById('altFrame').selectedIndex =
-                        tarmacIdx >= 0 ? tarmacIdx : Math.min(1, frames.length - 1);
-                }
-            } catch (e) {
-                console.error('Failed to load frames:', e);
-                document.getElementById('actualFrame').innerHTML = '<option value="">Failed to load frames</option>';
-                document.getElementById('altFrame').innerHTML = '<option value="">Failed to load frames</option>';
-            }
-        }
-        
-        async function loadWheels() {
-            try {
-                const resp = await fetch('/api/wheels');
-                if (!resp.ok) {
-                    throw new Error(`Failed to fetch wheels (${resp.status})`);
-                }
-                const contentType = resp.headers.get('content-type') || '';
-                if (!contentType.includes('application/json')) {
-                    const body = await resp.text();
-                    throw new Error(`Wheels API returned non-JSON (${contentType}): ${body.slice(0, 200)}`);
-                }
-                wheels = await resp.json();
-                
-                // Sync wheel dropdowns — filters by frame type compatibility
-                syncWheelDropdownState('actual');
-                syncWheelDropdownState('alt');
-                
-                // Restore from cache or use defaults (skip for built-in wheel frames)
-                const savedActualWheels = localStorage.getItem('zwift_actualWheels');
-                const savedAltWheels = localStorage.getItem('zwift_altWheels');
-                
-                if (!frameHasBuiltInWheels(document.getElementById('actualFrame').value)) {
-                    if (savedActualWheels && document.getElementById('actualWheels').querySelector(`option[value="${savedActualWheels}"]`)) {
-                        document.getElementById('actualWheels').value = savedActualWheels;
-                    }
-                }
-                if (!frameHasBuiltInWheels(document.getElementById('altFrame').value)) {
-                    if (savedAltWheels && document.getElementById('altWheels').querySelector(`option[value="${savedAltWheels}"]`)) {
-                        document.getElementById('altWheels').value = savedAltWheels;
-                    }
-                }
-                
-                // Sync wheel dropdown states (disabled for built-in wheel frames)
-                syncWheelDropdownState('actual');
-                syncWheelDropdownState('alt');
-                
-                // Restore upgrade levels from cache
-                const savedActualLevel = localStorage.getItem('zwift_actualLevel');
-                const savedAltLevel = localStorage.getItem('zwift_altLevel');
-                if (savedActualLevel !== null) document.getElementById('actualLevel').value = savedActualLevel;
-                if (savedAltLevel !== null) document.getElementById('altLevel').value = savedAltLevel;
-                
-                updateBikeStats('actual');
-                updateBikeStats('alt');
-            } catch (e) {
-                console.error('Failed to load wheels:', e);
-                document.getElementById('actualWheels').innerHTML = '<option value="">Failed to load wheels</option>';
-                document.getElementById('altWheels').innerHTML = '<option value="">Failed to load wheels</option>';
-            }
         }
         
         function calculateFrontalAreaFor(prefix) {
@@ -679,11 +568,9 @@
         }
         
         function copyBike(from, to) {
-            document.getElementById(to + 'Frame').value = document.getElementById(from + 'Frame').value;
-            document.getElementById(to + 'Wheels').value = document.getElementById(from + 'Wheels').value;
-            document.getElementById(to + 'Level').value = document.getElementById(from + 'Level').value;
-            syncWheelDropdownState(to);
-            updateBikeStats(to);
+            const src = from === 'actual' ? actualBike : altBike;
+            const dst = to === 'actual' ? actualBike : altBike;
+            dst.setConfig(src.getConfig());
         }
         
         function copyRider(from, to) {
@@ -821,56 +708,6 @@
         
         document.getElementById('rangeStart').addEventListener('input', onRangeInput);
         document.getElementById('rangeEnd').addEventListener('input', onRangeInput);
-        
-        async function updateBikeStats(prefix) {
-            const frameSelect = document.getElementById(`${prefix}Frame`);
-            const wheelSelect = document.getElementById(`${prefix}Wheels`);
-            const levelSelect = document.getElementById(`${prefix}Level`);
-            
-            const frameId = frameSelect.value;
-            const level = levelSelect.value;
-            
-            // For built-in wheel frames, force wheel to empty and disable dropdown
-            syncWheelDropdownState(prefix);
-            syncLevelDropdown(prefix);
-            const wheelId = wheelSelect.value;
-            
-            // Save selections to browser cache
-            const key = prefix === 'actual' ? 'actual' : 'alt';
-            localStorage.setItem(`zwift_${key}Frame`, frameId);
-            localStorage.setItem(`zwift_${key}Wheels`, wheelId);
-            localStorage.setItem(`zwift_${key}Level`, level);
-            
-            if (!frameId) return;
-            
-            try {
-                const resp = await fetch(`/api/bike_stats?frame_id=${frameId}&wheel_id=${wheelId}&upgrade_level=${level}`);
-                
-                if (resp.ok) {
-                    const stats = await resp.json();
-                    const fmtBias = (v) => v == null ? 'N/A' : `${v >= 0 ? '+' : ''}${v.toFixed(4)} m²`;
-                    // weight_kg is the total-bike weight in kg; tolerate the legacy
-                    // field name (weight_g held a kg value) so a lagging backend
-                    // deploy doesn't blank out the totals.
-                    const totalWeightKg = stats.weight_kg != null ? stats.weight_kg : stats.weight_g;
-                    document.getElementById(`${prefix}Weight`).textContent = totalWeightKg != null ? `${totalWeightKg.toFixed(2)} kg` : 'N/A';
-                    document.getElementById(`${prefix}Cda`).textContent = fmtBias(stats.cda_bias);
-                } else {
-                    ['Weight','Cda'].forEach(s =>
-                        document.getElementById(`${prefix}${s}`).textContent = 'N/A');
-                }
-            } catch (e) {
-                console.error('Failed to get bike stats:', e);
-            }
-            
-            // Auto-refresh comparison
-            if (telemetryData) runComparison();
-            
-            // Auto-refresh best bikes if they were already shown and actual bike changed
-            if (prefix === 'actual' && telemetryData && !document.getElementById('bestBikesContainer').classList.contains('hidden')) {
-                findBestBikes();
-            }
-        }
         
         function updateActivityLink() {
             const activityId = document.getElementById('activityId').value.trim();
@@ -1520,26 +1357,16 @@
         }
         
         function selectBike(panel, frameId, wheelId) {
-            // Set the frame and wheel dropdowns to the selected bike
-            const frameSelect = document.getElementById(panel + 'Frame');
-            const wheelSelect = document.getElementById(panel + 'Wheels');
-            
-            if (frameId) frameSelect.value = frameId;
-            // Set wheel - syncWheelDropdownState handles built-in wheel frames
-            if (wheelId) {
-                wheelSelect.value = wheelId;
-            }
-            syncWheelDropdownState(panel);
-            
+            // Apply the selected bike to the panel's BikeSelector
+            const selector = panel === 'actual' ? actualBike : altBike;
+            const cfg = { frameId };
+            if (wheelId) cfg.wheelId = wheelId;
             // Sync upgrade level from best bikes search if selecting alternative
             if (panel === 'alt') {
-                const bestBikesLevel = document.getElementById('bestBikesLevel').value;
-                document.getElementById('altLevel').value = bestBikesLevel;
+                cfg.level = parseInt(document.getElementById('bestBikesLevel').value, 10);
             }
-            
-            // Update stats display (also saves to cache)
-            updateBikeStats(panel);
-            
+            selector.setConfig(cfg);
+
             // Scroll to bike panels
             document.querySelector('.bike-panels').scrollIntoView({ behavior: 'smooth' });
         }
