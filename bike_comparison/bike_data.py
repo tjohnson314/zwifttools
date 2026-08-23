@@ -12,12 +12,11 @@ rider's baseline CdA.  Absolute CdA at the reference rider is therefore
 
     CdA = BASE_CDA + frame_cda_bias + wheel_cda_bias
 
-Downstream physics multiplies a per-bike ``cd`` by the rider's frontal area, so
-we expose an equivalent ``cd`` such that ``cd * REF_FRONTAL_AREA`` reproduces the
-absolute CdA above.  This keeps every existing physics call-site working while
-sourcing the numbers from the game.  The bike-vs-bike comparison and best-bike
-search are differential (evaluated against recorded power), so BASE_CDA cancels
-there; it only anchors absolute solo / ride-simulator predictions.
+Each bike combo exposes this absolute ``cda`` (m^2, at the reference rider)
+alongside the raw per-frame/per-wheel biases.  The bike-vs-bike comparison and
+best-bike search are differential (evaluated against recorded power), so
+BASE_CDA cancels there; it only anchors absolute solo / pacing-planner
+predictions.
 
 Note: frame upgrades ARE modelled.  game_frames.json carries a measured 5-stage
 upgrade ladder per frame (levels 1-5, each with cumulative ``cda_bias_effective``
@@ -38,7 +37,7 @@ REF_FRONTAL_AREA = 0.3449
 # rider.  Calibrated by tools/export_frame_stats.py from Zwift Insider flat and
 # climb speed tests, with the authoritative game CdA biases kept at 1:1 scale.
 # This anchor cancels out of differential comparisons but controls absolute
-# solo, ride-simulator, and draft-savings predictions.
+# solo, pacing-planner, and draft-savings predictions.
 BASE_CDA = 0.3042
 
 # Map Zwift game frame "type" tokens to the frametype strings used by
@@ -84,7 +83,7 @@ class BikeSetup:
     wheel_id: str
     wheel_name: str
     upgrade_level: int
-    cd: float  # Equivalent drag coefficient (cd * frontal_area = absolute CdA)
+    cda: float  # Absolute CdA (m²) at the reference rider (BASE_CDA + biases)
     weight_kg: float  # Total bike weight (frame + wheels) in kg
     frame_type: str  # 'Standard', 'TT', 'Gravel', 'MTB', 'Tron', 'Hand'
     # Authoritative game values (base / stage 0)
@@ -108,7 +107,7 @@ class BikeDatabase:
     def __init__(self):
         self.frames: Dict[str, dict] = {}
         self.wheels: Dict[str, dict] = {}
-        self.bikes: Dict[Tuple[str, str], dict] = {}  # (frame_id, wheel_id) -> {'cd':[...], 'weight':[...]}
+        self.bikes: Dict[Tuple[str, str], dict] = {}  # (frame_id, wheel_id) -> {'cda':[...], 'weight':[...]}
         self._load_data()
 
     def _read_json(self, name: str):
@@ -234,29 +233,28 @@ class BikeDatabase:
         wt = wt_stages[level] if wt_stages else frame.get('frameweight_g', 0.0)
         return float(cda or 0.0), float(wt or 0.0)
 
-    def _combo_cd_weight(self, frame: dict, wheel: Optional[dict], upgrade_level: int = 0) -> Tuple[float, float]:
+    def _combo_cda_weight(self, frame: dict, wheel: Optional[dict], upgrade_level: int = 0) -> Tuple[float, float]:
         frame_bias, frame_wt = self._frame_stage(frame, upgrade_level)
         wheel_bias = self._wheel_bias_for_frame(frame, wheel)
         wheel_wt = float(wheel.get('wheelweight_g') or 0.0) if wheel else 0.0
         cda = BASE_CDA + frame_bias + wheel_bias
-        cd = cda / REF_FRONTAL_AREA
         weight_kg = (frame_wt + wheel_wt) / 1000.0
-        return cd, weight_kg
+        return cda, weight_kg
 
     def _build_combos(self):
-        """Precompute (frame, wheel) combos with per-upgrade-stage cd/weight arrays."""
+        """Precompute (frame, wheel) combos with per-upgrade-stage cda/weight arrays."""
         self.bikes = {}
         for fid, frame in self.frames.items():
             # Built-in / no separate wheelset option (wheel_id == '')
-            builtin = [self._combo_cd_weight(frame, None, lvl) for lvl in range(6)]
+            builtin = [self._combo_cda_weight(frame, None, lvl) for lvl in range(6)]
             self.bikes[(fid, '')] = {
-                'cd': [c for c, _ in builtin],
+                'cda': [c for c, _ in builtin],
                 'weight': [w for _, w in builtin],
             }
             for wid, wheel in self.wheels.items():
-                stages = [self._combo_cd_weight(frame, wheel, lvl) for lvl in range(6)]
+                stages = [self._combo_cda_weight(frame, wheel, lvl) for lvl in range(6)]
                 self.bikes[(fid, wid)] = {
-                    'cd': [c for c, _ in stages],
+                    'cda': [c for c, _ in stages],
                     'weight': [w for _, w in stages],
                 }
 
@@ -279,7 +277,7 @@ class BikeDatabase:
             return None
 
         level = max(0, min(5, int(upgrade_level or 0)))
-        cd, weight_kg = self._combo_cd_weight(frame, wheel, level)
+        cda, weight_kg = self._combo_cda_weight(frame, wheel, level)
         frame_bias, frame_wt = self._frame_stage(frame, level)
         wheel_bias = self._wheel_bias_for_frame(frame, wheel)
 
@@ -289,7 +287,7 @@ class BikeDatabase:
             wheel_id=lookup_wheel_id,
             wheel_name=(f"{wheel['wheelmake']} {wheel['wheelmodel']}".strip() if wheel else '(Built-in wheels)'),
             upgrade_level=level,
-            cd=cd,
+            cda=cda,
             weight_kg=weight_kg,
             frame_type=frame.get('frametype', 'Standard'),
             cda_bias=frame_bias + wheel_bias,
@@ -354,4 +352,4 @@ if __name__ == "__main__":
         print(f"  Frame:  {setup.frame_weight_g}g, CdA bias {setup.frame_cda_bias}")
         print(f"  Wheels: {setup.wheel_weight_g}g, CdA bias {setup.wheel_cda_bias}")
         print(f"  Total:  {setup.weight_kg:.3f} kg, CdA bias {setup.cda_bias:+.4f}")
-        print(f"  cd={setup.cd:.4f}  (abs CdA @ref {setup.cd * REF_FRONTAL_AREA:.4f})")
+        print(f"  CdA={setup.cda:.4f} m² (abs @ref rider)")

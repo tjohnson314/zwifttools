@@ -33,10 +33,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from bike_comparison.bike_data import get_bike_database, get_bike_stats, BASE_CDA, REF_FRONTAL_AREA
+from bike_comparison.bike_data import get_bike_database, get_bike_stats, BASE_CDA
 from bike_comparison.physics import compare_bike_setups, frontal_area_from_rider, rider_cda
-from bike_comparison.ride_simulator import list_routes, load_route_profile, simulate_ride as _simulate_ride
-from bike_comparison.pacing_planner import plan_tt_pacing
+from bike_comparison.pacing_planner import plan_tt_pacing, list_routes, load_route_profile
 from shared.utils import calculate_normalized_power
 from shared.data_fetcher import (
     fetch_rider_telemetry, convert_telemetry_to_dataframe,
@@ -1590,7 +1589,7 @@ def get_bike_stats_api():
         'wheel_id': setup.wheel_id,
         'wheel_name': setup.wheel_name,
         'upgrade_level': setup.upgrade_level,
-        'cd': round(setup.cd, 4),
+        'cda': round(setup.cda, 4),
         'weight_kg': round(setup.weight_kg, 3),
         'cda_bias': round(setup.cda_bias, 4),
         'frame_weight_g': round(setup.frame_weight_g),
@@ -1605,7 +1604,7 @@ def get_bike_database_api():
     """
     Return all frames, wheels, and bike combos in a single payload.
 
-    Used by the ride simulator to populate all dropdowns and look up Cd/weight
+    Used by the ride simulator to populate all dropdowns and look up CdA/weight
     without making multiple round-trips.
     """
     db = get_db()
@@ -1634,12 +1633,12 @@ def get_bike_database_api():
 
     bikes = []
     for (fid, wid), combo in db.bikes.items():
-        if not isinstance(combo.get('cd'), list) or not isinstance(combo.get('weight'), list):
+        if not isinstance(combo.get('cda'), list) or not isinstance(combo.get('weight'), list):
             continue
         bikes.append({
             'frameid': fid,
             'wheelid': wid,
-            'cd':      combo['cd'],
+            'cda':     combo['cda'],
             'weight':  combo['weight'],
         })
 
@@ -2031,7 +2030,7 @@ def compare_bikes():
     return jsonify({
         'actual': {
             'name': str(actual),
-            'cd': actual.cd,
+            'cda': round(actual.cda, 4),
             'weight_kg': actual.weight_kg,
             'cda_bias': round(actual.cda_bias, 4),
             'frame_weight_g': round(actual.frame_weight_g),
@@ -2041,7 +2040,7 @@ def compare_bikes():
         },
         'alternative': {
             'name': str(alternative),
-            'cd': alternative.cd,
+            'cda': round(alternative.cda, 4),
             'weight_kg': alternative.weight_kg,
             'cda_bias': round(alternative.cda_bias, 4),
             'frame_weight_g': round(alternative.frame_weight_g),
@@ -2173,15 +2172,15 @@ def _filter_bike_combos(db, exclude_tt, use_pareto, upgrade_level, max_rider_lev
     if use_pareto:
         bike_stats = []
         for (frame_id, wheel_id), combo in bike_combos:
-            cd = combo['cd'][upgrade_level]
+            cda = combo['cda'][upgrade_level]
             wt = combo['weight'][upgrade_level]
-            bike_stats.append((cd, wt, frame_id, wheel_id))
+            bike_stats.append((cda, wt, frame_id, wheel_id))
         
         bike_stats.sort(key=lambda x: (x[0], x[1]))
         
         pareto = []
         min_weight = float('inf')
-        for cd, wt, fid, wid in bike_stats:
+        for cda, wt, fid, wid in bike_stats:
             if wt < min_weight:
                 pareto.append((fid, wid))
                 min_weight = wt
@@ -2364,7 +2363,7 @@ def find_best_bikes():
                 'frame_name': setup.frame_name,
                 'wheel_name': setup.wheel_name,
                 'name': f"{setup.frame_name} + {setup.wheel_name}",
-                'cd': round(setup.cd, 4),
+                'cda': round(setup.cda, 4),
                 'weight_kg': round(setup.weight_kg, 3),
                 'cda_bias': round(setup.cda_bias, 4),
                 'frame_weight_g': round(setup.frame_weight_g),
@@ -2398,103 +2397,6 @@ def find_best_bikes():
         'actual_np': round(actual_np, 1),
         'actual_bike_name': actual_bike_name,
         'best_bikes': top_bikes
-    })
-
-
-# ---------------------------------------------------------------------------
-# Ride Simulator — predict finish time given rider, bike, power, and route
-# ---------------------------------------------------------------------------
-
-@app.route('/ride-simulator')
-def ride_simulator():
-    """Ride simulator tool."""
-    return render_template('ride_simulator.html')
-
-
-@app.route('/api/ride_simulator/routes')
-def api_ride_simulator_routes():
-    """Return all rideable routes for the simulator route selector."""
-    try:
-        routes = list_routes()
-        return jsonify({'routes': routes})
-    except Exception as e:
-        logger.exception("Error listing simulator routes")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/simulate_ride', methods=['POST'])
-def api_simulate_ride():
-    """
-    Run a ride simulation.
-
-    Expected JSON body:
-        route_id      (str)   — route ID (WAD route nameHash)
-        route_name    (str)   — route name (used for ZwiftMap geometry lookup)
-        world         (str)   — world name (for surface-aware CRR)
-        include_leadin (bool) — include the route lead-in (default true)
-        rider_weight_kg (float)
-        rider_height_cm (float)
-        power_watts   (float)
-        frame_id      (str)
-        wheel_id      (str or null)
-        upgrade_level (int, 0-5)
-    """
-    body = request.get_json(force=True, silent=True) or {}
-
-    try:
-        route_name = str(body['route_name'])
-        weight_kg  = float(body['rider_weight_kg'])
-        height_cm  = float(body['rider_height_cm'])
-        power_w    = float(body['power_watts'])
-        frame_id   = str(body['frame_id'])
-        wheel_id   = body.get('wheel_id') or None
-        level      = int(body.get('upgrade_level', 0))
-    except (KeyError, TypeError, ValueError) as exc:
-        return jsonify({'error': f'Invalid request: {exc}'}), 400
-
-    if power_w <= 0:
-        return jsonify({'error': 'power_watts must be positive'}), 400
-    if weight_kg <= 0 or height_cm <= 0:
-        return jsonify({'error': 'rider_weight_kg and rider_height_cm must be positive'}), 400
-
-    db = get_db()
-    bike_setup = db.get_bike_stats(frame_id, wheel_id, level)
-    if bike_setup is None:
-        return jsonify({'error': f'Unknown frame/wheel combination: {frame_id}/{wheel_id}'}), 400
-
-    try:
-        route = load_route_profile(
-            body.get('route_id', ''), route_name, world=body.get('world'),
-            include_leadin=bool(body.get('include_leadin', True)),
-        )
-        result = _simulate_ride(
-            route=route,
-            rider_weight_kg=weight_kg,
-            rider_height_m=height_cm / 100.0,
-            power_w=power_w,
-            bike_setup=bike_setup,
-        )
-    except ValueError as exc:
-        return jsonify({'error': str(exc)}), 400
-    except Exception as exc:
-        logger.exception("Simulation error")
-        return jsonify({'error': str(exc)}), 500
-
-    return jsonify({
-        'route_name': result.route_name,
-        'total_time_seconds': round(result.total_time_seconds),
-        'total_time_formatted': result.total_time_formatted,
-        'total_distance_km': round(result.total_distance_km, 2),
-        'total_ascent_m': round(result.total_ascent_m),
-        'avg_speed_kph': result.avg_speed_kph,
-        'profile': {
-            'distance_km': result.distance_km,
-            'altitude_m': result.altitude_m,
-            'speed_kph': result.speed_kph,
-            'gradient_pct': result.gradient_pct,
-            'surfaces': result.surfaces,
-        },
-        'surface_breakdown': result.surface_breakdown,
     })
 
 
@@ -2654,7 +2556,7 @@ def api_tt_pacing_route_geometry():
     distance on the SAME axis the pacing plan uses (lead-in first, then the
     route offset by the lead-in length), plus the world's background image.
     """
-    from bike_comparison.ride_simulator import _find_wad_route
+    from bike_comparison.pacing_planner import _find_wad_route
     from shared import surface_map
 
     route_id   = request.args.get('route_id', '')

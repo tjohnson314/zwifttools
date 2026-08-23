@@ -39,8 +39,13 @@ the plan reflects real coasting/acceleration rather than isolated steady states.
 
 from __future__ import annotations
 
+import json
 import math
+import re
 from dataclasses import dataclass, field
+from functools import lru_cache
+from pathlib import Path
+from typing import Optional
 
 import numpy as np
 
@@ -50,9 +55,421 @@ from bike_comparison.physics import (
     GRAVITY,
     DRIVETRAIN_LOSS,
 )
+from shared import surface_map
+from shared.world_config import MAP_TO_NAME, MAP_TO_WORLD_ID
+from shared.route_lookup import load_route_cache
+from race_replay.data_cleaner import fetch_route_from_zwiftmap, ROUTE_STRAVA_SEGMENTS
+
+ROUTE_DIR = Path(__file__).parent.parent / "zwiftmap_surfaces"
+ZWIFT_ROUTES_DIR = Path(__file__).parent.parent / "zwift_routes"
 
 V_FLOOR = 0.3          # m/s — numerical floor so the rider never fully stalls
 V_FLOOR2 = V_FLOOR * V_FLOOR
+
+
+# ===========================================================================
+# Route loading — real WAD / ZwiftMap geometry (route selector + profiles)
+# ===========================================================================
+
+def _route_name_to_slug(name: str) -> str:
+    """Convert a route name to its ZwiftMap slug (matches race-replay convention)."""
+    return name.lower().replace(" ", "-").replace("'", "")
+
+
+def _cached_route_file(slug: str) -> Path:
+    """Path to the locally-cached geometry file for a route slug."""
+    return ROUTE_DIR / f'{slug.replace("-", "_")}_route.json'
+
+
+def route_has_profile(
+    route_name: str, world: Optional[str] = None, route_id: Optional[str] = None
+) -> bool:
+    """True if real elevation geometry is available.
+
+    Prefers the WAD ``zwift_routes`` geometry (same source as the surface map),
+    and falls back to ZwiftMap geometry (cached or fetchable).
+    """
+    if _find_wad_route(route_name, world, route_id) is not None:
+        return True
+    slug = _route_name_to_slug(route_name)
+    return _cached_route_file(slug).exists() or slug in ROUTE_STRAVA_SEGMENTS
+
+
+def _normalize_world(world: str) -> str:
+    """Collapse a world name to lowercase alphanumerics for loose matching."""
+    return re.sub(r"[^a-z0-9]", "", (world or "").lower())
+
+
+def _world_to_map_id(world: Optional[str]) -> Optional[int]:
+    """Resolve a routes_cache world name to a surface_map mapID."""
+    if not world:
+        return None
+    key = _normalize_world(world)
+    for map_name, map_id in MAP_TO_WORLD_ID.items():
+        if _normalize_world(map_name) == key:
+            return map_id
+    return None
+
+
+@lru_cache(maxsize=1)
+def _wad_route_index() -> dict:
+    """Map a casefolded route name to its ``zwift_routes/index.json`` entries."""
+    path = ZWIFT_ROUTES_DIR / "index.json"
+    if not path.exists():
+        return {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            entries = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    by_name: dict[str, list] = {}
+    for entry in entries:
+        name = str(entry.get("name", "")).strip().casefold()
+        if name:
+            by_name.setdefault(name, []).append(entry)
+    return by_name
+
+
+@lru_cache(maxsize=1)
+def _wad_route_by_hash() -> dict:
+    """Map a route's ``nameHash`` (as str) to its ``index.json`` entry.
+
+    Resolves routes whose display name differs from the WAD name
+    (e.g. "Watopia Hilly Route" -> "Hilly Route").
+    """
+    path = ZWIFT_ROUTES_DIR / "index.json"
+    if not path.exists():
+        return {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            entries = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return {str(e["nameHash"]): e for e in entries if e.get("nameHash") is not None}
+
+
+def _find_wad_route(
+    route_name: str, world: Optional[str] = None, route_id: Optional[str] = None
+) -> Optional[dict]:
+    """Find the WAD route index entry, by nameHash (route_id) then by name."""
+    if route_id:
+        entry = _wad_route_by_hash().get(str(route_id).strip())
+        if entry is not None:
+            return entry
+    entries = _wad_route_index().get((route_name or "").strip().casefold())
+    if not entries:
+        return None
+    if len(entries) > 1 and world:
+        map_id = _world_to_map_id(world)
+        if map_id is not None:
+            for entry in entries:
+                if entry.get("mapID") == map_id:
+                    return entry
+    return entries[0]
+
+
+def route_is_loop(
+    route_name: str, world: Optional[str] = None, route_id: Optional[str] = None
+) -> bool:
+    """True if the route is a loop (start/end coincide) and can be lapped.
+
+    Only WAD ``zwift_routes`` geometry carries the coordinates needed to detect
+    a loop; routes without WAD data are treated as non-loops.
+    """
+    entry = _find_wad_route(route_name, world, route_id)
+    if entry is None:
+        return False
+    try:
+        return surface_map.route_is_loop(entry["mapID"], entry["nameHash"])
+    except (KeyError, OSError, ValueError):
+        return False
+
+
+def _load_wad_profile(
+    route_name: str, world: Optional[str], include_leadin: bool,
+    route_id: Optional[str] = None, laps: int = 1,
+) -> Optional[dict]:
+    """Build a route profile from WAD ``zwift_routes`` geometry.
+
+    Returns distance/altitude/surface arrays identical to what the surface map
+    page renders, optionally prepending the lead-in leg. Returns ``None`` when
+    no WAD geometry is available for the route.
+    """
+    entry = _find_wad_route(route_name, world, route_id)
+    if entry is None:
+        return None
+    data = surface_map.get_route(entry["mapID"], entry["nameHash"])
+    if data is None:
+        return None
+    main = data.get("route")
+    if not main or not main.get("d"):
+        return None
+
+    distance = np.asarray(main["d"], dtype=float)
+    altitude = np.asarray(main["alt"], dtype=float)
+    surfaces = np.asarray(main["surface"], dtype=object)
+    source_ascent_m = float(data.get("ascent_m") or 0.0)
+
+    # Repeat the main (non-lead-in) leg for multi-lap plans on looped routes.
+    n_laps = max(1, int(laps or 1))
+    if n_laps > 1 and len(distance) >= 2:
+        lap_len = float(distance[-1] - distance[0])
+        rel = distance - distance[0]  # 0 .. lap_len
+        d_parts = [distance]
+        alt_parts = [altitude]
+        surf_parts = [surfaces]
+        for k in range(1, n_laps):
+            # Drop each lap's first point (a duplicate of the previous lap's
+            # end) so the concatenated axis is strictly increasing.
+            d_parts.append(distance[0] + rel[1:] + lap_len * k)
+            alt_parts.append(altitude[1:])
+            surf_parts.append(surfaces[1:])
+        distance = np.concatenate(d_parts)
+        altitude = np.concatenate(alt_parts)
+        surfaces = np.concatenate(surf_parts)
+        source_ascent_m *= n_laps
+
+    leadin = data.get("leadin")
+    if include_leadin and leadin and leadin.get("d"):
+        # Offset by the lead-in's own geometry length (its last d), so the join
+        # is seamless now that d is summed from geometry rather than the header.
+        leadin_len = float(leadin["d"][-1])
+        # Offset the route leg so it follows the lead-in on a single axis
+        # (mirrors the surface map, which draws the route at +leadin_distance_m).
+        distance = np.concatenate([
+            np.asarray(leadin["d"], dtype=float),
+            distance + leadin_len,
+        ])
+        altitude = np.concatenate([
+            np.asarray(leadin["alt"], dtype=float),
+            altitude,
+        ])
+        surfaces = np.concatenate([
+            np.asarray(leadin["surface"], dtype=object),
+            surfaces,
+        ])
+        source_ascent_m += float(data.get("leadin_ascent_m") or 0.0)
+
+    # WAD vertical geometry is not to physical scale (e.g. Watopia altitudes read
+    # ~2x true metres); horizontal distance is. Anchor the altitude to Zwift's
+    # authoritative ascent by scaling about the start point so gradients — and
+    # thus simulated times — are physical. World-agnostic: a no-op where the
+    # geometry already matches the header ascent.
+    if source_ascent_m and len(altitude) > 1:
+        dalt = np.diff(altitude)
+        raw_ascent = float(np.sum(dalt[dalt > 0]))
+        if raw_ascent > 0:
+            altitude = altitude[0] + (altitude - altitude[0]) * (source_ascent_m / raw_ascent)
+
+    # Display distance follows the physical geometry (matches the in-game
+    # odometer), not Zwift's inflated header figure.
+    source_distance_m = float(distance[-1]) if len(distance) else None
+
+    return {
+        "distance_m": distance,
+        "altitude_m": altitude,
+        "surfaces": surfaces,
+        "source_distance_m": source_distance_m or None,
+        "source_ascent_m": source_ascent_m or None,
+    }
+
+
+def _load_route_geometry(slug: str) -> Optional[dict]:
+    """
+    Return raw route geometry (latlng/distance/altitude) for a slug.
+
+    Loads from the local cache when present, otherwise fetches from ZwiftMap
+    and caches the result. Returns None when no geometry is available.
+    """
+    path = _cached_route_file(slug)
+    if path.exists():
+        try:
+            with open(path) as f:
+                return json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return None
+
+    strava_id = ROUTE_STRAVA_SEGMENTS.get(slug)
+    if not strava_id:
+        return None
+
+    data = fetch_route_from_zwiftmap(strava_id, slug)
+    if data:
+        try:
+            with open(path, "w") as f:
+                json.dump(data, f, indent=2)
+        except OSError:
+            pass  # Caching is best-effort; still return the fetched data
+    return data
+
+
+@dataclass
+class RouteProfile:
+    """Elevation and distance profile for a route (real ZwiftMap geometry)."""
+    name: str
+    distance_m: np.ndarray      # Cumulative distance in metres
+    altitude_m: np.ndarray      # Altitude in metres
+    lats: Optional[np.ndarray] = None
+    lngs: Optional[np.ndarray] = None
+    # Per-point surface tags (from WAD geometry) used for surface-aware CRR.
+    surfaces: Optional[np.ndarray] = None
+    world: Optional[str] = None
+    # Authoritative totals from the WAD route index (Zwift's own figures).
+    # Used for display so the reported stats match Zwift Insider exactly,
+    # rather than re-summing the sampled ZwiftMap geometry.
+    source_distance_m: Optional[float] = None
+    source_ascent_m: Optional[float] = None
+
+    @property
+    def total_distance_km(self) -> float:
+        return float(self.distance_m[-1]) / 1000.0
+
+    @property
+    def total_ascent_m(self) -> float:
+        dalt = np.diff(self.altitude_m)
+        return float(np.sum(dalt[dalt > 0]))
+
+    @property
+    def display_distance_km(self) -> float:
+        """Authoritative distance if known, else computed from geometry."""
+        if self.source_distance_m is not None:
+            return self.source_distance_m / 1000.0
+        return self.total_distance_km
+
+    @property
+    def display_ascent_m(self) -> float:
+        """Authoritative ascent if known, else computed from geometry."""
+        if self.source_ascent_m is not None:
+            return self.source_ascent_m
+        return self.total_ascent_m
+
+
+def _load_routes_cache() -> dict:
+    return load_route_cache() or {}
+
+
+def list_routes() -> list[dict]:
+    """
+    Return rideable routes that have real elevation geometry available.
+
+    Routes without ZwiftMap geometry (no cached file and no known Strava
+    segment) are excluded entirely — the planner never fabricates a profile.
+    """
+    cache = _load_routes_cache()
+    routes = []
+    for route_id, info in cache.items():
+        name = info.get("name", "")
+        dist_m = info.get("distanceInMeters", 0)
+        ascent_m = info.get("ascentInMeters", 0)
+        world = info.get("map", "")
+
+        # Skip event-only, unnamed, implausibly-huge, or zero-distance routes
+        if info.get("eventOnly", False):
+            continue
+        if not name or not world:
+            continue
+        if dist_m <= 0 or dist_m > 200_000:
+            continue
+
+        # Only include routes with real elevation data available
+        wad = _find_wad_route(name, world, route_id)
+        if wad is None and not route_has_profile(name, world, route_id):
+            continue
+        # The WAD index is the authoritative name source; prefer it when the
+        # routes_cache name differs (e.g. "Watopia Hilly Route" -> "Hilly Route").
+        if wad is not None and wad.get("name"):
+            name = wad["name"]
+
+        leadin_dist_m = info.get("leadinDistanceInMeters", 0) or 0
+        leadin_ascent_m = info.get("leadinAscentInMeters", 0) or 0
+        routes.append({
+            "id": route_id,
+            "name": name,
+            "world": world,
+            "world_name": MAP_TO_NAME.get(world, world),
+            "distance_km": round(dist_m / 1000, 1),
+            "ascent_m": round(ascent_m),
+            "leadin_distance_km": round(leadin_dist_m / 1000, 1),
+            "leadin_ascent_m": round(leadin_ascent_m),
+            "is_loop": route_is_loop(name, world, route_id),
+        })
+
+    return sorted(routes, key=lambda r: (r["world"], r["name"]))
+
+
+def load_route_profile(
+    route_id: str,
+    route_name: str,
+    world: Optional[str] = None,
+    include_leadin: bool = True,
+    laps: int = 1,
+) -> RouteProfile:
+    """
+    Load the real elevation profile for a route.
+
+    Prefers the WAD ``zwift_routes`` geometry (identical to the surface map
+    page, including the lead-in), and falls back to ZwiftMap geometry when a
+    route has no WAD data. Raises ValueError when no real geometry is available
+    — the planner never synthesises an approximate profile.
+
+    Args:
+        route_id: Route ID, used to look up authoritative totals; also kept for
+            API symmetry/logging.
+        route_name: Route name, used for WAD/ZwiftMap geometry lookup.
+        world: World name (e.g. 'WATOPIA') used for surface-aware CRR lookup and
+            to disambiguate WAD routes that share a name.
+        include_leadin: Include the route's lead-in leg in the profile (WAD
+            geometry only).
+        laps: Number of laps to ride. For looped routes the main (non-lead-in)
+            leg is repeated this many times; the lead-in is ridden once.
+    """
+    wad = _load_wad_profile(route_name, world, include_leadin, route_id, laps)
+    if wad is not None:
+        return RouteProfile(
+            name=route_name,
+            distance_m=wad["distance_m"],
+            altitude_m=wad["altitude_m"],
+            surfaces=wad["surfaces"],
+            world=world,
+            source_distance_m=wad["source_distance_m"],
+            source_ascent_m=wad["source_ascent_m"],
+        )
+
+    slug = _route_name_to_slug(route_name)
+    data = _load_route_geometry(slug)
+    if data is None:
+        raise ValueError(f"No elevation data available for route '{route_name}'")
+
+    distance_arr = np.array(data["distance"], dtype=float)
+    altitude_arr = np.array(data["altitude"], dtype=float)
+    latlng = data.get("latlng", [])
+    lats = np.array([p[0] for p in latlng]) if latlng else None
+    lngs = np.array([p[1] for p in latlng]) if latlng else None
+
+    # Authoritative distance/ascent from the WAD route index (Zwift's figures),
+    # looked up by route_id, then by name as a fallback.
+    source_distance_m = None
+    source_ascent_m = None
+    cache = _load_routes_cache()
+    info = cache.get(route_id)
+    if info is None:
+        info = next((v for v in cache.values() if v.get("name") == route_name), None)
+    if info is not None:
+        if info.get("distanceInMeters"):
+            source_distance_m = float(info["distanceInMeters"])
+        if info.get("ascentInMeters"):
+            source_ascent_m = float(info["ascentInMeters"])
+
+    return RouteProfile(
+        name=route_name,
+        distance_m=distance_arr,
+        altitude_m=altitude_arr,
+        lats=lats,
+        lngs=lngs,
+        world=world,
+        source_distance_m=source_distance_m,
+        source_ascent_m=source_ascent_m,
+    )
 
 
 def _traverse(v0, drive, f_grav, f_roll, aero_k, inv_mass, length):

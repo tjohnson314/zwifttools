@@ -35,7 +35,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from extract_zwift_routes import read_wad_entries, load_multiroot  # noqa: E402
 from extract_zwift_surfaces import parse_roadstyles, UNSET_STYLE  # noqa: E402
 from route_surface_exact import parse_roads  # noqa: E402
-from bike_comparison.bike_data import get_bike_stats  # noqa: E402
+from bike_comparison.bike_data import get_bike_stats, REF_FRONTAL_AREA  # noqa: E402
 from bike_comparison.physics import (  # noqa: E402
     frontal_area_from_rider, AIR_DENSITY, GRAVITY, DRIVETRAIN_LOSS,
 )
@@ -230,7 +230,7 @@ def main():
     if setup is None:
         raise RuntimeError("Bike setup not found")
     frontal_area = frontal_area_from_rider(RIDER_HEIGHT_M, RIDER_WEIGHT_KG)
-    cda = setup.cd * frontal_area
+    cda = setup.cda * frontal_area / REF_FRONTAL_AREA
     bike_kg = setup.weight_kg
     mass_kg = RIDER_WEIGHT_KG + bike_kg
     print("=== Bike / rider ===")

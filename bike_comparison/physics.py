@@ -582,10 +582,10 @@ if __name__ == "__main__":
     
     if tron_setup and climb_setup:
         print(f"TRON BIKE: {tron_setup}")
-        print(f"  Cd: {tron_setup.cd:.4f}, Weight: {tron_setup.weight_kg:.3f} kg")
+        print(f"  CdA: {tron_setup.cda:.4f} m², Weight: {tron_setup.weight_kg:.3f} kg")
         print(f"\nCLIMB BIKE: {climb_setup}")
-        print(f"  Cd: {climb_setup.cd:.4f}, Weight: {climb_setup.weight_kg:.3f} kg")
-        print(f"\nDifference: Cd {(tron_setup.cd - climb_setup.cd)*1000:+.1f}mm², Weight {(tron_setup.weight_kg - climb_setup.weight_kg)*1000:+.0f}g")
+        print(f"  CdA: {climb_setup.cda:.4f} m², Weight: {climb_setup.weight_kg:.3f} kg")
+        print(f"\nDifference: CdA {(tron_setup.cda - climb_setup.cda):+.4f} m², Weight {(tron_setup.weight_kg - climb_setup.weight_kg)*1000:+.0f}g")
         
         # Compare: What if you used climb bike instead of Tron?
         result = compare_bike_setups(

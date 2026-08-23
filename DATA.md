@@ -561,7 +561,7 @@ Renders `ttt_analysis.html`.
 3. **Fetch all rider telemetry** — concurrent with 5 workers, each producing: time_sec, speed_kmh, distance_km, altitude_m, power_watts, lat/lng
 4. **Compute draft estimates** per rider:
    - Uses a fixed reference bike (Cadex Tri frame + DT Swiss ARC 1100 DICUT 85 wheels, upgrade level 5)
-   - `frontal_area_from_rider(height_m, weight_kg)` → CDA
+   - `frontal_area_from_rider(height_m, weight_kg)` → CdA
    - Solo power = `(F_rolling + F_aero) × v / (1 - drivetrain_loss)`
    - Draft watts = solo power − actual power, smoothed over 5-point window
 5. **Route alignment** (if route data available) — projects all riders onto shared route via `align_riders_to_route()`, corrects post-finish drift using raw Zwift odometer

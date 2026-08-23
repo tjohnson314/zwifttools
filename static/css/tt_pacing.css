@@ -256,6 +256,10 @@ h1 .logo-emoji {
     letter-spacing: 0.05em;
 }
 
+.stat-label.no-uppercase {
+    text-transform: none;
+}
+
 .stat-value {
     font-size: 0.9rem;
     font-weight: 700;

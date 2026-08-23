@@ -28,15 +28,15 @@
     </details>
 
     <details style="margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
-        <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">What are Cd and bike weight?</summary>
+        <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">What are CdA and bike weight?</summary>
         <p style="margin-top: 10px; color: #aaa; line-height: 1.6;">
-            <strong style="color: #e0e0e0;">Cd (Drag Coefficient)</strong> represents how aerodynamic a bike is in Zwift's physics engine.
-            A lower Cd means less air resistance, which matters most on flat roads and at higher speeds.
-            The total aerodynamic drag depends on both the bike's Cd and the rider's frontal area (estimated from height and weight).
+            <strong style="color: #e0e0e0;">CdA (Drag Area)</strong> represents how aerodynamic a bike is in Zwift's physics engine.
+            A lower CdA means less air resistance, which matters most on flat roads and at higher speeds.
+            CdA already combines the bike's drag with the rider's frontal area (estimated from height and weight).
         </p>
         <p style="margin-top: 8px; color: #aaa; line-height: 1.6;">
             <strong style="color: #e0e0e0;">Bike weight</strong> affects climbing speed — lighter bikes require less power to go uphill.
-            On flat terrain, weight has almost no effect. As a rule of thumb: prioritize low Cd for flat or rolling courses,
+            On flat terrain, weight has almost no effect. As a rule of thumb: prioritize low CdA for flat or rolling courses,
             and low weight for hilly or mountainous courses.
         </p>
     </details>
@@ -99,7 +99,7 @@
         <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">What does "Pareto optimal" mean?</summary>
         <p style="margin-top: 10px; color: #aaa; line-height: 1.6;">
             A bike is Pareto optimal if no other bike is better in both aerodynamics <em>and</em> weight simultaneously.
-            For example, a bike with the best Cd but moderate weight is Pareto optimal because nothing else beats
+            For example, a bike with the best CdA but moderate weight is Pareto optimal because nothing else beats
             it on aero without being heavier. Enabling the Pareto filter narrows the search to only these "best trade-off" bikes,
             which dramatically reduces the number of combinations to test and focuses on setups that aren't strictly outclassed.
         </p>

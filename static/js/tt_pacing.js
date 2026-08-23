@@ -451,14 +451,14 @@ function updateBikeStats() {
     if (!combo) { clearBikeStats(); return; }
 
     const frame = bikeDatabase.frames.find(f => f.frameid === frameId);
-    document.getElementById('bikeCd').textContent = combo.cd[level].toFixed(4);
+    document.getElementById('bikeCda').textContent = combo.cda[level].toFixed(4);
     document.getElementById('bikeWeightStat').textContent = fmtWeight(combo.weight[level]);
     document.getElementById('bikeType').textContent = frame ? (frame.frametype || 'Standard') : 'Standard';
     updatePlanButton();
 }
 
 function clearBikeStats() {
-    ['bikeCd', 'bikeWeightStat', 'bikeType'].forEach(id => {
+    ['bikeCda', 'bikeWeightStat', 'bikeType'].forEach(id => {
         document.getElementById(id).textContent = '—';
     });
     updatePlanButton();
@@ -475,7 +475,7 @@ function updateWperKg() {
 function updatePlanButton() {
     const ready = !!selectedRoute
         && !!document.getElementById('frameSelect').value
-        && document.getElementById('bikeCd').textContent !== '—';
+        && document.getElementById('bikeCda').textContent !== '—';
     const btn = document.getElementById('planBtn');
     btn.disabled = !ready;
     document.getElementById('planHint').textContent =
