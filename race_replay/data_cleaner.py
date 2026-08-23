@@ -1108,7 +1108,7 @@ def align_riders_to_route(riders: List[Dict], route: RouteData,
         # We first check if the rider's initial GPS points are already on the
         # route; if so, skip the lead-in search entirely.
         #
-        # If the known lead-in distance is available (from routes_cache.json),
+        # If the known lead-in distance is available (from the WAD route index),
         # we use it to skip ahead to approximately the right index and only
         # search a window around it. This avoids scanning thousands of
         # off-route GPS points on routes with long lead-ins (up to ~12 km).
@@ -1879,7 +1879,7 @@ def detect_route(riders: List[Dict], data_path: Path) -> Tuple[str, Optional[str
             except Exception as e:
                 logger.warning("Route detection from race name failed: %s", e)
     
-    # Method 2: Check routes_cache.json for matching GPS coordinates + distance (fallback)
+    # Method 2: Check the WAD route index for matching GPS coordinates + distance (fallback)
     if not route_name:
         try:
             from shared.route_lookup import load_route_cache

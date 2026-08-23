@@ -2428,7 +2428,7 @@ def api_simulate_ride():
     Run a ride simulation.
 
     Expected JSON body:
-        route_id      (str)   — route ID from routes_cache.json
+        route_id      (str)   — route ID (WAD route nameHash)
         route_name    (str)   — route name (used for ZwiftMap geometry lookup)
         world         (str)   — world name (for surface-aware CRR)
         include_leadin (bool) — include the route lead-in (default true)
@@ -2525,7 +2525,7 @@ def api_tt_pacing_plan():
     Compute an optimal TT pacing plan.
 
     Expected JSON body:
-        route_id        (str)   — route ID from routes_cache.json
+        route_id        (str)   — route ID (WAD route nameHash)
         route_name      (str)   — route name (used for geometry lookup)
         world           (str)   — world name
         include_leadin  (bool)  — include the route lead-in (default true)

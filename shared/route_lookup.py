@@ -1,47 +1,21 @@
 """
 Route Lookup Module
-Lookup route data from Zwift's game dictionary cache.
+Route metadata sourced directly from the WAD-extracted route index
+(``zwift_routes/index.json``, produced by tools/extract_zwift_routes.py).
 """
 
 import json
+from functools import lru_cache
 from pathlib import Path
 
-from shared.world_config import WORLD_ID_TO_MAP, MAP_TO_WORLD_ID
+# MAP_TO_WORLD_ID is re-exported for consumers (e.g. app.py).
+from shared.world_config import WORLD_ID_TO_MAP, MAP_TO_WORLD_ID  # noqa: F401
 
-CACHE_FILE = Path(__file__).parent.parent / "routes_cache.json"
-# WAD-extracted route index; contains newly added routes not yet in routes_cache.json
 ROUTE_INDEX_FILE = Path(__file__).parent.parent / "zwift_routes" / "index.json"
 
 
-def load_route_cache():
-    """Load routes from local cache."""
-    if CACHE_FILE.exists():
-        with open(CACHE_FILE) as f:
-            return json.load(f)
-    return None
-
-
-def _load_route_index():
-    """Load the WAD-extracted route index keyed by nameHash (as string)."""
-    if not ROUTE_INDEX_FILE.exists():
-        return None
-    with open(ROUTE_INDEX_FILE, encoding="utf-8") as f:
-        entries = json.load(f)
-    return {str(e["nameHash"]): e for e in entries if "nameHash" in e}
-
-
-def _route_info_from_index(route_id):
-    """Look up a route in the WAD index and adapt it to the cache schema.
-
-    Covers newly added routes that exist in zwift_routes/index.json but have not
-    yet been synced into routes_cache.json.
-    """
-    index = _load_route_index()
-    if not index:
-        return None
-    entry = index.get(str(route_id))
-    if not entry:
-        return None
+def _adapt(entry):
+    """Adapt a WAD index entry to the route-info schema used across the app."""
     return {
         "name": entry.get("name", ""),
         "map": WORLD_ID_TO_MAP.get(entry.get("mapID"), ""),
@@ -53,26 +27,28 @@ def _route_info_from_index(route_id):
     }
 
 
+@lru_cache(maxsize=1)
+def load_route_cache():
+    """Load all routes keyed by route ID (nameHash), adapted from the WAD index."""
+    if not ROUTE_INDEX_FILE.exists():
+        return None
+    with open(ROUTE_INDEX_FILE, encoding="utf-8") as f:
+        entries = json.load(f)
+    return {str(e["nameHash"]): _adapt(e) for e in entries if "nameHash" in e}
+
+
 def get_route_info(route_id):
     """Get route info by route ID/signature."""
     routes = load_route_cache()
-
-    if routes is not None:
-        info = routes.get(str(route_id))
-        if info is not None:
-            return info
-
-    # Fall back to the WAD index for routes not yet in routes_cache.json
-    return _route_info_from_index(route_id)
+    if routes is None:
+        return None
+    return routes.get(str(route_id))
 
 
 def get_total_race_distance(route_id):
     """Get total race distance (route + lead-in) in km."""
     route = get_route_info(route_id)
-    
     if route is None:
         return None
-    
-    total_meters = route["distanceInMeters"] + route["leadinDistanceInMeters"]
-    return total_meters / 1000.0
+    return (route["distanceInMeters"] + route["leadinDistanceInMeters"]) / 1000.0
 

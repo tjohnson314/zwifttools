@@ -95,7 +95,7 @@ The function `zwift_games_etl` runs every 15 minutes:
 | Frames              | Bike frame specs (aero, weight, speed rankings) |
 | Wheels              | Wheel specs (aero, weight, flat/climb rankings) |
 | BikeConfigs         | Frame + wheel combos with CdA and weight arrays |
-| Routes              | Route metadata (distance, ascent, difficulty)   |
+| Routes              | Route metadata (distance, lead-in, ascent, world) |
 | RoutePoints         | GPS polyline points per route                   |
 | Worlds              | Map bounds and metadata                         |
 | SurfaceCrr          | Rolling resistance by surface type              |

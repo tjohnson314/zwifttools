@@ -111,7 +111,6 @@
     leadin_distance_m: real,
     ascent_m: real,
     leadin_ascent_m: real,
-    difficulty: string,
     event_only: bool
 )
 

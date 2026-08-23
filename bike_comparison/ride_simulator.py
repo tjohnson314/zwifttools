@@ -37,10 +37,10 @@ from shared.surface_lookup import (
 )
 from shared import surface_map
 from shared.world_config import MAP_TO_NAME, MAP_TO_WORLD_ID
+from shared.route_lookup import load_route_cache
 from race_replay.data_cleaner import fetch_route_from_zwiftmap, ROUTE_STRAVA_SEGMENTS
 
 ROUTE_DIR = Path(__file__).parent.parent / "zwiftmap_surfaces"
-ROUTES_CACHE = Path(__file__).parent.parent / "routes_cache.json"
 ZWIFT_ROUTES_DIR = Path(__file__).parent.parent / "zwift_routes"
 
 
@@ -107,8 +107,8 @@ def _wad_route_index() -> dict:
 def _wad_route_by_hash() -> dict:
     """Map a route's ``nameHash`` (as str) to its ``index.json`` entry.
 
-    The routes_cache.json key is the same nameHash, so this resolves routes
-    whose cache name differs from the WAD name (e.g. "Watopia Hilly Route").
+    Resolves routes whose display name differs from the WAD name
+    (e.g. "Watopia Hilly Route" -> "Hilly Route").
     """
     path = ZWIFT_ROUTES_DIR / "index.json"
     if not path.exists():
@@ -287,7 +287,7 @@ class RouteProfile:
     # Per-point surface tags (from WAD geometry) used for surface-aware CRR.
     surfaces: Optional[np.ndarray] = None
     world: Optional[str] = None
-    # Authoritative totals from routes_cache.json (Zwift's own figures).
+    # Authoritative totals from the WAD route index (Zwift's own figures).
     # Used for display so the reported stats match Zwift Insider exactly,
     # rather than re-summing the sampled ZwiftMap geometry.
     source_distance_m: Optional[float] = None
@@ -345,10 +345,7 @@ class SimulationResult:
 
 
 def _load_routes_cache() -> dict:
-    if ROUTES_CACHE.exists():
-        with open(ROUTES_CACHE) as f:
-            return json.load(f)
-    return {}
+    return load_route_cache() or {}
 
 
 def list_routes() -> list[dict]:
@@ -449,7 +446,7 @@ def load_route_profile(
     lats = np.array([p[0] for p in latlng]) if latlng else None
     lngs = np.array([p[1] for p in latlng]) if latlng else None
 
-    # Authoritative distance/ascent from routes_cache.json (Zwift's figures),
+    # Authoritative distance/ascent from the WAD route index (Zwift's figures),
     # looked up by route_id, then by name as a fallback.
     source_distance_m = None
     source_ascent_m = None
@@ -608,7 +605,7 @@ def simulate_ride(
     total_time = t
 
     # Report Zwift's authoritative totals for display; fall back to the
-    # geometry-derived values when the route isn't in routes_cache.json.
+    # geometry-derived values when the route isn't in the WAD route index.
     # Average speed is computed from the same displayed distance so the
     # results card stays internally consistent.
     display_dist_km = route.display_distance_km

@@ -104,7 +104,7 @@ Renders `my_activities.html`. Redirects to login if not authenticated.
 1. **Activity details** — `get_activity_details(activity_id, headers)` → `GET /api/activities/{id}`
    - Extract `routeId`, `eventInfo` (subgroup ID, event ID, race name)
    - If no `routeId` but has `eventId`: fetch `GET /api/events/{eventId}` → scan `eventSubgroups` for matching subgroup → get `routeId`
-2. **Route lookup** — `get_route_info(routeId)` from `routes_cache.json` → `route_name`
+2. **Route lookup** — `get_route_info(routeId)` from the WAD route index (`zwift_routes/index.json`) → `route_name`
 3. **Telemetry** — `fetch_rider_telemetry(activity_id, headers)`:
    - `GET /api/activities/{id}` → extract `fitnessData` URL
    - Fetch raw telemetry JSON (contains `powerInWatts`, `heartRateInBpm`, etc.)
@@ -337,7 +337,7 @@ For each `rank*_*.csv` file:
 #### Step 4: Detect Route
 
 `detect_route()` uses a three-method cascade:
-1. **API route_id** — `route_id` from `race_meta.json` → `get_route_info()` from `routes_cache.json`
+1. **API route_id** — `route_id` from `race_meta.json` → `get_route_info()` from the WAD route index (`zwift_routes/index.json`)
 2. **Name matching** — substring match race title against all known route names (sorted longest-first to avoid partial matches)
 3. **GPS + distance matching** — `detect_world_from_coords()` → filter routes by world → compare median of top-10 riders' max distance against each route's total distance → pick closest within 3 km tolerance
 
@@ -399,7 +399,7 @@ Finish-distance cascade:
    - Search near each rider's official `elapsed_ms` for a GPS pass through the lap finish
    - Convert the aligned crossing distance to a lap count
    - Use the modal lap count across riders and snap to `leadin + laps × lap_distance`
-3. `route_id` → `get_total_race_distance()` from `routes_cache.json`
+3. `route_id` → `get_total_race_distance()` from the WAD route index (`zwift_routes/index.json`)
 4. `subgroupResults[0].segmentDistanceInCentimeters` from any rider's raw JSON
 5. Median of top 5 ranked riders' maximum `distance_km`
 
@@ -610,7 +610,7 @@ Returns the rider's data downsampled to 50 m intervals: `{ name, activity_id, we
 
 ### Route Lookup (`shared/route_lookup.py`)
 
-- **`routes_cache.json`** — local cache of all Zwift routes with distance, lead-in, world, etc.
+- **`zwift_routes/index.json`** — WAD-extracted route index; all route metadata (distance, lead-in, world, ascent, eventOnly). No REST API dependency.
 - `get_route_info(route_id)` → route dict by numeric ID
 - `get_total_race_distance(route_id)` → `(distanceInMeters + leadinDistanceInMeters) / 1000` km
 - `WORLD_ID_TO_MAP` / `MAP_TO_WORLD_ID` — int ↔ name mappings

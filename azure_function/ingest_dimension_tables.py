@@ -184,22 +184,23 @@ def load_bike_configs() -> pd.DataFrame:
 
 
 def load_routes() -> pd.DataFrame:
-    """Load Routes from routes_cache.json."""
-    path = os.path.join(WORKSPACE, "routes_cache.json")
-    with open(path) as f:
-        data = json.load(f)
+    """Load Routes from the WAD-extracted route index (zwift_routes/index.json)."""
+    path = os.path.join(WORKSPACE, "zwift_routes", "index.json")
+    with open(path, encoding="utf-8") as f:
+        entries = json.load(f)
 
     rows = []
-    for route_id, r in data.items():
+    for e in entries:
+        if "nameHash" not in e:
+            continue
         rows.append({
-            "route_id": route_id,
-            "name": r["name"],
-            "distance_m": float(r["distanceInMeters"]),
-            "leadin_distance_m": float(r["leadinDistanceInMeters"]),
-            "ascent_m": float(r["ascentInMeters"]),
-            "leadin_ascent_m": float(r["leadinAscentInMeters"]),
-            "difficulty": r["difficulty"],
-            "event_only": r["eventOnly"],
+            "route_id": str(e["nameHash"]),
+            "name": e.get("name", ""),
+            "distance_m": float(e.get("distance_m", 0.0)),
+            "leadin_distance_m": float(e.get("leadin_distance_m", 0.0)),
+            "ascent_m": float(e.get("ascent_m", 0.0)),
+            "leadin_ascent_m": float(e.get("leadin_ascent_m", 0.0)),
+            "event_only": bool(e.get("event_only", False)),
         })
 
     df = pd.DataFrame(rows)
