@@ -122,6 +122,37 @@ WORLD_CONFIG = {
 }
 
 
+# Authoritative Zwift world-ID registry — single source of truth for the
+# mapID -> world mappings previously duplicated in route_lookup.py and
+# surface_map.py. Each entry carries:
+#   config: key into WORLD_CONFIG above (map PNG + GPS bounds), or None
+#   name:   human-readable world name
+#   map:    compact "map" name used in the routes_cache schema, or None
+WORLD_ID_REGISTRY = {
+    1:  {'config': 'WATOPIA',   'name': 'Watopia',         'map': 'WATOPIA'},
+    2:  {'config': 'RICHMOND',  'name': 'Richmond',        'map': 'RICHMOND'},
+    3:  {'config': 'LONDON',    'name': 'London',          'map': 'LONDON'},
+    4:  {'config': 'NEW_YORK',  'name': 'New York',        'map': 'NEWYORK'},
+    5:  {'config': 'INNSBRUCK', 'name': 'Innsbruck',       'map': 'INNSBRUCK'},
+    6:  {'config': 'BOLOGNA',   'name': 'Bologna',         'map': 'BOLOGNATT'},
+    7:  {'config': 'YORKSHIRE', 'name': 'Yorkshire',       'map': 'YORKSHIRE'},
+    8:  {'config': 'CRIT_CITY', 'name': 'Crit City',       'map': 'CRITCITY'},
+    9:  {'config': 'MAKURI',    'name': 'Makuri Islands',  'map': 'MAKURIISLANDS'},
+    10: {'config': 'FRANCE',    'name': 'France',          'map': 'FRANCE'},
+    11: {'config': 'PARIS',     'name': 'Paris',           'map': 'PARIS'},
+    12: {'config': None,        'name': 'Gravel Mountain', 'map': 'GRAVEL MOUNTAIN'},
+    13: {'config': 'SCOTLAND',  'name': 'Scotland',        'map': 'SCOTLAND'},
+}
+
+# Derived convenience mappings (all sourced from WORLD_ID_REGISTRY).
+WORLD_NAMES = {mid: e['name'] for mid, e in WORLD_ID_REGISTRY.items()}
+MAPID_TO_CONFIG = {mid: e['config'] for mid, e in WORLD_ID_REGISTRY.items() if e['config']}
+WORLD_ID_TO_MAP = {mid: e['map'] for mid, e in WORLD_ID_REGISTRY.items() if e['map']}
+MAP_TO_WORLD_ID = {v: k for k, v in WORLD_ID_TO_MAP.items()}
+# Compact route "map" name -> human-readable display name.
+MAP_TO_NAME = {e['map']: e['name'] for e in WORLD_ID_REGISTRY.values() if e['map']}
+
+
 def get_world_map_config(world_name: str) -> dict | None:
     """Get map config for a world name (as returned by detect_world_from_coords)."""
     if world_name and world_name in WORLD_CONFIG:

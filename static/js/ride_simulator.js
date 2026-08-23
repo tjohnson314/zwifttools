@@ -54,33 +54,15 @@ async function loadBikeDatabase() {
 
 // ── World filter ─────────────────────────────────────────────────────────────
 function populateWorldFilter() {
-    const worlds = [...new Set(allRoutes.map(r => r.world))].sort();
+    const worldNames = new Map(allRoutes.map(r => [r.world, r.world_name || r.world]));
+    const worlds = [...worldNames.keys()].sort();
     const sel = document.getElementById('worldFilter');
     worlds.forEach(w => {
         const opt = document.createElement('option');
         opt.value = w;
-        opt.textContent = formatWorldName(w);
+        opt.textContent = worldNames.get(w);
         sel.appendChild(opt);
     });
-}
-
-function formatWorldName(world) {
-    const MAP = {
-        WATOPIA: 'Watopia',
-        LONDON: 'London',
-        RICHMOND: 'Richmond',
-        NEWYORK: 'New York',
-        INNSBRUCK: 'Innsbruck',
-        FRANCE: 'France',
-        MAKURIISLANDS: 'Makuri Islands',
-        YORKSHIRE: 'Yorkshire',
-        SCOTLAND: 'Scotland',
-        PARIS: 'Paris',
-        CRITCITY: 'Crit City',
-        BOLOGNATT: 'Bologna',
-        'GRAVEL MOUNTAIN': 'Gravel Mountain',
-    };
-    return MAP[world] || world;
 }
 
 function filterRoutes() {

@@ -36,15 +36,12 @@ from shared.surface_lookup import (
     surface_types_to_crr,
 )
 from shared import surface_map
+from shared.world_config import MAP_TO_NAME, MAP_TO_WORLD_ID
 from race_replay.data_cleaner import fetch_route_from_zwiftmap, ROUTE_STRAVA_SEGMENTS
 
 ROUTE_DIR = Path(__file__).parent.parent / "zwiftmap_surfaces"
 ROUTES_CACHE = Path(__file__).parent.parent / "routes_cache.json"
 ZWIFT_ROUTES_DIR = Path(__file__).parent.parent / "zwift_routes"
-
-# routes_cache.json world names that don't normalise cleanly to surface_map's
-# WORLD_NAMES (e.g. the Bologna TT world).
-_WORLD_ALIASES = {"bolognatt": 6}
 
 
 def _route_name_to_slug(name: str) -> str:
@@ -81,10 +78,8 @@ def _world_to_map_id(world: Optional[str]) -> Optional[int]:
     if not world:
         return None
     key = _normalize_world(world)
-    if key in _WORLD_ALIASES:
-        return _WORLD_ALIASES[key]
-    for map_id, name in surface_map.WORLD_NAMES.items():
-        if _normalize_world(name) == key:
+    for map_name, map_id in MAP_TO_WORLD_ID.items():
+        if _normalize_world(map_name) == key:
             return map_id
     return None
 
@@ -394,6 +389,7 @@ def list_routes() -> list[dict]:
             "id": route_id,
             "name": name,
             "world": world,
+            "world_name": MAP_TO_NAME.get(world, world),
             "distance_km": round(dist_m / 1000, 1),
             "ascent_m": round(ascent_m),
             "leadin_distance_km": round(leadin_dist_m / 1000, 1),

@@ -36,12 +36,9 @@ from extract_zwift_routes import read_wad_entries, load_multiroot  # noqa: E402
 from extract_zwift_surfaces import parse_roadstyles, UNSET_STYLE  # noqa: E402
 from _probe_route_surface_exact import parse_roads  # noqa: E402
 from bike_comparison.bike_data import get_bike_stats  # noqa: E402
-from bike_comparison.physics import frontal_area_from_rider  # noqa: E402
-
-# --- Physics constants (match bike_comparison/physics.py) --------------------
-AIR_DENSITY = 1.225
-GRAVITY = 9.8067
-DRIVETRAIN_LOSS = 0.025
+from bike_comparison.physics import (  # noqa: E402
+    frontal_area_from_rider, AIR_DENSITY, GRAVITY, DRIVETRAIN_LOSS,
+)
 
 # --- Ride / rider / route configuration -------------------------------------
 ACTIVITY_ID = "2202922917312921632"
@@ -54,8 +51,6 @@ WHEEL_ID = "dtswissarc1100dicut85disc"
 UPGRADE_LEVEL = 5
 
 ZWIFT_DIR = r"C:\Program Files (x86)\Zwift"
-ZWIFT_TOKEN_URL = "https://secure.zwift.com/auth/realms/zwift/protocol/openid-connect/token"
-CLIENT_ID = "Zwift_Mobile_Link"
 STYLE_MAP_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                               "zwift_surfaces", "style_surface_map.json")
 TELEM_CACHE = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"_telem_{ACTIVITY_ID}.json")
@@ -66,15 +61,10 @@ TELEM_CACHE = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"_telem_
 # ---------------------------------------------------------------------------
 def get_token():
     import getpass
-    import requests
+    from shared.zwift_auth import get_token_with_password
     user = os.environ.get("ZWIFT_USERNAME") or input("Zwift email: ").strip()
     pw = os.environ.get("ZWIFT_PASSWORD") or getpass.getpass("Zwift password: ")
-    resp = requests.post(ZWIFT_TOKEN_URL, data={
-        "client_id": CLIENT_ID, "grant_type": "password",
-        "username": user, "password": pw,
-    }, timeout=20)
-    resp.raise_for_status()
-    return resp.json()["access_token"]
+    return get_token_with_password(user, pw).access_token
 
 
 def fetch_telemetry():

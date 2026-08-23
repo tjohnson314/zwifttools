@@ -6,29 +6,11 @@ Lookup route data from Zwift's game dictionary cache.
 import json
 from pathlib import Path
 
+from shared.world_config import WORLD_ID_TO_MAP, MAP_TO_WORLD_ID
+
 CACHE_FILE = Path(__file__).parent.parent / "routes_cache.json"
 # WAD-extracted route index; contains newly added routes not yet in routes_cache.json
 ROUTE_INDEX_FILE = Path(__file__).parent.parent / "zwift_routes" / "index.json"
-
-# Zwift internal world ID -> map name mapping (from game dictionary segments)
-WORLD_ID_TO_MAP = {
-    1: "WATOPIA",
-    2: "RICHMOND",
-    3: "LONDON",
-    4: "NEWYORK",
-    5: "INNSBRUCK",
-    6: "BOLOGNATT",
-    7: "YORKSHIRE",
-    8: "CRITCITY",
-    9: "MAKURIISLANDS",
-    10: "FRANCE",
-    11: "PARIS",
-    13: "SCOTLAND",
-    14: "GRAVEL MOUNTAIN",
-}
-
-MAP_TO_WORLD_ID = {v: k for k, v in WORLD_ID_TO_MAP.items()}
-
 
 
 def load_route_cache():

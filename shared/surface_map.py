@@ -24,7 +24,12 @@ from functools import lru_cache
 import numpy as np
 from scipy.spatial import cKDTree
 
-from shared.world_config import WORLD_CONFIG, get_world_altitude_scale
+from shared.world_config import (
+    WORLD_CONFIG,
+    get_world_altitude_scale,
+    WORLD_NAMES,
+    MAPID_TO_CONFIG,
+)
 
 _BASE = Path(__file__).parent.parent
 SURFACE_DIR = _BASE / "zwift_surfaces"
@@ -33,20 +38,8 @@ MAPS_DIR = _BASE / "static" / "maps"
 CALIBRATION_FILE = SURFACE_DIR / "world_gps_calibration.json"
 STYLE_MAP_FILE = SURFACE_DIR / "style_surface_map.json"
 
-# mapID -> human readable world name (derived from route locKeys).
-WORLD_NAMES = {
-    1: "Watopia", 2: "Richmond", 3: "London", 4: "New York",
-    5: "Innsbruck", 6: "Bologna", 7: "Yorkshire", 8: "Crit City",
-    9: "Makuri Islands", 10: "France", 11: "Paris",
-    12: "Gravel Mountain", 13: "Scotland",
-}
-
-# mapID -> key in shared.world_config.WORLD_CONFIG (for the map PNG + GPS bounds).
-MAPID_TO_CONFIG = {
-    1: "WATOPIA", 2: "RICHMOND", 3: "LONDON", 4: "NEW_YORK",
-    5: "INNSBRUCK", 6: "BOLOGNA", 7: "YORKSHIRE", 8: "CRIT_CITY",
-    9: "MAKURI", 10: "FRANCE", 11: "PARIS", 13: "SCOTLAND",
-}
+# mapID -> human readable world name (WORLD_NAMES) and mapID -> WORLD_CONFIG key
+# (MAPID_TO_CONFIG) are imported from shared.world_config.
 
 SURFACE_COLORS = {
     "Tarmac": "#7d828b",
