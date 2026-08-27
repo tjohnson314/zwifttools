@@ -363,9 +363,8 @@ def list_routes() -> list[dict]:
         ascent_m = info.get("ascentInMeters", 0)
         world = info.get("map", "")
 
-        # Skip event-only, unnamed, implausibly-huge, or zero-distance routes
-        if info.get("eventOnly", False):
-            continue
+        # Skip unnamed, implausibly-huge, or zero-distance routes. Event-only
+        # routes are included so they can be planned for event time estimates.
         if not name or not world:
             continue
         if dist_m <= 0 or dist_m > 200_000:

@@ -114,6 +114,20 @@
                 </select>
             </div>
 
+            <div class="form-group">
+                <label for="draftLevel">Drafting: <span id="draftLevelValue">None</span><span
+                        class="help-icon" tabindex="0" role="button"
+                        aria-label="Drafting benchmarks">?<span class="help-tooltip">
+                    <strong>Benchmarks</strong><br>
+                    Theoretical max: −50% aero drag.<br>
+                    Elite riders holding the middle of the pack for a whole race
+                    achieve around −25%.
+                </span></span></label>
+                <input type="range" id="draftLevel" min="0" max="100" value="0" step="5"
+                       oninput="onDraftLevelInput()">
+                <p class="field-hint">Constant aero-drag reduction from sitting in a draft (max −40%).</p>
+            </div>
+
             <div class="bike-summary" id="bikeStats">
                 <div class="bike-summary-row">
                     <span class="bike-summary-label">Total weight</span>

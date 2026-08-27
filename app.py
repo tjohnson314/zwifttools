@@ -2496,6 +2496,16 @@ def api_tt_pacing_plan():
     height_m = height_cm / 100.0
     cda = rider_cda(height_m, weight_kg) + bike_setup.cda_bias
     bike_kg = bike_setup.weight_kg
+
+    # Drafting is modelled as a constant reduction to aero drag: full draft
+    # (fraction 1.0) cuts aero drag — and hence CdA — by 40%.
+    try:
+        draft_fraction = float(body.get('draft_fraction', 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'draft_fraction must be a number'}), 400
+    draft_fraction = max(0.0, min(1.0, draft_fraction))
+    cda *= (1.0 - 0.40 * draft_fraction)
+
     if cda <= 0:
         return jsonify({'error': 'Resulting CdA is non-positive.'}), 400
 

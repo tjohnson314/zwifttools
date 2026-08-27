@@ -14,6 +14,7 @@ let planChart = null;     // Chart.js instance
 let lastPlanData = null;  // most recent plan response, for re-rendering on unit change
 let serverDividerIdx = []; // profile-point indices of the current buckets' dividers
 let bucketSliderTimer = null;
+let draftSliderTimer = null;
 let laps = 1;             // number of laps for looped routes
 let routeSlugMap = {};    // slug → route object, for URL deep-linking
 
@@ -148,6 +149,7 @@ function saveSettings() {
         wheelId: document.getElementById('wheelSelect').value,
         upgradeLevel: document.getElementById('upgradeLevel').value,
         includeLeadin: document.getElementById('includeLeadin').checked,
+        draftLevel: document.getElementById('draftLevel').value,
         laps: laps,
     };
     try { localStorage.setItem(TT_SETTINGS_KEY, JSON.stringify(data)); } catch (e) { /* ignore */ }
@@ -191,6 +193,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (settings.heightCm != null) document.getElementById('riderHeight').value = settings.heightCm;
     if (settings.npTarget != null) document.getElementById('avgPower').value = settings.npTarget;
     if (settings.includeLeadin != null) document.getElementById('includeLeadin').checked = settings.includeLeadin;
+    if (settings.draftLevel != null) document.getElementById('draftLevel').value = settings.draftLevel;
+    onDraftLevelInput();
 
     let savedUnit = null;
     try { savedUnit = localStorage.getItem('ttUnit'); } catch (e) { /* ignore */ }
@@ -222,7 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Persist choices whenever the user changes them. Bike selections persist
     // via the BikeSelector onChange handler.
     ['riderWeight', 'riderHeight', 'avgPower', 'worldFilter', 'routeSelect',
-     'includeLeadin'].forEach(id => {
+     'includeLeadin', 'draftLevel'].forEach(id => {
         const el = document.getElementById(id);
         el.addEventListener('change', saveSettings);
         if (el.type === 'number') el.addEventListener('input', saveSettings);
@@ -424,6 +428,23 @@ async function runPlan() {
     await requestPlan({ numBuckets: null, isBuild: true });
 }
 
+// Drafting slider → fraction of full draft benefit (0–1); 1 == −40% aero drag.
+function getDraftFraction() {
+    const v = parseInt(document.getElementById('draftLevel').value, 10);
+    return isNaN(v) ? 0 : v / 100;
+}
+
+// Slider moved: update the label and, if a plan exists, rebuild it (debounced).
+function onDraftLevelInput() {
+    const pct = Math.round(getDraftFraction() * 40);   // effective aero reduction
+    document.getElementById('draftLevelValue').textContent =
+        pct > 0 ? `−${pct}% aero` : 'None';
+    saveSettings();
+    if (!lastPlanData) return;
+    clearTimeout(draftSliderTimer);
+    draftSliderTimer = setTimeout(() => runPlan(), 220);
+}
+
 // Slider moved: request that many "smart" buckets (max = the full optimal plan).
 function onBucketSliderInput() {
     const slider = document.getElementById('bucketSlider');
@@ -471,6 +492,7 @@ async function requestPlan({ numBuckets = null, isBuild = false } = {}) {
                 frame_id:        frameId,
                 wheel_id:        wheelId,
                 upgrade_level:   level,
+                draft_fraction:  getDraftFraction(),
                 laps:            (selectedRoute.is_loop ? laps : 1),
                 num_buckets:     numBuckets != null ? numBuckets : undefined,
             }),

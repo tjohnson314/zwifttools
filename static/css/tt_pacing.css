@@ -151,6 +151,68 @@ h1 .logo-emoji {
     line-height: 1.35;
 }
 
+/* Inline help "?" icon with hover/focus tooltip (e.g. drafting benchmarks) */
+.help-icon {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    height: 15px;
+    margin-left: 6px;
+    border-radius: 50%;
+    background: #2a2a45;
+    color: #bbb;
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1;
+    cursor: help;
+    vertical-align: middle;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.help-icon:hover,
+.help-icon:focus {
+    background: #f7931e;
+    color: #1a1a2e;
+    outline: none;
+}
+
+.help-tooltip {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: 220px;
+    padding: 10px 12px;
+    border: 1px solid #2a2a45;
+    border-radius: 8px;
+    background: #12121f;
+    color: #ccc;
+    font-size: 0.75rem;
+    font-weight: 400;
+    line-height: 1.4;
+    text-transform: none;
+    letter-spacing: 0;
+    text-align: left;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s;
+    z-index: 10;
+}
+
+.help-tooltip strong {
+    color: #f7931e;
+}
+
+.help-icon:hover .help-tooltip,
+.help-icon:focus .help-tooltip {
+    opacity: 1;
+    visibility: visible;
+}
+
 /* Inline checkbox row (e.g. "Include lead-in") */
 .form-check {
     display: flex;
