@@ -3523,12 +3523,157 @@ def api_race_streams(race_id):
 # TTT Analysis
 # ---------------------------------------------------------------------------
 
-# TTT bike setup: Cadex Tri (F112) + DT Swiss ARC 1100 DICUT 85/Disc (W055), level 5
-TTT_FRAME_ID = 'F112'
-TTT_WHEEL_ID = 'W055'
+# TTT bike setup: Cadex Tri + DT Swiss ARC 1100 DICUT 85/Disc, level 5
+TTT_FRAME_ID = 'CadexTri2022'
+TTT_WHEEL_ID = 'dtswissarc1100dicut85disc'
 TTT_UPGRADE_LEVEL = 5
 
+# Riders whose absolute start times fall within this many seconds of each
+# other are treated as the same wave/team.  TTT waves are typically released
+# 30-60 s apart, so a gap larger than this marks a team boundary.
+TTT_WAVE_GAP_SEC = 15.0
+
 _ttt_cache = {}  # subgroup_id -> processed rider data for reassignment
+
+
+def _ttt_rider_start_epoch(participant):
+    """Absolute start time (UTC epoch seconds) for a TTT rider.
+
+    Derived from the race entry's finish timestamp minus race duration
+    (``end_date`` - ``elapsed_ms``).  Returns None when either field is
+    missing or the timestamp can't be parsed.
+    """
+    end_date = participant.get('end_date')
+    elapsed_ms = participant.get('elapsed_ms')
+    if not end_date or not elapsed_ms:
+        return None
+    dt = _parse_zwift_datetime(end_date)
+    if dt is None:
+        return None
+    return dt.timestamp() - float(elapsed_ms) / 1000.0
+
+
+def _detect_team_tag(riders):
+    """Return a team tag shared by more than half a team's riders, else None.
+
+    Counts alphanumeric tokens across the riders' display names (tags appear
+    inside brackets, after separators, or as bare words, so all tokens are
+    considered).  A token counts once per rider; the most common one wins if
+    it appears on a strict majority.  Pure numbers and single characters are
+    ignored to avoid matching bib numbers or stray initials.
+    """
+    from collections import Counter
+
+    n = len(riders)
+    if n == 0:
+        return None
+
+    counts = Counter()   # lowercased token -> number of riders carrying it
+    display = {}          # lowercased token -> representative display form
+    for p in riders:
+        seen = set()
+        for tok in re.findall(r'[A-Za-z0-9]{2,}', p.get('name', '')):
+            if tok.isdigit():
+                continue
+            key = tok.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            counts[key] += 1
+            # Prefer a display form that contains an uppercase letter (tags are
+            # usually capitalised, e.g. RtB / WCC), otherwise keep first seen.
+            if key not in display or (any(c.isupper() for c in tok)
+                                      and not any(c.isupper() for c in display[key])):
+                display[key] = tok
+
+    if not counts:
+        return None
+
+    key, cnt = counts.most_common(1)[0]
+    if cnt > n / 2:
+        return display[key]
+    return None
+
+
+def _cluster_ttt_teams_by_start(participants, gap_threshold_sec=TTT_WAVE_GAP_SEC):
+    """Group riders into teams (waves) by absolute start time.
+
+    TTT teams are released in staggered waves, so riders that start within
+    ``gap_threshold_sec`` of one another belong to the same team.  Each team
+    is named after a tag shared by more than half its riders (e.g. "RtB"),
+    falling back to "Team N" when no majority tag exists.  When two teams in
+    the subgroup resolve to the same name they are numbered in start order
+    ("RtB 1", "RtB 2").  Returns
+    ``(team_map, team_tags, diagnostics)`` where ``team_map`` maps a team
+    label to its participant list and ``team_tags`` is the label list in
+    start order.  Riders with no usable start time go into a trailing
+    "Unknown start" bucket so they still surface for manual reassignment.
+    """
+    timed = []
+    untimed = []
+    for p in participants:
+        t0 = _ttt_rider_start_epoch(p)
+        (untimed if t0 is None else timed).append(p if t0 is None else (t0, p))
+
+    timed.sort(key=lambda x: x[0])
+
+    # Split the sorted riders into waves on large start-time gaps.
+    waves = []  # list of list[(t0, participant)]
+    for entry in timed:
+        if not waves or entry[0] - waves[-1][-1][0] > gap_threshold_sec:
+            waves.append([entry])
+        else:
+            waves[-1].append(entry)
+
+    team_map = {}
+    team_tags = []
+    diagnostics = []
+
+    # First pass: raw label per wave (majority tag, else "Team N").
+    raw_labels = [_detect_team_tag([p for _, p in wave]) or f'Team {i}'
+                  for i, wave in enumerate(waves, start=1)]
+
+    # When two teams in the same subgroup share a name, number every team
+    # that carries it ("RtB 1", "RtB 2", ...) so they can be told apart.
+    from collections import Counter
+    label_totals = Counter(raw_labels)
+    label_seen = Counter()
+    labels = []
+    for raw in raw_labels:
+        if label_totals[raw] > 1:
+            label_seen[raw] += 1
+            labels.append(f'{raw} {label_seen[raw]}')
+        else:
+            labels.append(raw)
+
+    base = timed[0][0] if timed else 0.0
+    prev_t = base
+    for wave, label in zip(waves, labels):
+        riders = [p for _, p in wave]
+        team_map[label] = riders
+        team_tags.append(label)
+        for t0, p in wave:
+            diagnostics.append({
+                'name': p['name'],
+                'start_offset_sec': round(t0 - base, 2),
+                'gap_from_prev_sec': round(t0 - prev_t, 2),
+                'team': label,
+            })
+            prev_t = t0
+
+    if untimed:
+        label = 'Unknown start'
+        team_map[label] = untimed
+        team_tags.append(label)
+        for p in untimed:
+            diagnostics.append({
+                'name': p['name'],
+                'start_offset_sec': None,
+                'gap_from_prev_sec': None,
+                'team': label,
+            })
+
+    return team_map, team_tags, diagnostics
 
 
 @app.route('/ttt-analysis')
@@ -3838,7 +3983,9 @@ def api_ttt_fetch():
 
     Steps:
     1. Fetch race entries and telemetry for every rider.
-    2. Group riders into teams by race segment start time (>60 s gap).
+    2. Group riders into teams (waves) by absolute start time
+       (``end_date`` - ``elapsed_ms``), splitting on gaps > ~15 s.  A manual
+       ``team_tags`` override falls back to name-tag matching.
     3. Compute per-second draft estimates assuming Cadex Tri + ARC 85/Disc L5.
     4. Build per-team time-series arrays for the chart (lead speed, avg draft
        efficiency, max distance) — only including riders connected to the team
@@ -3902,53 +4049,57 @@ def api_ttt_fetch():
                 except Exception:
                     pass
 
-    # ---- Group riders into teams by name tags ----
+    # ---- Group riders into teams ----
     import re
     from collections import defaultdict
 
     raw_tags = data.get('team_tags', '').strip()
 
-    def _extract_bracket_contents(name):
-        """Extract all content inside [...] or (...) in a rider name."""
-        return re.findall(r'[\[\(]([^)\]]+)[\]\)]', name)
-
-    def _rider_has_tag(name, tag):
-        """Check if tag appears as a word inside any bracketed section of name."""
-        for content in _extract_bracket_contents(name):
-            # Split on common separators (|, /, space) and strip each part
-            parts = [p.strip() for p in re.split(r'[|/]', content)]
-            if tag in parts:
-                return True
-        return False
-
     if raw_tags:
-        # User provided explicit tags — use those
+        # Manual override: explicit comma-separated name tags.
+        def _extract_bracket_contents(name):
+            """Extract all content inside [...] or (...) in a rider name."""
+            return re.findall(r'[\[\(]([^)\]]+)[\]\)]', name)
+
+        def _rider_has_tag(name, tag):
+            """Check if tag appears as a word inside any bracketed section of name."""
+            for content in _extract_bracket_contents(name):
+                parts = [p.strip() for p in re.split(r'[|/]', content)]
+                if tag in parts:
+                    return True
+            return False
+
         team_tags = [t.strip() for t in raw_tags.split(',') if t.strip()]
-    else:
-        # Auto-detect: collect every simple tag that appears on >= 2 riders
-        from collections import Counter
-        tag_counts = Counter()
+
+        # Assign each rider to their team (first matching tag wins)
+        team_map = defaultdict(list)  # tag -> [participant, ...]
         for p in participants:
-            for content in _extract_bracket_contents(p['name']):
-                parts = [pt.strip() for pt in re.split(r'[|/]', content)]
-                for part in set(parts):
-                    if part:
-                        tag_counts[part] += 1
-        team_tags = [tag for tag, cnt in tag_counts.most_common() if cnt >= 2]
+            for tag in team_tags:
+                if _rider_has_tag(p['name'], tag):
+                    team_map[tag].append(p)
+                    break  # assign to first matching team only
 
-    if not team_tags:
-        return jsonify({'error': 'Could not detect team tags. Please provide them manually (e.g. V, RtB, SZ).'}), 400
+        if not team_map:
+            return jsonify({'error': 'No riders matched any team tags.'}), 400
+    else:
+        # Automatic: cluster riders into waves by absolute start time.
+        # (Teams are released in staggered waves, so start time is a far
+        # more reliable signal than parsing name tags.)
+        try:
+            gap_sec = float(data.get('wave_gap_sec') or TTT_WAVE_GAP_SEC)
+        except (TypeError, ValueError):
+            gap_sec = TTT_WAVE_GAP_SEC
 
-    # Assign each rider to their team (first matching tag wins)
-    team_map = defaultdict(list)  # tag -> [participant, ...]
-    for p in participants:
-        for tag in team_tags:
-            if _rider_has_tag(p['name'], tag):
-                team_map[tag].append(p)
-                break  # assign to first matching team only
+        team_map, team_tags, start_diag = _cluster_ttt_teams_by_start(participants, gap_sec)
+        if not team_tags:
+            return jsonify({'error': 'Could not determine rider start times for automatic grouping. Provide team tags manually.'}), 400
 
-    if not team_map:
-        return jsonify({'error': 'No riders matched any team tags.'}), 400
+        logger.info("TTT start-time clustering: %d teams / %d riders (gap>%.0fs)",
+                    len(team_tags), len(participants), gap_sec)
+        for d in start_diag:
+            logger.info("  %-24s start+%-8s gap+%-7s -> %s",
+                        (d['name'] or '')[:24], d['start_offset_sec'],
+                        d['gap_from_prev_sec'], d['team'])
 
     # ---- Fetch telemetry for ALL riders (concurrent) ----
     # We fetch everyone so unassigned riders can be reassigned via
@@ -4252,6 +4403,42 @@ def api_ttt_fetch():
         'race_distance_km': race_distance_km,
         'unassigned': unassigned,
         'team_tags': team_tags,
+    })
+
+
+@app.route('/api/ttt/debug_starts', methods=['GET'])
+def api_ttt_debug_starts():
+    """Diagnostic: per-rider absolute start times and wave clustering.
+
+    Visit ``/api/ttt/debug_starts?subgroup_id=<id>`` (optionally
+    ``&wave_gap_sec=<n>``) while logged in to inspect how riders split into
+    teams by start time, without running the full analysis.
+    """
+    headers = get_headers()
+    if not headers:
+        return jsonify({'error': 'Not authenticated. Please log in first.'}), 401
+
+    raw_id = str(request.args.get('subgroup_id', '')).strip()
+    if not raw_id.isdigit():
+        return jsonify({'error': 'subgroup_id (numeric) is required'}), 400
+
+    try:
+        gap_sec = float(request.args.get('wave_gap_sec') or TTT_WAVE_GAP_SEC)
+    except (TypeError, ValueError):
+        gap_sec = TTT_WAVE_GAP_SEC
+
+    participants, error = get_race_entries(int(raw_id), headers)
+    if error:
+        return jsonify({'error': error}), 502
+
+    team_map, team_tags, diag = _cluster_ttt_teams_by_start(participants, gap_sec)
+    return jsonify({
+        'subgroup_id': int(raw_id),
+        'gap_threshold_sec': gap_sec,
+        'rider_count': len(participants),
+        'team_count': len(team_tags),
+        'teams': {tag: [p['name'] for p in team_map[tag]] for tag in team_tags},
+        'riders': diag,
     })
 
 
