@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # Bump this version when data cleaning logic changes in a way that invalidates
 # previously cached results.  The cache loader will discard stale caches.
-CLEANING_VERSION = 27
+CLEANING_VERSION = 28
 
 # Grace period after the official race start before a rider is treated as a
 # "late joiner".  Riders routinely begin recording / cross the start banner a
@@ -119,46 +119,58 @@ def compute_finish_crossing_time(
 
     Returns ``None`` if the finish crossing cannot be determined.
     """
-    search_mask = np.abs(distances_m - finish_distance_m) < search_radius_m
-    search_indices = np.where(search_mask)[0]
-    if len(search_indices) == 0:
+    # Every telemetry point genuinely at the finish-line coordinates. GPS
+    # proximity is the primary signal; the odometer is only used below to
+    # disambiguate passes, because the rider's odometer at the finish can
+    # drift a few hundred metres from the nominal finish distance and, after a
+    # turnaround, the route-projected odometer even folds back through the
+    # finish window while the rider is heading the wrong way.
+    gps_all = haversine(lats, lngs, finish_lat, finish_lng)
+    near_indices = np.where(gps_all < gps_sanity_m)[0]
+    if len(near_indices) == 0:
         return None
 
-    gps_dists = haversine(
-        lats[search_indices], lngs[search_indices],
-        finish_lat, finish_lng,
-    )
-    # Only consider points that are genuinely at the finish line.
-    gps_valid = gps_dists < gps_sanity_m
-    if not np.any(gps_valid):
-        return None
+    # Split the near-finish points into distinct passes (telemetry-time gaps
+    # over 60s). A rider may pass the finish coordinates several times: on the
+    # lead-in, on each lap of a loop, at the real finish, and again during
+    # cool-down if they ride past and double back. For each pass record its
+    # GPS closest-approach index and whether the rider is moving forward
+    # (odometer increasing) through it, so cool-down crossings taken while
+    # doubling back the wrong way can be rejected.
+    splits = np.where(np.diff(times[near_indices]) > 60.0)[0] + 1
+    passes = []
+    for grp in np.split(near_indices, splits):
+        grp_gps = haversine(lats[grp], lngs[grp], finish_lat, finish_lng)
+        closest = int(grp[int(np.argmin(grp_gps))])
+        lo = max(0, int(grp[0]) - 1)
+        hi = min(len(distances_m) - 1, int(grp[-1]) + 1)
+        forward = distances_m[hi] >= distances_m[lo]
+        passes.append((closest, forward))
 
-    # A rider may pass near the finish line more than once (multi-lap routes)
-    # or coast/linger past it during cooldown, so the GPS-closest point over
-    # the whole ride is not necessarily the finish crossing. First select the
-    # correct pass (nearest to the expected time, or the last pass when no
-    # estimate is given), then within that pass take the true GPS closest
-    # approach so we time the actual line crossing rather than a point tens of
-    # metres past it.
-    valid_indices = search_indices[gps_valid]
-    valid_times = times[valid_indices]
+    # Prefer genuine forward crossings; only consider a doubling-back pass if
+    # there is nothing else to go on.
+    forward_passes = [p for p in passes if p[1]]
+    pool = forward_passes if forward_passes else passes
     if expected_time_sec is not None:
-        anchor_idx = valid_indices[
-            int(np.argmin(np.abs(valid_times - expected_time_sec)))
-        ]
+        # Anchor to the pass whose telemetry time is closest to the expected
+        # finish time. This selects the correct lap on a loop and rejects a
+        # cool-down re-crossing minutes after the rider actually finished.
+        best_idx = min(
+            pool, key=lambda p: abs(times[p[0]] - expected_time_sec)
+        )[0]
     else:
-        anchor_idx = valid_indices[int(np.argmax(valid_times))]
-    same_pass = np.abs(valid_times - times[anchor_idx]) <= 60.0
-    pass_indices = valid_indices[same_pass]
-    pass_gps = haversine(
-        lats[pass_indices], lngs[pass_indices],
-        finish_lat, finish_lng,
-    )
-    best_idx = pass_indices[int(np.argmin(pass_gps))]
+        # No time anchor: restrict to passes whose odometer is near the finish
+        # (so the lead-in/lap passes on a loop are ignored) and take the last.
+        in_window = [
+            p for p in pool
+            if abs(distances_m[p[0]] - finish_distance_m) < search_radius_m
+        ]
+        candidates = in_window if in_window else pool
+        best_idx = max(candidates, key=lambda p: times[p[0]])[0]
 
     # Refine within a small window around the closest-approach index
-    window_start = max(search_indices[0], best_idx - 2)
-    window_end = min(search_indices[-1], best_idx + 2) + 1
+    window_start = max(0, best_idx - 2)
+    window_end = min(len(times) - 1, best_idx + 2) + 1
     win_indices = np.arange(window_start, window_end)
     win_gps = haversine(
         lats[win_indices], lngs[win_indices],
@@ -2026,6 +2038,7 @@ def clean_race_data(
         activity_start_time = None
         elapsed_ms = None
         segment_distance_anomaly = False
+        segment_distance_cm = None
         if summary is not None:
             match = summary[summary['rank'] == rank]
             if len(match) > 0:
@@ -2040,6 +2053,8 @@ def clean_race_data(
                     elapsed_ms = float(match['elapsed_ms'].values[0])
                 if 'segment_distance_anomaly' in match.columns and pd.notna(match['segment_distance_anomaly'].values[0]):
                     segment_distance_anomaly = bool(match['segment_distance_anomaly'].values[0])
+                if 'segment_distance_cm' in match.columns and pd.notna(match['segment_distance_cm'].values[0]):
+                    segment_distance_cm = float(match['segment_distance_cm'].values[0])
         
         riders.append({
             'rank': rank,
@@ -2051,6 +2066,7 @@ def clean_race_data(
             'activity_start_time': activity_start_time,
             'elapsed_ms': elapsed_ms,
             'segment_distance_anomaly': segment_distance_anomaly,
+            'segment_distance_cm': segment_distance_cm,
             'data': rider_data['data'],
             'metadata': rider_data['metadata']
         })
@@ -2512,8 +2528,36 @@ def determine_finish_line(
                 finish = segment_dist_cm / 100000.0
                 logger.info("Finish line from race segment distance: %.2f km", finish)
                 return finish
-            
-            # Fall back to route_id from event API (already includes lead-in)
+        except Exception as e:
+            logger.warning("Could not get finish line from meta data: %s", e)
+
+    # The Zwift-reported segment distance (from the race results) is the
+    # authoritative finish distance on the rider odometer axis. Prefer it over
+    # the route index, which adds the full nominal lead-in and can overshoot
+    # the actual raced distance by a few hundred metres.
+    seg_dists_cm = [
+        rider['segment_distance_cm']
+        for rider in riders
+        if rider.get('segment_distance_cm')
+    ]
+    if not seg_dists_cm:
+        for rider in riders:
+            if rider['metadata']:
+                subgroup_results = rider['metadata'].get('subgroupResults', [])
+                if subgroup_results:
+                    cm = subgroup_results[0].get('segmentDistanceInCentimeters')
+                    if cm:
+                        seg_dists_cm.append(cm)
+    if seg_dists_cm:
+        finish = float(np.median(seg_dists_cm)) / 100000.0
+        logger.info("Finish line from race segment distance (results): %.2f km", finish)
+        return finish
+
+    # Fall back to route_id from the route index (adds nominal lead-in).
+    if meta_path.exists():
+        try:
+            with open(meta_path) as f:
+                meta = json.load(f)
             route_id = meta.get('route_id')
             if route_id:
                 from shared.route_lookup import get_total_race_distance
@@ -2522,16 +2566,7 @@ def determine_finish_line(
                     logger.info("Finish line from route data: %.2f km", finish)
                     return finish
         except Exception as e:
-            logger.warning("Could not get finish line from meta data: %s", e)
-    
-    # Try from metadata segmentDistanceInCentimeters
-    for rider in riders:
-        if rider['metadata']:
-            subgroup_results = rider['metadata'].get('subgroupResults', [])
-            if subgroup_results:
-                segment_dist_cm = subgroup_results[0].get('segmentDistanceInCentimeters')
-                if segment_dist_cm:
-                    return segment_dist_cm / 100000.0
+            logger.warning("Could not get finish line from route data: %s", e)
     
     # Fallback: use top-ranked riders' max distances (they definitely finished)
     # Sort by rank and use the top finishers for a reliable estimate
