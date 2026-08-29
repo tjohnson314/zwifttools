@@ -471,6 +471,54 @@ h1 .header-icon {
     opacity: 0.5;
 }
 
+/* Race efficiency table — shares the rider-table look */
+.efficiency-subtitle {
+    color: #888;
+    font-size: 0.78rem;
+    font-style: italic;
+    text-align: right;
+}
+
+#efficiency-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+#efficiency-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+#efficiency-table th {
+    background: rgba(255,255,255,0.08);
+    padding: 8px 10px;
+    text-align: left;
+    color: #aaa;
+    font-weight: 500;
+    cursor: default;
+    user-select: none;
+}
+#efficiency-table th.sortable {
+    cursor: pointer;
+}
+#efficiency-table th.sortable:hover {
+    color: #4fc3f7;
+}
+#efficiency-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+#efficiency-table tbody tr {
+    transition: background 0.15s;
+}
+#efficiency-table tbody tr:hover {
+    background: rgba(255,255,255,0.06);
+}
+#efficiency-table td.col-eff {
+    font-weight: 600;
+    color: #81c784;
+}
+
 .no-data-badge {
     font-size: 0.65em;
     color: #ff9800;

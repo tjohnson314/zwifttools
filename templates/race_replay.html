@@ -164,6 +164,32 @@
             <div id="peloton-details-body"></div>
         </section>
 
+        <!-- Race efficiency -->
+        <section class="panel" id="efficiency-panel" style="display:none;">
+            <div class="table-header">
+                <h2>Race Efficiency</h2>
+                <span class="efficiency-subtitle">Draft &amp; aero estimated for a fully-upgraded Tarmac SL9 + Princeton Wake</span>
+            </div>
+            <div class="table-container">
+                <table id="efficiency-table">
+                    <thead>
+                        <tr>
+                            <th class="col-name sortable" data-eff-sort="name">Name</th>
+                            <th class="col-weight sortable" data-eff-sort="weight">Weight</th>
+                            <th class="col-height sortable" data-eff-sort="height">Height</th>
+                            <th class="col-racetime sortable" data-eff-sort="finish_time_sec">Race Time</th>
+                            <th class="col-avgpwr sortable" data-eff-sort="avg_power">Avg Power</th>
+                            <th class="col-np sortable" data-eff-sort="normalized_power">NP</th>
+                            <th class="col-draft sortable" data-eff-sort="avg_draft_watts">Avg Draft</th>
+                            <th class="col-eff sortable" data-eff-sort="aero_reduction_pct">Average Drag Reduction</th>
+                        </tr>
+                    </thead>
+                    <tbody id="efficiency-tbody">
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
         {% include 'race_replay_faq.html' %}
 
         <!-- Loading overlay -->

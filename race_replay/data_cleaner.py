@@ -67,6 +67,7 @@ class RiderData:
     data: pd.DataFrame  # Telemetry data (1-second intervals from Zwift API)
     finish_time_sec: Optional[float]  # Time when rider crossed finish line
     weight_kg: float = 75.0  # Rider weight in kg
+    height_cm: Optional[float] = None  # Rider height in cm (from Zwift profile)
     player_id: Optional[int] = None  # Numeric Zwift profile ID
     activity_start_time: Optional[str] = None  # ISO 8601 UTC when activity started
     ttt_time_offset: Optional[float] = None  # Replay clock offset (legacy field name)
@@ -2034,6 +2035,7 @@ def clean_race_data(
         name = f"Rider {rank}"
         team = ""
         weight_kg = 75.0
+        height_cm = None
         player_id = None
         activity_start_time = None
         elapsed_ms = None
@@ -2045,6 +2047,8 @@ def clean_race_data(
                 name = match['name'].values[0] if 'name' in match.columns else name
                 team = match['team'].values[0] if 'team' in match.columns else ""
                 weight_kg = float(match['weight_kg'].values[0]) if 'weight_kg' in match.columns else 75.0
+                if 'height_cm' in match.columns and pd.notna(match['height_cm'].values[0]):
+                    height_cm = float(match['height_cm'].values[0])
                 if 'player_id' in match.columns and pd.notna(match['player_id'].values[0]):
                     player_id = int(match['player_id'].values[0])
                 if 'activity_start_time' in match.columns and pd.notna(match['activity_start_time'].values[0]):
@@ -2062,6 +2066,7 @@ def clean_race_data(
             'name': name,
             'team': team,
             'weight_kg': weight_kg,
+            'height_cm': height_cm,
             'player_id': player_id,
             'activity_start_time': activity_start_time,
             'elapsed_ms': elapsed_ms,
@@ -2337,6 +2342,7 @@ def clean_race_data(
             data=df,
             finish_time_sec=finish_time,
             weight_kg=rider.get('weight_kg', 75.0),
+            height_cm=rider.get('height_cm'),
             player_id=rider.get('player_id'),
             activity_start_time=rider.get('activity_start_time'),
             ttt_time_offset=ttt_time_offset,
@@ -2623,6 +2629,7 @@ def save_to_cache(data: CleanedRaceData, cache_path: Path):
             'name': str(rider.name) if rider.name else "",
             'team': str(rider.team) if rider.team else "",
             'weight_kg': float(rider.weight_kg),
+            'height_cm': float(rider.height_cm) if rider.height_cm is not None else None,
             'player_id': int(rider.player_id) if rider.player_id else None,
             'activity_start_time': rider.activity_start_time,
             'finish_time_sec': to_python(rider.finish_time_sec) if rider.finish_time_sec is not None else None,
@@ -2686,6 +2693,7 @@ def load_from_cache(cache_path: Path) -> Optional[CleanedRaceData]:
                 data=data,
                 finish_time_sec=rider_info['finish_time_sec'],
                 weight_kg=rider_info.get('weight_kg', 75.0),
+                height_cm=rider_info.get('height_cm'),
                 player_id=rider_info.get('player_id'),
                 activity_start_time=rider_info.get('activity_start_time'),
                 ttt_time_offset=rider_info.get('ttt_time_offset'),

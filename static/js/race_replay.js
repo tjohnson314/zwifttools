@@ -26,6 +26,10 @@ let hideLateJoiners = true;    // Hide late joiners by default
 let sortField = 'position';
 let sortAsc = true;
 
+// Efficiency table sort state (null field = race/finish order)
+let effSortField = null;
+let effSortAsc = true;
+
 // Rider lookup for O(1) access: rank -> rider object with typed arrays
 let riderLookup = {};
 
@@ -171,6 +175,21 @@ function bindEvents() {
                 sortAsc = true;
             }
             updateRiderTable();
+        });
+    });
+
+    // Sortable efficiency table headers
+    document.querySelectorAll('#efficiency-table th.sortable').forEach(th => {
+        th.addEventListener('click', () => {
+            const field = th.dataset.effSort;
+            if (effSortField === field) {
+                effSortAsc = !effSortAsc;
+            } else {
+                effSortField = field;
+                // Names read best ascending; metrics most-interesting descending.
+                effSortAsc = field === 'name';
+            }
+            renderEfficiencyTable();
         });
     });
 }
@@ -509,6 +528,8 @@ function initRaceData(data) {
     document.getElementById('elevation-panel').style.display = 'block';
     document.getElementById('peloton-details-panel').style.display = chartMode === 'peloton' ? 'block' : 'none';
     document.getElementById('zoom-controls').style.display = 'flex';
+    document.getElementById('efficiency-panel').style.display = 'block';
+    renderEfficiencyTable();
 
     // Initialize map if map config is available
     if (data.map_config) {
@@ -1330,6 +1351,84 @@ function formatPower(watts, weightKg) {
         return (watts / weightKg).toFixed(1) + ' W/kg';
     }
     return Math.round(watts) + 'W';
+}
+
+// ---------------------------------------------------------------------------
+// Race Efficiency table (whole-race averages; static per race load)
+// ---------------------------------------------------------------------------
+
+/**
+ * Render the race-efficiency table from the server-computed per-rider stats.
+ * Values (avg power, NP, effective draft, aero-drag reduction) assume every
+ * rider is on a fully-upgraded Tarmac SL9 + Princeton Wake and are estimated
+ * from each rider's recorded power/speed trace via the physics model.
+ */
+function renderEfficiencyTable() {
+    if (!raceData || !raceData.riders) return;
+    const tbody = document.getElementById('efficiency-tbody');
+    if (!tbody) return;
+
+    const rows = raceData.riders.map(r => {
+        const eff = r.efficiency || {};
+        return {
+            rank: r.rank,
+            name: r.name,
+            category: r.category || null,
+            weight: r.weight_kg,
+            height: r.height_cm,
+            finish_time_sec: r.finish_time_sec,
+            avg_power: eff.avg_power,
+            normalized_power: eff.normalized_power,
+            avg_draft_watts: eff.avg_draft_watts,
+            aero_reduction_pct: eff.aero_reduction_pct,
+        };
+    });
+
+    const dir = effSortAsc ? 1 : -1;
+    rows.sort((a, b) => {
+        if (!effSortField) return a.rank - b.rank;
+        if (effSortField === 'name') {
+            return dir * String(a.name).localeCompare(String(b.name));
+        }
+        const va = a[effSortField], vb = b[effSortField];
+        const na = (va == null || isNaN(va)), nb = (vb == null || isNaN(vb));
+        if (na && nb) return a.rank - b.rank;
+        if (na) return 1;   // missing values sort last
+        if (nb) return -1;
+        return dir * (va - vb);
+    });
+
+    const num = (v, digits, suffix) =>
+        (v == null || isNaN(v)) ? '—' : v.toFixed(digits) + (suffix || '');
+
+    const raceTime = (v) => {
+        if (v == null || isNaN(v)) return '—';
+        const s = Math.round(v);
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const sec = s % 60;
+        return h > 0
+            ? `${h}:${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`
+            : `${m}:${sec.toString().padStart(2, '0')}`;
+    };
+
+    let html = '';
+    for (const p of rows) {
+        const catBadge = p.category
+            ? `<span class="cat-badge" style="background:${CATEGORY_COLORS[p.category] || '#666'}">${p.category}</span> `
+            : '';
+        html += `<tr>
+            <td class="col-name">${catBadge}${p.name}</td>
+            <td class="col-weight">${p.weight ? p.weight.toFixed(1) + ' kg' : '—'}</td>
+            <td class="col-height">${p.height ? Math.round(p.height) + ' cm' : '—'}</td>
+            <td class="col-racetime">${raceTime(p.finish_time_sec)}</td>
+            <td class="col-avgpwr">${num(p.avg_power, 0, ' W')}</td>
+            <td class="col-np">${num(p.normalized_power, 0, ' W')}</td>
+            <td class="col-draft">${num(p.avg_draft_watts, 0, ' W')}</td>
+            <td class="col-eff">${num(p.aero_reduction_pct, 1, '%')}</td>
+        </tr>`;
+    }
+    tbody.innerHTML = html;
 }
 
 // ---------------------------------------------------------------------------

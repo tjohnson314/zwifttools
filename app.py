@@ -34,7 +34,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 from bike_comparison.bike_data import get_bike_database, get_bike_stats, BASE_CDA
-from bike_comparison.physics import compare_bike_setups, frontal_area_from_rider, rider_cda
+from bike_comparison.physics import compare_bike_setups, frontal_area_from_rider, rider_cda, estimate_draft_efficiency
 from bike_comparison.pacing_planner import plan_tt_pacing, list_routes, load_route_profile
 from shared.utils import calculate_normalized_power
 from shared.data_fetcher import (
@@ -2847,6 +2847,57 @@ def api_ride_compare_fetch_stream():
 # In-memory cache of loaded race data (keyed by race_id)
 _race_data_cache = {}
 
+# Reference bike every rider is normalised to for the race-efficiency table:
+# a fully-upgraded (level 5) Specialized Tarmac SL9 with Princeton Wake wheels.
+_EFFICIENCY_FRAME_ID = 'SpecializedTarmacSL92026'
+_EFFICIENCY_WHEEL_ID = 'princetoncarbonworkswake6560'
+_EFFICIENCY_UPGRADE_LEVEL = 5
+_DEFAULT_HEIGHT_CM = 175.0
+_efficiency_setup = None
+
+
+def _get_efficiency_setup():
+    """The shared Tarmac SL9 + Princeton Wake setup used for efficiency stats."""
+    global _efficiency_setup
+    if _efficiency_setup is None:
+        _efficiency_setup = get_bike_stats(
+            _EFFICIENCY_FRAME_ID, _EFFICIENCY_WHEEL_ID, _EFFICIENCY_UPGRADE_LEVEL
+        )
+    return _efficiency_setup
+
+
+def _compute_rider_efficiency(df, weight_kg, height_cm):
+    """Per-rider power, NP, effective draft and aero-drag reduction.
+
+    Every rider is assumed to ride the same fully-upgraded Tarmac SL9 +
+    Princeton Wake setup; draft is estimated from their recorded power/speed
+    trace via the physics model. Returns a dict of display-ready values (any of
+    which may be ``None`` when the required telemetry is missing).
+    """
+    stats = {
+        'avg_power': None,
+        'normalized_power': None,
+        'avg_draft_watts': None,
+        'aero_reduction_pct': None,
+    }
+    if 'power_watts' not in df.columns or df['power_watts'].notna().sum() == 0:
+        return stats
+
+    power = df['power_watts'].to_numpy(dtype=float)
+    stats['avg_power'] = float(np.nanmean(power))
+    time_sec = df['time_sec'].to_numpy(dtype=float) if 'time_sec' in df.columns else None
+    stats['normalized_power'] = calculate_normalized_power(power, time_sec)
+
+    setup = _get_efficiency_setup()
+    if setup is not None:
+        height_m = (height_cm or _DEFAULT_HEIGHT_CM) / 100.0
+        frontal_area = frontal_area_from_rider(height_m, weight_kg)
+        eff = estimate_draft_efficiency(df, weight_kg, setup, frontal_area)
+        if eff is not None:
+            stats['avg_draft_watts'] = eff['avg_draft_watts']
+            stats['aero_reduction_pct'] = eff['aero_reduction_pct']
+    return stats
+
 
 @app.route('/api/race/resolve')
 def api_race_resolve():
@@ -3221,6 +3272,7 @@ def _load_multi_subgroup_race(race_id):
             data=r.data,
             finish_time_sec=r.finish_time_sec,
             weight_kg=r.weight_kg,
+            height_cm=r.height_cm,
             player_id=r.player_id,
             activity_start_time=r.activity_start_time,
             ttt_time_offset=r.ttt_time_offset,
@@ -3365,6 +3417,7 @@ def api_race_data(race_id):
             'activity_id': str(r.activity_id),
             'player_id': int(r.player_id) if r.player_id else None,
             'weight_kg': float(r.weight_kg),
+            'height_cm': float(r.height_cm) if r.height_cm is not None else None,
             'is_late_joiner': is_late_joiner,
             'finish_time_sec': float(r.finish_time_sec) if r.finish_time_sec is not None else None,
             'ttt_time_offset': round(float(r.ttt_time_offset), 1) if r.ttt_time_offset is not None else None,
@@ -3378,6 +3431,9 @@ def api_race_data(race_id):
             'lat': safe_list(df['lat']) if 'lat' in df.columns else [],
             'lng': safe_list(df['lng']) if 'lng' in df.columns else [],
         }
+        rider_json['efficiency'] = _compute_rider_efficiency(
+            df, float(r.weight_kg), r.height_cm
+        )
         riders.append(rider_json)
 
     # Build world map configuration

@@ -9,6 +9,7 @@ in the exact same position?"
 import numpy as np
 import pandas as pd
 from dataclasses import dataclass
+from typing import Optional
 
 from bike_comparison.bike_data import BikeSetup, get_bike_stats, get_bike_database, BASE_CDA
 from shared.utils import calculate_normalized_power
@@ -381,6 +382,123 @@ def compare_bike_setups(
         actual_np=actual_np,
         alternative_np=alternative_np
     )
+
+
+def estimate_draft_efficiency(
+    telemetry: pd.DataFrame,
+    rider_weight_kg: float,
+    setup: BikeSetup,
+    frontal_area: float,
+    crr: float = 0.004,
+) -> Optional[dict]:
+    """Estimate a rider's drafting efficiency over a ride.
+
+    Uses the same recorded-power draft model as :func:`compare_bike_setups`:
+    the effective draft is the aero power saved by sitting in the draft, derived
+    from energy conservation (gradient-free; gravity enters only through the
+    potential energy of the raw altitude trace).
+
+    Args:
+        telemetry: DataFrame with ``time_sec``, a speed column (``speed_mps`` or
+            ``speed_kmh``), optional ``altitude_m`` and ``power_watts``.
+        rider_weight_kg: Rider mass (kg).
+        setup: The bike setup every rider is assumed to ride.
+        frontal_area: Rider frontal area (m²), from height and weight.
+        crr: Rolling resistance coefficient.
+
+    Returns:
+        dict with ``avg_draft_watts`` (time-weighted mean effective draft, W)
+        and ``aero_reduction_pct`` (total effective-draft energy divided by
+        total solo aero-drag energy, as a percentage), or ``None`` when speed or
+        power data is unavailable.
+    """
+    if 'time_sec' in telemetry.columns:
+        time_sec = telemetry['time_sec'].to_numpy(dtype=float)
+    else:
+        time_sec = np.asarray(telemetry.index, dtype=float)
+
+    if 'speed_mps' in telemetry.columns:
+        speed_mps = telemetry['speed_mps'].to_numpy(dtype=float)
+    elif 'speed_kmh' in telemetry.columns:
+        speed_mps = telemetry['speed_kmh'].to_numpy(dtype=float) / 3.6
+    elif 'speed_kph' in telemetry.columns:
+        speed_mps = telemetry['speed_kph'].to_numpy(dtype=float) / 3.6
+    else:
+        return None
+
+    if 'power_watts' in telemetry.columns:
+        power = telemetry['power_watts'].to_numpy(dtype=float)
+    elif 'power' in telemetry.columns:
+        power = telemetry['power'].to_numpy(dtype=float)
+    else:
+        return None
+
+    if 'altitude_m' in telemetry.columns:
+        altitude_m = telemetry['altitude_m'].to_numpy(dtype=float)
+    else:
+        altitude_m = np.zeros_like(speed_mps)
+
+    # Per-surface rolling resistance when the cleaner provides it, else scalar.
+    if 'crr' in telemetry.columns:
+        crr_arr = telemetry['crr'].to_numpy(dtype=float)
+        crr = np.where(np.isfinite(crr_arr), crr_arr, crr)
+
+    # Drop samples where speed or power is missing so NaNs don't poison the
+    # energy-weighted averages.
+    valid = np.isfinite(speed_mps) & np.isfinite(power) & np.isfinite(time_sec)
+    if valid.sum() < 2:
+        return None
+    time_sec = time_sec[valid]
+    speed_mps = speed_mps[valid]
+    power = power[valid]
+    altitude_m = np.nan_to_num(altitude_m[valid], nan=0.0)
+    if isinstance(crr, np.ndarray):
+        crr = crr[valid]
+
+    # Absolute CdA: rider's own (frontal-area-scaled) CdA plus the bike's bias.
+    cda = _RIDER_BASELINE_CD * frontal_area + setup.cda_bias
+    total_mass = rider_weight_kg + setup.weight_kg
+
+    safe_speed = np.maximum(speed_mps, 0.5)
+
+    f_rolling = crr * total_mass * GRAVITY
+    f_aero_solo = 0.5 * AIR_DENSITY * cda * speed_mps ** 2
+
+    # Solo power to overcome all resistance, and the aero-only portion of it.
+    resistance_power_solo = (f_rolling + f_aero_solo) * safe_speed / (1 - DRIVETRAIN_LOSS)
+    solo_aero_power = f_aero_solo * safe_speed / (1 - DRIVETRAIN_LOSS)
+
+    # Rate of mechanical-energy change (KE + PE) from the recorded trace.
+    dt = np.diff(time_sec, prepend=time_sec[0])
+    dt[0] = dt[1] if len(dt) > 1 else 1.0
+    dt = np.maximum(dt, 0.01)
+    total_energy = 0.5 * total_mass * speed_mps ** 2 + total_mass * GRAVITY * altitude_m
+    energy_change_rate = np.zeros_like(total_energy)
+    energy_change_rate[:-1] = np.diff(total_energy) / dt[1:]
+    energy_change_rate[-1] = energy_change_rate[-2] if len(energy_change_rate) > 1 else 0.0
+
+    # Effective draft = aero power saved vs. riding solo (same formula as
+    # compare_bike_setups). Left unclamped so real deceleration (braking) shows.
+    draft_watts = resistance_power_solo - power + energy_change_rate / (1 - DRIVETRAIN_LOSS)
+    draft_window = min(5, len(draft_watts))
+    if draft_window > 1:
+        dk = np.ones(draft_window) / draft_window
+        draft_watts = np.convolve(draft_watts, dk, mode='same')
+
+    total_dt = float(np.sum(dt))
+    if total_dt <= 0:
+        return None
+    avg_draft_watts = float(np.sum(draft_watts * dt) / total_dt)
+
+    total_aero_energy = float(np.sum(solo_aero_power * dt))
+    total_draft_energy = float(np.sum(draft_watts * dt))
+    aero_reduction_pct = (100.0 * total_draft_energy / total_aero_energy
+                          if total_aero_energy > 0 else None)
+
+    return {
+        'avg_draft_watts': avg_draft_watts,
+        'aero_reduction_pct': aero_reduction_pct,
+    }
 
 
 def speed_from_power(

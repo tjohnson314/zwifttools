@@ -532,7 +532,8 @@ def fetch_all_subgroups_from_activity(activity_url_or_id, headers, output_base_d
             np_value = calculate_normalized_power(df['power_watts']) if len(df) > 0 else None
             result = {
                 'rank': p['rank'], 'name': p['name'], 'activity_id': act_id,
-                'weight_kg': p.get('weight_kg', 75.0), 'player_id': p.get('player_id'),
+                'weight_kg': p.get('weight_kg', 75.0), 'height_cm': p.get('height_cm'),
+                'player_id': p.get('player_id'),
                 'activity_start_time': act_data.get('startDate') if act_data else None,
                 'status': 'SUCCESS',
                 'duration_sec': df['time_sec'].max() if len(df) > 0 else 0,
@@ -789,6 +790,7 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
             'name': p['name'],
             'activity_id': act_id,
             'weight_kg': p.get('weight_kg', 75.0),
+            'height_cm': p.get('height_cm'),
             'player_id': p.get('player_id'),
             'file_id': file_id,
             'activity_start_time': act_data.get('startDate') if act_data else None,

@@ -52,6 +52,32 @@
     </details>
 
     <details style="margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
+        <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">What does the Race Efficiency table mean?</summary>
+        <p style="margin-top: 10px; color: #aaa; line-height: 1.6;">
+            The Race Efficiency table summarises, for the whole race, how much aerodynamic benefit each rider got from
+            sitting in the draft. Because we don't have data on which bike each rider was using, every rider is modelled
+            on the same bike — a fully-upgraded Specialized Tarmac SL9 with Princeton Wake wheels — and their frontal area
+            is estimated from their height and weight.
+        </p>
+        <p style="margin-top: 8px; color: #aaa; line-height: 1.6;">
+            Using each rider's recorded power and speed, the physics model works out how much power they <em>would</em> have
+            needed to ride solo (fully exposed to the wind) versus what they actually produced. The difference is the
+            <strong style="color: #e0e0e0;">effective draft</strong> — the watts saved by drafting. The
+            <strong style="color: #e0e0e0;">Average Drag Reduction</strong> column expresses that saving as a percentage of
+            the rider's total aerodynamic drag over the race: 0% means they rode fully in the wind the whole time, while a
+            higher number means they spent more of the race sheltered behind others.
+        </p>
+        <p style="margin-top: 8px; color: #aaa; line-height: 1.6;">
+            In Zwift the maximum possible draft reduces aerodynamic drag by about <strong style="color: #e0e0e0;">50%</strong>,
+            but that peak only applies deep inside a large group — sitting behind a single rider provides noticeably less
+            shelter. A rider tucked in a big bunch for an entire race would therefore approach — but never exceed — a 50%
+            average drag reduction. Values close to 50% indicate a rider who drafted almost perfectly; low or slightly
+            negative values indicate a rider who spent time on the front, in the wind (the model shows these as raw,
+            un-clamped numbers).
+        </p>
+    </details>
+
+    <details style="margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
         <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">What are the two chart modes?</summary>
         <p style="margin-top: 10px; color: #aaa; line-height: 1.6;">
             The chart has two modes, toggled with the <strong style="color: #e0e0e0;">Riders</strong> and
