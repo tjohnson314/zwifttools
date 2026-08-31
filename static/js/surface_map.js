@@ -64,15 +64,20 @@ async function loadWorlds() {
         });
         setStatus('');
         if (data.worlds.length) {
-            sel.value = data.worlds[0].mapID;
-            await loadWorld(data.worlds[0].mapID);
+            // Deep-link support: ?world=<world-slug>&route=<route-slug>.
+            const want = getUrlParams();
+            const match = want.world &&
+                data.worlds.find(w => matchesSlug(want.world, w.name, w.mapID));
+            const mapId = match ? match.mapID : data.worlds[0].mapID;
+            sel.value = mapId;
+            await loadWorld(mapId, match ? want.route : null);
         }
     } catch (e) {
         setStatus(e.message, true);
     }
 }
 
-async function loadWorld(mapId) {
+async function loadWorld(mapId, routeSlug = null) {
     setStatus('Loading world…');
     state.route = null;
     state.activeHash = null;
@@ -94,6 +99,10 @@ async function loadWorld(mapId) {
         loadBackground(data.background);
         document.getElementById('map-hint').style.display = 'none';
         setStatus('');
+        updateUrl();
+        const route = routeSlug &&
+            data.routes.find(r => matchesSlug(routeSlug, r.name, r.nameHash));
+        if (route) await loadRoute(route.nameHash);
     } catch (e) {
         setStatus(e.message, true);
     }
@@ -128,8 +137,60 @@ async function loadRoute(hash) {
         if (data.bounds) fitToBounds(data.bounds, 0.82);
         else renderBase();
         setStatus('');
+        updateUrl();
     } catch (e) {
         setStatus(e.message, true);
+    }
+}
+
+/* --------------------------------------------------------------- url --- */
+
+// Deep-link state: ?world=<world-slug>&route=<route-slug>.
+function slugify(s) {
+    return (s || '').toLowerCase().trim()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+}
+
+// Match a URL token against a name's slug (also accepts the legacy numeric id).
+function matchesSlug(token, name, id) {
+    return token === slugify(name) || token === String(id);
+}
+
+function getUrlParams() {
+    try {
+        const p = new URL(window.location.href).searchParams;
+        return { world: p.get('world'), route: p.get('route') };
+    } catch (e) {
+        return { world: null, route: null };
+    }
+}
+
+function updateUrl() {
+    const p = new URLSearchParams();
+    if (state.world) p.set('world', slugify(state.world.name));
+    if (state.activeHash != null && state.world) {
+        const r = state.world.routes.find(r => r.nameHash === state.activeHash);
+        if (r) p.set('route', slugify(r.name));
+    }
+    const qs = p.toString();
+    history.replaceState(null, '', qs ? `${location.pathname}?${qs}` : location.pathname);
+}
+
+async function copyRouteLink() {
+    updateUrl();
+    const url = window.location.href;
+    const btn = document.getElementById('btn-copy-link');
+    const done = ok => {
+        const prev = btn.textContent;
+        btn.textContent = ok ? 'Copied!' : 'Copy failed';
+        setTimeout(() => { btn.textContent = prev; }, 1500);
+    };
+    try {
+        await navigator.clipboard.writeText(url);
+        done(true);
+    } catch (e) {
+        done(false);
     }
 }
 
@@ -185,6 +246,7 @@ function clearRoute() {
     document.getElementById('route-detail').style.display = 'none';
     renderRouteList();
     if (state.world) fitToBounds(state.world.bounds);
+    updateUrl();
 }
 
 function renderRouteDetail(d) {
@@ -484,6 +546,7 @@ function bindEvents() {
         state.showNetwork = e.target.checked;
         renderBase();
     });
+    document.getElementById('btn-copy-link').addEventListener('click', copyRouteLink);
 
     // Pan
     let dragging = false, lastX = 0, lastY = 0;

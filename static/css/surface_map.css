@@ -270,6 +270,7 @@ select option {
     margin-bottom: 12px;
 }
 .route-detail-head h2 { font-size: 1.25rem; }
+.route-detail-actions { display: flex; gap: 8px; align-items: center; }
 .rd-stats { display: flex; gap: 18px; flex-wrap: wrap; }
 .rd-stats .stat { text-align: right; }
 .rd-stats .stat .v { font-size: 1.05rem; font-weight: 600; }
