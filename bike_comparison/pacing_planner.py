@@ -716,6 +716,7 @@ def plan_tt_pacing(
     max_power_mult: float = 2.5,
     downsample_points: int = 400,
     n_sections: int = 40,
+    bisection_iterations: int = 50,
     bucket_edges_m: list | None = None,
     num_buckets: int | None = None,
 ) -> PacingPlanResult:
@@ -737,6 +738,8 @@ def plan_tt_pacing(
             ceiling (e.g. 2.5 × 250 W = 625 W).
         downsample_points: Number of points in the returned chart series.
         n_sections: Number of rows in the aggregated pacing table.
+        bisection_iterations: Number of iterations used to match the target
+            normalized power. The default preserves full planner precision.
         bucket_edges_m: Optional sorted internal divider distances (m).  When
             given, the finely-varying optimal plan is collapsed into constant-
             power "buckets" between consecutive dividers — a coarse, simpler
@@ -833,7 +836,7 @@ def plan_tt_pacing(
             mu_hi *= 4.0
             np_hi, _ = np_for(mu_hi)
             expand += 1
-        for _ in range(50):
+        for _ in range(bisection_iterations):
             mu_mid = 0.5 * (mu_lo + mu_hi)
             np_mid, _ = np_for(mu_mid)
             if np_mid > power_target_w:
@@ -903,7 +906,7 @@ def plan_tt_pacing(
                 s_lo *= 0.5
                 np_low, _ = np_for_scale(s_lo)
                 expand += 1
-            for _ in range(50):
+            for _ in range(bisection_iterations):
                 s_mid = 0.5 * (s_lo + s_hi)
                 np_mid, _ = np_for_scale(s_mid)
                 if np_mid < power_target_w:

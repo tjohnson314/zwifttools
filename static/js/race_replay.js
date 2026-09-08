@@ -1377,6 +1377,9 @@ function renderEfficiencyTable() {
             weight: r.weight_kg,
             height: r.height_cm,
             finish_time_sec: r.finish_time_sec,
+            no_draft_plan_time_sec: eff.no_draft_plan_time_sec,
+            solo_speed_ratio: r.finish_time_sec > 0 && eff.no_draft_plan_time_sec > 0
+                ? eff.no_draft_plan_time_sec / r.finish_time_sec : null,
             avg_power: eff.avg_power,
             normalized_power: eff.normalized_power,
             avg_draft_watts: eff.avg_draft_watts,
@@ -1426,6 +1429,7 @@ function renderEfficiencyTable() {
             <td class="col-np">${num(p.normalized_power, 0, ' W')}</td>
             <td class="col-draft">${num(p.avg_draft_watts, 0, ' W')}</td>
             <td class="col-eff">${num(p.aero_reduction_pct, 1, '%')}</td>
+            <td class="col-racetime">${num(p.solo_speed_ratio, 2, '×')}</td>
         </tr>`;
     }
     tbody.innerHTML = html;

@@ -2853,6 +2853,8 @@ _EFFICIENCY_FRAME_ID = 'SpecializedTarmacSL92026'
 _EFFICIENCY_WHEEL_ID = 'princetoncarbonworkswake6560'
 _EFFICIENCY_UPGRADE_LEVEL = 5
 _DEFAULT_HEIGHT_CM = 175.0
+_EFFICIENCY_PACING_CHUNK_M = 100.0
+_EFFICIENCY_PACING_BISECTION_ITERATIONS = 12
 _efficiency_setup = None
 
 
@@ -2866,7 +2868,7 @@ def _get_efficiency_setup():
     return _efficiency_setup
 
 
-def _compute_rider_efficiency(df, weight_kg, height_cm):
+def _compute_rider_efficiency(df, weight_kg, height_cm, route=None):
     """Per-rider power, NP, effective draft and aero-drag reduction.
 
     Every rider is assumed to ride the same fully-upgraded Tarmac SL9 +
@@ -2877,6 +2879,7 @@ def _compute_rider_efficiency(df, weight_kg, height_cm):
     stats = {
         'avg_power': None,
         'normalized_power': None,
+        'no_draft_plan_time_sec': None,
         'avg_draft_watts': None,
         'aero_reduction_pct': None,
     }
@@ -2891,6 +2894,21 @@ def _compute_rider_efficiency(df, weight_kg, height_cm):
     setup = _get_efficiency_setup()
     if setup is not None:
         height_m = (height_cm or _DEFAULT_HEIGHT_CM) / 100.0
+        if route is not None and stats['normalized_power'] > 0:
+            try:
+                plan = plan_tt_pacing(
+                    route=route,
+                    rider_weight_kg=weight_kg,
+                    rider_height_m=height_m,
+                    bike_weight_kg=setup.weight_kg,
+                    cda=rider_cda(height_m, weight_kg) + setup.cda_bias,
+                    power_target_w=stats['normalized_power'],
+                    max_chunk_m=_EFFICIENCY_PACING_CHUNK_M,
+                    bisection_iterations=_EFFICIENCY_PACING_BISECTION_ITERATIONS,
+                )
+                stats['no_draft_plan_time_sec'] = plan.total_time_seconds
+            except (ValueError, ZeroDivisionError) as exc:
+                logger.warning("Could not calculate no-draft pacing time: %s", exc)
         frontal_area = frontal_area_from_rider(height_m, weight_kg)
         eff = estimate_draft_efficiency(df, weight_kg, setup, frontal_area)
         if eff is not None:
@@ -3396,6 +3414,15 @@ def api_race_data(race_id):
     # Category mapping (populated by multi-subgroup load)
     cat_map = _race_data_cache.get(race_id + '_categories', {})
 
+    pacing_route = None
+    if race_data.route_name:
+        try:
+            pacing_route = load_route_profile(
+                race_data.route_slug or '', race_data.route_name, world=world
+            )
+        except ValueError as exc:
+            logger.warning("Could not load pacing profile for %s: %s", race_data.route_name, exc)
+
     for i, r in enumerate(race_data.riders):
         df = r.data.reset_index()  # time_sec is the index
 
@@ -3432,7 +3459,7 @@ def api_race_data(race_id):
             'lng': safe_list(df['lng']) if 'lng' in df.columns else [],
         }
         rider_json['efficiency'] = _compute_rider_efficiency(
-            df, float(r.weight_kg), r.height_cm
+            df, float(r.weight_kg), r.height_cm, pacing_route
         )
         riders.append(rider_json)
 
