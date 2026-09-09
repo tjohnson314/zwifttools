@@ -313,23 +313,27 @@ def _pack_leg(map_id: int, leg: dict | None) -> dict | None:
     }
 
 
-def _anchor_leg_alt(leg: dict | None, scale: float) -> None:
+def _anchor_leg_alt(leg: dict | None, scale: float, anchor: float) -> None:
     """Scale a packed leg's altitude to physical metres by a per-world factor.
 
     WAD vertical geometry is not always to physical scale (Watopia altitudes
     read ~2x true metres, New York ~1.32x) while horizontal distance is. The
     factor is the stored per-world WAD->physical scale
-    (:func:`get_world_altitude_scale`); scaling about the first point restores
-    physical gradients and is a no-op for worlds already at physical scale
-    (``scale == 1``).
+    (:func:`get_world_altitude_scale`). ``anchor`` must be the SAME raw
+    altitude value for both the lead-in and main legs (e.g. the lead-in's
+    first point) so the two legs stay joined at their shared boundary; using
+    each leg's own first point independently (as before) desyncs the two legs
+    whenever the lead-in has significant net elevation change (e.g. Watopia's
+    Canopies and Coastlines climbs ~140m raw over its lead-in), producing a
+    large spurious jump where the lead-in meets the route. This is a no-op for
+    worlds already at physical scale (``scale == 1``).
     """
     if not leg or not scale or scale == 1.0:
         return
     alt = leg.get("alt")
-    if not alt or len(alt) < 2:
+    if not alt:
         return
-    a0 = alt[0]
-    leg["alt"] = [round(a0 + (v - a0) * scale, 2) for v in alt]
+    leg["alt"] = [round(anchor + (v - anchor) * scale, 2) for v in alt]
 
 
 def _surface_breakdown(leg: dict | None) -> dict[str, float]:
@@ -386,8 +390,11 @@ def get_route(map_id: int, name_hash: int) -> dict | None:
     # WAD->physical factor so the elevation profile and gradients are correct
     # (WAD vertical geometry is not always physical — see helper).
     world_scale = get_world_altitude_scale(map_id)
-    _anchor_leg_alt(leadin, world_scale)
-    _anchor_leg_alt(main, world_scale)
+    anchor_leg = leadin if leadin and leadin.get("alt") else main
+    if anchor_leg and anchor_leg.get("alt"):
+        anchor_alt = anchor_leg["alt"][0]
+        _anchor_leg_alt(leadin, world_scale, anchor_alt)
+        _anchor_leg_alt(main, world_scale, anchor_alt)
 
     breakdown: dict[str, float] = {}
     for leg in (leadin, main):
