@@ -131,14 +131,19 @@ def compute_finish_crossing_time(
     if len(near_indices) == 0:
         return None
 
-    # Split the near-finish points into distinct passes (telemetry-time gaps
-    # over 60s). A rider may pass the finish coordinates several times: on the
+    # Split the near-finish points into distinct passes.
+    # Consecutive points in a single pass are recorded every ~1-2 seconds,
+    # so any gap > 5s (or index gap > 3) indicates a distinct pass.
+    # A rider may pass the finish coordinates several times: on the
     # lead-in, on each lap of a loop, at the real finish, and again during
     # cool-down if they ride past and double back. For each pass record its
     # GPS closest-approach index and whether the rider is moving forward
     # (odometer increasing) through it, so cool-down crossings taken while
     # doubling back the wrong way can be rejected.
-    splits = np.where(np.diff(times[near_indices]) > 60.0)[0] + 1
+    splits = np.where(
+        (np.diff(times[near_indices]) > 5.0)
+        | (np.diff(near_indices) > 3)
+    )[0] + 1
     passes = []
     for grp in np.split(near_indices, splits):
         grp_gps = haversine(lats[grp], lngs[grp], finish_lat, finish_lng)
