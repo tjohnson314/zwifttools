@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # Bump this version when data cleaning logic changes in a way that invalidates
 # previously cached results.  The cache loader will discard stale caches.
-CLEANING_VERSION = 28
+CLEANING_VERSION = 32
 
 # Grace period after the official race start before a rider is treated as a
 # "late joiner".  Riders routinely begin recording / cross the start banner a
@@ -918,7 +918,15 @@ def build_game_elevation_profile(
 ) -> pd.DataFrame:
     """Build lead-in plus repeated-lap elevation on the absolute race axis."""
     if route.has_leadin:
-        distance_parts = [route.leadin_distance[:-1]]
+        leadin_span_m = route.leadin_distance[-1] - route.leadin_distance[0]
+        if leadin_span_m > 0:
+            normalized_leadin_distance = (
+                (route.leadin_distance - route.leadin_distance[0])
+                * route.leadin_distance_m / leadin_span_m
+            )
+        else:
+            normalized_leadin_distance = route.leadin_distance
+        distance_parts = [normalized_leadin_distance[:-1]]
         altitude_parts = [route.leadin_altitude[:-1]]
     else:
         distance_parts = []
@@ -1020,6 +1028,66 @@ def align_profile_distance_to_riders(
         return adjusted
 
     return elevation_profile
+
+
+def align_riders_to_elevation_profile(
+    riders: List[RiderData],
+    elevation_profile: pd.DataFrame,
+    max_shift_m: float = 400.0,
+) -> float:
+    """Shift a subgroup's independently rebased distance onto a shared profile."""
+    if not riders or elevation_profile is None or elevation_profile.empty:
+        return 0.0
+
+    ref = max(riders, key=lambda rider: len(rider.data)).data
+    if not {'distance_km', 'altitude_m'}.issubset(ref.columns):
+        return 0.0
+
+    profile_distance = elevation_profile['distance_km'].to_numpy(dtype=float)
+    profile_altitude = elevation_profile['altitude_m'].to_numpy(dtype=float)
+    distance = ref['distance_km'].to_numpy(dtype=float)
+    altitude = ref['altitude_m'].to_numpy(dtype=float)
+    in_course = (
+        (distance >= profile_distance.min() + 0.1)
+        & (distance <= profile_distance.max() - 0.1)
+    )
+    if in_course.sum() < 10:
+        return 0.0
+    distance = distance[in_course]
+    altitude = altitude[in_course]
+
+    def residual_std(shift_km: float) -> float:
+        shifted = distance + shift_km
+        valid = (
+            (shifted >= profile_distance.min())
+            & (shifted <= profile_distance.max())
+        )
+        if valid.sum() < 10:
+            return float('inf')
+        residual = altitude[valid] - np.interp(
+            shifted[valid], profile_distance, profile_altitude
+        )
+        return float(np.std(residual))
+
+    base_std = residual_std(0.0)
+    shifts_km = np.arange(-max_shift_m, max_shift_m + 1.0, 5.0) / 1000.0
+    stds = np.array([residual_std(shift) for shift in shifts_km])
+    best_idx = int(np.argmin(stds))
+    best_shift_km = float(shifts_km[best_idx])
+    best_std = float(stds[best_idx])
+
+    if abs(best_shift_km) < 0.02 or best_std >= 0.8 * base_std:
+        return 0.0
+
+    for rider in riders:
+        rider.data = rider.data.copy()
+        rider.data['distance_km'] += best_shift_km
+    logger.info(
+        "Aligned subgroup riders to shared profile: shift %.0f m "
+        "(residual std %.2f m -> %.2f m)",
+        best_shift_km * 1000.0, base_std, best_std,
+    )
+    return best_shift_km
 
 
 def anchor_profile_altitude(
@@ -2121,6 +2189,15 @@ def clean_race_data(
                 logger.info("Detected TTT race — will apply per-rider time offsets")
         except Exception:
             pass
+
+    if not segment_distance_cm:
+        reported_segment_distances = [
+            rider['segment_distance_cm']
+            for rider in riders
+            if rider.get('segment_distance_cm')
+        ]
+        if reported_segment_distances:
+            segment_distance_cm = float(np.median(reported_segment_distances))
     
     if progress_callback:
         progress_callback(len(csv_files) + 1, total_steps, "Aligning distances...")
@@ -2234,9 +2311,36 @@ def clean_race_data(
         # Landmark alignment keeps the raw Zwift odometer, which already
         # includes the lead-in — the same axis as Zwift's segment distance.
         finish_line = determine_finish_line(riders, data_path)
+
+    is_shortened_custom_finish = bool(
+        calibrated_game_route is not None
+        and finish_line
+        and finish_line * 1000.0 < (
+            calibrated_game_route.leadin_distance_m
+            + calibrated_game_route.lap_distance_m
+            - 50.0
+        )
+    )
     
     if progress_callback:
         progress_callback(len(csv_files) + 2, total_steps, "Processing riders...")
+
+    telemetry_finish_latlng = None
+    if finish_line and is_shortened_custom_finish:
+        finish_ref = max(riders, key=lambda rider: len(rider['data']))['data']
+        if {'distance_km', 'lat', 'lng'}.issubset(finish_ref.columns):
+            finish_ref = finish_ref.dropna(subset=['distance_km', 'lat', 'lng'])
+            if (not finish_ref.empty
+                    and finish_ref['distance_km'].min() <= finish_line
+                    <= finish_ref['distance_km'].max()):
+                telemetry_finish_latlng = np.array([
+                    np.interp(
+                        finish_line,
+                        finish_ref['distance_km'].to_numpy(dtype=float),
+                        finish_ref[column].to_numpy(dtype=float),
+                    )
+                    for column in ('lat', 'lng')
+                ])
     
     # Process each rider
     cleaned_riders = []
@@ -2262,11 +2366,31 @@ def clean_race_data(
 
                 if 'lat' in df.columns and 'lng' in df.columns and (
                         calibrated_game_route is not None or route_data is not None):
-                    finish_latlng = (
-                        calibrated_game_route.route_latlng[-1]
-                        if calibrated_game_route is not None
-                        else route_data.latlng[-1]
-                    )
+                    if telemetry_finish_latlng is not None:
+                        finish_latlng = telemetry_finish_latlng
+                    elif calibrated_game_route is not None:
+                        finish_route_distance_m = max(
+                            0.0,
+                            finish_line * 1000.0
+                            - calibrated_game_route.leadin_distance_m,
+                        )
+                        finish_latlng = np.array([
+                            np.interp(
+                                finish_route_distance_m,
+                                calibrated_game_route.route_distance,
+                                calibrated_game_route.route_latlng[:, axis],
+                            )
+                            for axis in range(2)
+                        ])
+                    else:
+                        finish_latlng = np.array([
+                            np.interp(
+                                finish_line * 1000.0,
+                                route_data.distance,
+                                route_data.latlng[:, axis],
+                            )
+                            for axis in range(2)
+                        ])
                     telem_finish = compute_finish_crossing_time(
                         times=times,
                         distances_m=dist_m,
@@ -2369,7 +2493,10 @@ def clean_race_data(
     
     # Build elevation profile - prefer route data if available, else use reference rider
     ref_rider = max(riders, key=lambda r: len(r['data']))
-    if calibrated_game_route is not None and calibrated_game_route.has_leadin:
+    if is_shortened_custom_finish:
+        elevation_profile = build_elevation_profile(ref_rider['data'])
+        logger.info("Using rider telemetry elevation for shortened custom event")
+    elif calibrated_game_route is not None and calibrated_game_route.has_leadin:
         profile_distance_m = (finish_line * 1000) if finish_line else max(
             r.data['distance_km'].max() * 1000
             for r in cleaned_riders if len(r.data) > 0
@@ -2485,6 +2612,25 @@ def clean_race_data(
     else:
         elevation_profile = build_elevation_profile(ref_rider['data'])
 
+    if (finish_line and elevation_profile is not None
+            and not elevation_profile.empty
+            and elevation_profile['distance_km'].max() > finish_line):
+        finish_altitude = float(np.interp(
+            finish_line,
+            elevation_profile['distance_km'].to_numpy(dtype=float),
+            elevation_profile['altitude_m'].to_numpy(dtype=float),
+        ))
+        elevation_profile = elevation_profile[
+            elevation_profile['distance_km'] < finish_line
+        ].copy()
+        elevation_profile = pd.concat([
+            elevation_profile,
+            pd.DataFrame({
+                'distance_km': [finish_line],
+                'altitude_m': [finish_altitude],
+            }),
+        ], ignore_index=True)
+
     # Extract source activity ID from race metadata
     source_activity_id = None
     meta_path = data_path / 'race_meta.json'
@@ -2522,9 +2668,8 @@ def determine_finish_line(
 ) -> Optional[float]:
     """Determine the finish line distance in km on the rider distance axis.
 
-    Zwift's segment distance already includes the lead-in, matching both the
-    raw landmark odometer axis and the route-projected axes (WAD / ZwiftMap),
-    so no lead-in adjustment is applied.
+    Zwift's segment distance is the complete raced distance, including any
+    lead-in, and can crop a custom event before the nominal route endpoint.
     """
     # Try to get from race_meta.json route_id
     meta_path = data_path / 'race_meta.json'

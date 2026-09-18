@@ -8,7 +8,11 @@ WORKSPACE_ROOT = Path(__file__).resolve().parent.parent
 if str(WORKSPACE_ROOT) not in sys.path:
     sys.path.insert(0, str(WORKSPACE_ROOT))
 
-from race_replay.data_cleaner import clean_race_data, compute_finish_crossing_time
+from race_replay.data_cleaner import (
+    align_riders_to_elevation_profile,
+    clean_race_data,
+    compute_finish_crossing_time,
+)
 
 
 class TestRaceReplayTimeOffset(unittest.TestCase):
@@ -16,6 +20,56 @@ class TestRaceReplayTimeOffset(unittest.TestCase):
     are calculated accurately across race datasets, including routes with
     near-finish road crossovers and long cooldown riding.
     """
+
+    def test_subgroup_distance_aligns_to_shared_profile(self):
+        base_dir = WORKSPACE_ROOT / 'race_data'
+        category_a = clean_race_data(base_dir / 'race_data_7343298', cache=False)
+        category_e = clean_race_data(base_dir / 'race_data_7343302', cache=False)
+
+        shift_km = align_riders_to_elevation_profile(
+            category_e.riders, category_a.elevation_profile
+        )
+
+        self.assertAlmostEqual(shift_km, 0.215, delta=0.01)
+        rider = category_e.riders[0].data
+        profile_altitude = np.interp(
+            rider['distance_km'],
+            category_a.elevation_profile['distance_km'],
+            category_a.elevation_profile['altitude_m'],
+        )
+        in_course = rider['distance_km'].between(0.1, 2.9)
+        residual = rider.loc[in_course, 'altitude_m'] - profile_altitude[in_course]
+        self.assertLess(np.std(residual), 0.5)
+
+    def test_custom_finish_crops_nominal_route(self):
+        """A custom total distance must crop the nominal route endpoint."""
+        race_dir = WORKSPACE_ROOT / 'race_data' / 'race_data_7343298'
+        if not race_dir.exists():
+            self.skipTest(f"Race directory {race_dir} not found")
+
+        cleaned = clean_race_data(race_dir, cache=False)
+
+        self.assertAlmostEqual(cleaned.finish_line_km, 3.0, places=3)
+        self.assertAlmostEqual(
+            cleaned.elevation_profile['distance_km'].max(), 3.0, places=6
+        )
+        self.assertTrue(
+            cleaned.elevation_profile['distance_km'].is_monotonic_increasing
+        )
+        rider = cleaned.riders[0]
+        leadin = rider.data[rider.data['distance_km'] <= 0.35]
+        profile_altitude = np.interp(
+            leadin['distance_km'],
+            cleaned.elevation_profile['distance_km'],
+            cleaned.elevation_profile['altitude_m'],
+        )
+        self.assertLess(
+            np.max(np.abs(leadin['altitude_m'] - profile_altitude)), 0.25
+        )
+        finish_sample = rider.data.iloc[
+            np.abs(rider.data.index.to_numpy() - rider.finish_time_sec).argmin()
+        ]
+        self.assertAlmostEqual(finish_sample['distance_km'], 3.0, delta=0.02)
 
     def test_croissant_race_offset_consistency(self):
         """Test race_data_7329699 (Croissant / activity 2225400252620423200).

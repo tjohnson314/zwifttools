@@ -2856,6 +2856,7 @@ _DEFAULT_HEIGHT_CM = 175.0
 _EFFICIENCY_PACING_CHUNK_M = 100.0
 _EFFICIENCY_PACING_BISECTION_ITERATIONS = 12
 _efficiency_setup = None
+_event_rules_cache = {}
 
 
 def _get_efficiency_setup():
@@ -2915,6 +2916,64 @@ def _compute_rider_efficiency(df, weight_kg, height_cm, route=None):
             stats['avg_draft_watts'] = eff['avg_draft_watts']
             stats['aero_reduction_pct'] = eff['aero_reduction_pct']
     return stats
+
+
+def _race_rules(race_id):
+    """Load persisted event rules, falling back to Zwift's public event API."""
+    if race_id in _event_rules_cache:
+        return _event_rules_cache[race_id]
+
+    race_root = Path('race_data')
+    meta_paths = []
+    event_id = None
+    if race_id.startswith('race_event_'):
+        manifest_path = race_root / race_id / 'event_manifest.json'
+        if manifest_path.exists():
+            with open(manifest_path) as f:
+                manifest = json.load(f)
+            event_id = manifest.get('event_id')
+            meta_paths = [
+                race_root / subgroup['race_id'] / 'race_meta.json'
+                for subgroup in manifest.get('subgroups', [])
+            ]
+    else:
+        meta_paths = [race_root / race_id / 'race_meta.json']
+
+    rules = set()
+    subgroup_id = None
+    for meta_path in meta_paths:
+        if not meta_path.exists():
+            continue
+        try:
+            with open(meta_path) as f:
+                meta = json.load(f)
+            event_id = event_id or meta.get('event_id')
+            subgroup_id = subgroup_id or meta.get('event_subgroup_id')
+            rules.update(meta.get('rules_set') or [])
+        except (OSError, ValueError, TypeError):
+            continue
+
+    if not rules and event_id:
+        try:
+            response = requests.get(
+                f'https://us-or-rly101.zwift.com/api/public/events/{event_id}',
+                timeout=10,
+            )
+            if response.status_code == 200:
+                event = response.json()
+                rules.update(event.get('rulesSet') or [])
+                if subgroup_id:
+                    subgroup = next((
+                        item for item in event.get('eventSubgroups', [])
+                        if item.get('id') == subgroup_id
+                    ), None)
+                    if subgroup:
+                        rules.update(subgroup.get('rulesSet') or [])
+        except (requests.RequestException, ValueError, TypeError):
+            logger.warning("Could not load public event rules for %s", event_id)
+
+    _event_rules_cache[race_id] = frozenset(rules)
+    return _event_rules_cache[race_id]
 
 
 @app.route('/api/race/resolve')
@@ -3217,7 +3276,12 @@ def _load_multi_subgroup_race(race_id):
     with open(manifest_path) as f:
         manifest = json.load(f)
 
-    from race_replay.data_cleaner import clean_race_data, CleanedRaceData, RiderData
+    from race_replay.data_cleaner import (
+        clean_race_data,
+        align_riders_to_elevation_profile,
+        CleanedRaceData,
+        RiderData,
+    )
 
     # Clean each subgroup and collect riders with category labels
     all_riders = []
@@ -3255,6 +3319,10 @@ def _load_multi_subgroup_race(race_id):
             merged_route_slug = sg_data.route_slug
             merged_elevation = sg_data.elevation_profile
             merged_world = sg_data.world
+        else:
+            align_riders_to_elevation_profile(
+                sg_data.riders, merged_elevation
+            )
         merged_finish = max(merged_finish, sg_data.finish_line_km)
         merged_min_time = min(merged_min_time, sg_data.min_time)
         merged_max_time = max(merged_max_time, sg_data.max_time)
@@ -3359,6 +3427,7 @@ def api_race_data(race_id):
             return jsonify({'error': str(e)}), 500
 
     race_data = _race_data_cache[race_id]
+    no_drafting = 'NO_DRAFTING' in _race_rules(race_id)
 
     # Detect world if not already set (e.g. older cached data)
     world = race_data.world
@@ -3458,9 +3527,10 @@ def api_race_data(race_id):
             'lat': safe_list(df['lat']) if 'lat' in df.columns else [],
             'lng': safe_list(df['lng']) if 'lng' in df.columns else [],
         }
-        rider_json['efficiency'] = _compute_rider_efficiency(
-            df, float(r.weight_kg), r.height_cm, pacing_route
-        )
+        if not no_drafting:
+            rider_json['efficiency'] = _compute_rider_efficiency(
+                df, float(r.weight_kg), r.height_cm, pacing_route
+            )
         riders.append(rider_json)
 
     # Build world map configuration
@@ -3507,6 +3577,7 @@ def api_race_data(race_id):
         'event_id': event_id,
         'event_subgroup_id': event_subgroup_id,
         'finish_line_km': float(race_data.finish_line_km),
+        'no_drafting': no_drafting,
         'min_time': int(race_data.min_time),
         'max_time': int(race_data.max_time),
         'elevation_profile': elevation_profile,

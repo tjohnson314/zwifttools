@@ -528,8 +528,9 @@ function initRaceData(data) {
     document.getElementById('elevation-panel').style.display = 'block';
     document.getElementById('peloton-details-panel').style.display = chartMode === 'peloton' ? 'block' : 'none';
     document.getElementById('zoom-controls').style.display = 'flex';
-    document.getElementById('efficiency-panel').style.display = 'block';
-    renderEfficiencyTable();
+    const efficiencyPanel = document.getElementById('efficiency-panel');
+    efficiencyPanel.style.display = data.no_drafting ? 'none' : 'block';
+    if (!data.no_drafting) renderEfficiencyTable();
 
     // Initialize map if map config is available
     if (data.map_config) {
@@ -742,13 +743,19 @@ function getRiderPositions(t) {
     for (const r of raceData.riders) {
         const rl = riderLookup[r.rank];
         if (!rl || t < rl.min_time || t > rl.max_time) continue;
+        const finished = r.finish_time_sec != null && t >= r.finish_time_sec;
         if (hideLateJoiners && rl.is_late_joiner) continue;
 
+        const sampleTime = finished ? r.finish_time_sec : t;
+
         // Binary search for the index
-        const idx = binarySearch(rl.time_sec, t);
+        const idx = binarySearch(rl.time_sec, sampleTime);
         if (idx < 0) continue;
 
-        const dist = interpolate(rl.time_sec, rl.distance_km, t, idx);
+        const sampledDistance = interpolate(
+            rl.time_sec, rl.distance_km, sampleTime, idx
+        );
+        const dist = finished ? raceData.finish_line_km : sampledDistance;
         const noData = isNaN(dist);
         const pos = {
             rank: r.rank,
@@ -761,13 +768,13 @@ function getRiderPositions(t) {
             finish_time_sec: r.finish_time_sec,
             no_data: noData,
             distance_km: dist,
-            speed_kmh: noData ? NaN : (rl.speed_kmh ? interpolate(rl.time_sec, rl.speed_kmh, t, idx) : 0),
-            power_watts: noData ? NaN : (rl.power_watts ? stepInterpolate(rl.time_sec, rl.power_watts, t, idx) : 0),
-            hr_bpm: noData ? NaN : (rl.hr_bpm ? interpolate(rl.time_sec, rl.hr_bpm, t, idx) : 0),
-            altitude_m: noData ? NaN : (rl.altitude_m ? interpolate(rl.time_sec, rl.altitude_m, t, idx) : 0),
-            lat: noData ? NaN : (rl.lat ? interpolate(rl.time_sec, rl.lat, t, idx) : NaN),
-            lng: noData ? NaN : (rl.lng ? interpolate(rl.time_sec, rl.lng, t, idx) : NaN),
-            finished: r.finish_time_sec != null && t >= r.finish_time_sec,
+            speed_kmh: noData ? NaN : (rl.speed_kmh ? interpolate(rl.time_sec, rl.speed_kmh, sampleTime, idx) : 0),
+            power_watts: noData ? NaN : (rl.power_watts ? stepInterpolate(rl.time_sec, rl.power_watts, sampleTime, idx) : 0),
+            hr_bpm: noData ? NaN : (rl.hr_bpm ? interpolate(rl.time_sec, rl.hr_bpm, sampleTime, idx) : 0),
+            altitude_m: noData ? NaN : (rl.altitude_m ? interpolate(rl.time_sec, rl.altitude_m, sampleTime, idx) : 0),
+            lat: noData ? NaN : (rl.lat ? interpolate(rl.time_sec, rl.lat, sampleTime, idx) : NaN),
+            lng: noData ? NaN : (rl.lng ? interpolate(rl.time_sec, rl.lng, sampleTime, idx) : NaN),
+            finished,
         };
         positions.push(pos);
     }

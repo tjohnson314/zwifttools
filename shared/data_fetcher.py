@@ -691,6 +691,7 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
     event_start_time = None
     route_id = None
     start_location = None
+    rules_set = []
     if event_id:
         try:
             event_url = f"{BASE_URL}/events/{event_id}"
@@ -703,6 +704,7 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
                         event_start_time = esg.get('eventSubgroupStart')
                         route_id = esg.get('routeId')
                         start_location = esg.get('startLocation')
+                        rules_set = esg.get('rulesSet') or event_data.get('rulesSet') or []
                         if event_start_time:
                             logger.info("Event start time: %s", event_start_time)
                         if route_id:
@@ -723,6 +725,7 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
         'world_id': world_id,
         'route_id': route_id,
         'start_location': start_location,
+        'rules_set': rules_set,
     }
     if segment_distance_cm:
         meta['segment_distance_cm'] = segment_distance_cm
