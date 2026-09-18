@@ -2,6 +2,7 @@ import sys
 import unittest
 from pathlib import Path
 import numpy as np
+import pandas as pd
 
 # Ensure workspace root is in sys.path when run directly as a script
 WORKSPACE_ROOT = Path(__file__).resolve().parent.parent
@@ -9,6 +10,7 @@ if str(WORKSPACE_ROOT) not in sys.path:
     sys.path.insert(0, str(WORKSPACE_ROOT))
 
 from race_replay.data_cleaner import (
+    RiderData,
     align_riders_to_elevation_profile,
     clean_race_data,
     compute_finish_crossing_time,
@@ -22,20 +24,43 @@ class TestRaceReplayTimeOffset(unittest.TestCase):
     """
 
     def test_subgroup_distance_aligns_to_shared_profile(self):
-        base_dir = WORKSPACE_ROOT / 'race_data'
-        category_a = clean_race_data(base_dir / 'race_data_7343298', cache=False)
-        category_e = clean_race_data(base_dir / 'race_data_7343302', cache=False)
+        profile_distance = np.arange(0.0, 3.01, 0.01)
+        profile_altitude = (
+            40.0
+            + 5.0 * np.sin(profile_distance * 3.1)
+            + 2.0 * np.sin(profile_distance * 8.7)
+        )
+        elevation_profile = pd.DataFrame({
+            'distance_km': profile_distance,
+            'altitude_m': profile_altitude,
+        })
+        expected_shift_km = 0.215
+        physical_distance = np.linspace(0.25, 2.9, 300)
+        rider_data = pd.DataFrame({
+            'distance_km': physical_distance - expected_shift_km,
+            'altitude_m': np.interp(
+                physical_distance, profile_distance, profile_altitude
+            ),
+        }, index=pd.Index(np.arange(300, dtype=float), name='time_sec'))
+        riders = [RiderData(
+            rank=1,
+            activity_id='synthetic',
+            name='Synthetic Rider',
+            team='',
+            data=rider_data,
+            finish_time_sec=None,
+        )]
 
         shift_km = align_riders_to_elevation_profile(
-            category_e.riders, category_a.elevation_profile
+            riders, elevation_profile
         )
 
-        self.assertAlmostEqual(shift_km, 0.215, delta=0.01)
-        rider = category_e.riders[0].data
+        self.assertAlmostEqual(shift_km, expected_shift_km, delta=0.01)
+        rider = riders[0].data
         profile_altitude = np.interp(
             rider['distance_km'],
-            category_a.elevation_profile['distance_km'],
-            category_a.elevation_profile['altitude_m'],
+            elevation_profile['distance_km'],
+            elevation_profile['altitude_m'],
         )
         in_course = rider['distance_km'].between(0.1, 2.9)
         residual = rider.loc[in_course, 'altitude_m'] - profile_altitude[in_course]
