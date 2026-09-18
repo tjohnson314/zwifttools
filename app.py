@@ -3362,6 +3362,8 @@ def _load_multi_subgroup_race(race_id):
             player_id=r.player_id,
             activity_start_time=r.activity_start_time,
             ttt_time_offset=r.ttt_time_offset,
+            segment_distance_anomaly=r.segment_distance_anomaly,
+            alignment_warning=r.alignment_warning,
         ))
 
     merged = CleanedRaceData(
@@ -3518,6 +3520,7 @@ def api_race_data(race_id):
             'finish_time_sec': float(r.finish_time_sec) if r.finish_time_sec is not None else None,
             'ttt_time_offset': round(float(r.ttt_time_offset), 1) if r.ttt_time_offset is not None else None,
             'segment_distance_anomaly': bool(r.segment_distance_anomaly),
+            'alignment_warning': r.alignment_warning,
             'time_sec': df['time_sec'].tolist(),
             'distance_km': safe_list(df['distance_km']),
             'altitude_m': safe_list(df['altitude_m']) if 'altitude_m' in df.columns else [],

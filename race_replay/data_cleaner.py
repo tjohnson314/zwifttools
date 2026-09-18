@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # Bump this version when data cleaning logic changes in a way that invalidates
 # previously cached results.  The cache loader will discard stale caches.
-CLEANING_VERSION = 32
+CLEANING_VERSION = 33
 
 # Grace period after the official race start before a rider is treated as a
 # "late joiner".  Riders routinely begin recording / cross the start banner a
@@ -72,6 +72,7 @@ class RiderData:
     activity_start_time: Optional[str] = None  # ISO 8601 UTC when activity started
     ttt_time_offset: Optional[float] = None  # Replay clock offset (legacy field name)
     segment_distance_anomaly: bool = False  # Segment distance differs from field (lead-in bug)
+    alignment_warning: Optional[str] = None  # Set when the replay clock offset is estimated, not measured
 
 
 @dataclass
@@ -2050,6 +2051,82 @@ def detect_world_from_coords(lat: float, lng: float) -> Optional[str]:
     return None
 
 
+def _compute_rider_finish_offset(
+    rider: Dict,
+    finish_line: float,
+    telemetry_finish_latlng: Optional[np.ndarray],
+    calibrated_game_route: Optional['CalibratedGameRoute'],
+    route_data: Optional['RouteData'],
+) -> Tuple[Optional[float], Optional[float]]:
+    """Compute a rider's finish-crossing time offset (telemetry vs. official).
+
+    Returns ``(ttt_time_offset, official_time_sec)``. ``ttt_time_offset`` is
+    ``None`` when the rider's telemetry never reaches the finish line — most
+    often because their activity recording was cut off before they actually
+    finished the race.
+    """
+    df = rider['data']
+    elapsed_ms = rider.get('elapsed_ms')
+    official_time_sec = elapsed_ms / 1000.0 if elapsed_ms is not None else None
+    if official_time_sec is None:
+        return None, None
+
+    times = df['time_sec'].values
+    dist_m = df['distance_km'].values * 1000.0
+    telem_finish = None
+
+    if 'lat' in df.columns and 'lng' in df.columns and (
+            calibrated_game_route is not None or route_data is not None):
+        if telemetry_finish_latlng is not None:
+            finish_latlng = telemetry_finish_latlng
+        elif calibrated_game_route is not None:
+            finish_route_distance_m = max(
+                0.0,
+                finish_line * 1000.0 - calibrated_game_route.leadin_distance_m,
+            )
+            finish_latlng = np.array([
+                np.interp(
+                    finish_route_distance_m,
+                    calibrated_game_route.route_distance,
+                    calibrated_game_route.route_latlng[:, axis],
+                )
+                for axis in range(2)
+            ])
+        else:
+            finish_latlng = np.array([
+                np.interp(
+                    finish_line * 1000.0,
+                    route_data.distance,
+                    route_data.latlng[:, axis],
+                )
+                for axis in range(2)
+            ])
+        telem_finish = compute_finish_crossing_time(
+            times=times,
+            distances_m=dist_m,
+            lats=df['lat'].values,
+            lngs=df['lng'].values,
+            finish_lat=finish_latlng[0],
+            finish_lng=finish_latlng[1],
+            finish_distance_m=finish_line * 1000.0,
+            expected_time_sec=official_time_sec,
+        )
+
+    if telem_finish is None:
+        # Distance-based crossing (landmark path or missing GPS):
+        # pick the crossing whose time is closest to the result.
+        crossed = np.where(dist_m >= finish_line * 1000.0 - 30.0)[0]
+        if len(crossed) > 0:
+            cross_times = times[crossed]
+            telem_finish = float(cross_times[
+                int(np.argmin(np.abs(cross_times - official_time_sec)))
+            ])
+
+    if telem_finish is None:
+        return None, official_time_sec
+    return float(telem_finish - official_time_sec), official_time_sec
+
+
 def clean_race_data(
     data_dir: Path,
     cache: bool = True,
@@ -2342,6 +2419,22 @@ def clean_race_data(
                     for column in ('lat', 'lng')
                 ])
     
+    # Pass 1: compute each rider's finish-crossing clock offset independently.
+    # A rider's telemetry sometimes ends before they cross the finish (their
+    # Zwift activity recording was cut off), in which case no offset can be
+    # measured directly. Collect the offsets that *could* be measured so we
+    # can fall back to the race's average alignment for the rest.
+    rider_offsets: Dict[int, Optional[float]] = {}
+    if finish_line:
+        for rider in riders:
+            offset, _ = _compute_rider_finish_offset(
+                rider, finish_line, telemetry_finish_latlng,
+                calibrated_game_route, route_data,
+            )
+            rider_offsets[rider['rank']] = offset
+    valid_offsets = [v for v in rider_offsets.values() if v is not None]
+    fallback_offset = float(np.mean(valid_offsets)) if valid_offsets else None
+
     # Process each rider
     cleaned_riders = []
     finish_times = []
@@ -2356,66 +2449,31 @@ def clean_race_data(
         # geometry is available, otherwise by the distance odometer, so this
         # also works on the landmark path (routes with no ZwiftMap/WAD data).
         ttt_time_offset = None
+        alignment_warning = None
         if finish_line:
             elapsed_ms = rider.get('elapsed_ms')
             official_time_sec = elapsed_ms / 1000.0 if elapsed_ms is not None else None
             if official_time_sec is not None:
-                times = df['time_sec'].values
-                dist_m = df['distance_km'].values * 1000.0
-                telem_finish = None
+                measured_offset = rider_offsets.get(rider['rank'])
+                used_fallback = measured_offset is None and fallback_offset is not None
+                ttt_time_offset = measured_offset if measured_offset is not None else fallback_offset
 
-                if 'lat' in df.columns and 'lng' in df.columns and (
-                        calibrated_game_route is not None or route_data is not None):
-                    if telemetry_finish_latlng is not None:
-                        finish_latlng = telemetry_finish_latlng
-                    elif calibrated_game_route is not None:
-                        finish_route_distance_m = max(
-                            0.0,
-                            finish_line * 1000.0
-                            - calibrated_game_route.leadin_distance_m,
+                if ttt_time_offset is not None:
+                    if used_fallback:
+                        alignment_warning = (
+                            "This rider's activity data ended before reaching the "
+                            "finish line, so their replay clock offset could not "
+                            "be measured directly. Using the average offset of "
+                            "other riders in this race instead \u2014 their position "
+                            "in the replay may be misaligned."
                         )
-                        finish_latlng = np.array([
-                            np.interp(
-                                finish_route_distance_m,
-                                calibrated_game_route.route_distance,
-                                calibrated_game_route.route_latlng[:, axis],
-                            )
-                            for axis in range(2)
-                        ])
+                        logger.warning(
+                            "  Rider %s (%s): activity cut off before finish \u2014 "
+                            "using fallback avg offset=%.2fs from other riders",
+                            rider['rank'], rider['name'], ttt_time_offset)
                     else:
-                        finish_latlng = np.array([
-                            np.interp(
-                                finish_line * 1000.0,
-                                route_data.distance,
-                                route_data.latlng[:, axis],
-                            )
-                            for axis in range(2)
-                        ])
-                    telem_finish = compute_finish_crossing_time(
-                        times=times,
-                        distances_m=dist_m,
-                        lats=df['lat'].values,
-                        lngs=df['lng'].values,
-                        finish_lat=finish_latlng[0],
-                        finish_lng=finish_latlng[1],
-                        finish_distance_m=finish_line * 1000.0,
-                        expected_time_sec=official_time_sec,
-                    )
-
-                if telem_finish is None:
-                    # Distance-based crossing (landmark path or missing GPS):
-                    # pick the crossing whose time is closest to the result.
-                    crossed = np.where(dist_m >= finish_line * 1000.0 - 30.0)[0]
-                    if len(crossed) > 0:
-                        cross_times = times[crossed]
-                        telem_finish = float(cross_times[
-                            int(np.argmin(np.abs(cross_times - official_time_sec)))
-                        ])
-
-                if telem_finish is not None:
-                    ttt_time_offset = telem_finish - official_time_sec
-                    logger.info("  Rider %s (%s): replay clock offset=%.2fs",
-                                rider['rank'], rider['name'], ttt_time_offset)
+                        logger.info("  Rider %s (%s): replay clock offset=%.2fs",
+                                    rider['rank'], rider['name'], ttt_time_offset)
                     df['time_sec'] = df['time_sec'] - ttt_time_offset
                     finish_time = official_time_sec
                     df = resample_to_integer_seconds(df)
@@ -2476,6 +2534,7 @@ def clean_race_data(
             activity_start_time=rider.get('activity_start_time'),
             ttt_time_offset=ttt_time_offset,
             segment_distance_anomaly=rider.get('segment_distance_anomaly', False),
+            alignment_warning=alignment_warning,
         ))
     
     # Find global time range
@@ -2785,6 +2844,7 @@ def save_to_cache(data: CleanedRaceData, cache_path: Path):
             'finish_time_sec': to_python(rider.finish_time_sec) if rider.finish_time_sec is not None else None,
             'ttt_time_offset': to_python(rider.ttt_time_offset) if rider.ttt_time_offset is not None else None,
             'segment_distance_anomaly': bool(rider.segment_distance_anomaly),
+            'alignment_warning': rider.alignment_warning,
             'data_file': rider_file.name
         })
     
@@ -2848,6 +2908,7 @@ def load_from_cache(cache_path: Path) -> Optional[CleanedRaceData]:
                 activity_start_time=rider_info.get('activity_start_time'),
                 ttt_time_offset=rider_info.get('ttt_time_offset'),
                 segment_distance_anomaly=rider_info.get('segment_distance_anomaly', False),
+                alignment_warning=rider_info.get('alignment_warning'),
             ))
         
         # Load elevation

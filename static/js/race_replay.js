@@ -507,6 +507,7 @@ function initRaceData(data) {
             weight_kg: r.weight_kg || 75.0,
             is_late_joiner: r.is_late_joiner || false,
             segment_distance_anomaly: r.segment_distance_anomaly || false,
+            alignment_warning: r.alignment_warning || null,
             finish_time_sec: r.finish_time_sec,
             time_sec: new Float64Array(r.time_sec),
             distance_km: toF64(r.distance_km),
@@ -602,6 +603,19 @@ function initRaceData(data) {
                 `${anomalyCount} rider${anomalyCount === 1 ? '' : 's'} affected by lead-in distance bug`;
         } else {
             anomalyEl.style.display = 'none';
+        }
+    }
+
+    // Alignment warning summary (activity cut off before finish, offset estimated)
+    const alignmentWarningCount = data.riders.filter(r => r.alignment_warning).length;
+    const alignmentWarningEl = document.getElementById('info-alignment-warning');
+    if (alignmentWarningEl) {
+        if (alignmentWarningCount > 0) {
+            alignmentWarningEl.style.display = '';
+            alignmentWarningEl.querySelector('span').textContent =
+                `${alignmentWarningCount} rider${alignmentWarningCount === 1 ? '' : 's'} had a cut-off activity — alignment estimated, may be misaligned`;
+        } else {
+            alignmentWarningEl.style.display = 'none';
         }
     }
 
@@ -765,6 +779,7 @@ function getRiderPositions(t) {
             activity_id: rl.activity_id,
             weight_kg: rl.weight_kg,
             segment_distance_anomaly: rl.segment_distance_anomaly,
+            alignment_warning: rl.alignment_warning,
             finish_time_sec: r.finish_time_sec,
             no_data: noData,
             distance_km: dist,
@@ -1059,7 +1074,7 @@ function updateRiderTable(positions) {
         html += `<tr class="${classes.join(' ')}${nd ? ' no-data' : ''}" data-rank="${p.rank}">
             <td class="col-check"><input type="checkbox" ${isChecked ? 'checked' : ''} data-rank="${p.rank}"></td>
             <td class="col-pos">${p.position}</td>
-            <td class="col-name">${p.activity_id ? `<a href="https://www.zwift.com/activity/${p.activity_id}" target="_blank" rel="noopener" title="View on Zwift" onclick="event.stopPropagation()"><img src="/static/img/zwift.ico" alt="Zwift" class="zwift-activity-icon"></a> ` : ''}${p.category ? `<span class="cat-badge" style="background:${CATEGORY_COLORS[p.category] || '#666'}">${p.category}</span> ` : ''}${p.name}${p.finished ? ' 🏁' : ''}${p.segment_distance_anomaly ? ' <span class="seg-anomaly-badge" title="Segment distance differs from the field — likely affected by the Zwift lead-in distance bug (shorter finish line)">⚠ short course</span>' : ''}${nd ? ' <span class="no-data-badge">No data</span>' : ''}</td>
+            <td class="col-name">${p.activity_id ? `<a href="https://www.zwift.com/activity/${p.activity_id}" target="_blank" rel="noopener" title="View on Zwift" onclick="event.stopPropagation()"><img src="/static/img/zwift.ico" alt="Zwift" class="zwift-activity-icon"></a> ` : ''}${p.category ? `<span class="cat-badge" style="background:${CATEGORY_COLORS[p.category] || '#666'}">${p.category}</span> ` : ''}${p.name}${p.finished ? ' 🏁' : ''}${p.segment_distance_anomaly ? ' <span class="seg-anomaly-badge" title="Segment distance differs from the field — likely affected by the Zwift lead-in distance bug (shorter finish line)">⚠ short course</span>' : ''}${p.alignment_warning ? ` <span class="alignment-warning-badge" title="${p.alignment_warning}">⚠ cut off</span>` : ''}${nd ? ' <span class="no-data-badge">No data</span>' : ''}</td>
             <td class="col-gap">${gapStr}</td>
             <td class="col-power">${pwrStr}</td>
             <td class="col-power1m">${pwr1mStr}</td>

@@ -532,8 +532,20 @@ h1 .header-icon {
     white-space: nowrap;
 }
 
+.alignment-warning-badge {
+    font-size: 0.65em;
+    color: #ff9800;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
 .info-seg-anomaly {
     color: #ef5350;
+    font-weight: 600;
+}
+
+.info-alignment-warning {
+    color: #ff9800;
     font-weight: 600;
 }
 
