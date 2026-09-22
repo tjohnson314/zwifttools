@@ -1257,6 +1257,7 @@ def get_wheels():
             'cdaBias': wheel.get('wheelcda_bias'),
             'cdaBiasTt': wheel.get('wheelcda_bias_tt'),
             'fitsFrame': wheel.get('wheelfitsframe', 'Standard,TT'),
+            'exclusiveFrameId': wheel.get('wheelownerframeid'),
             'level': _safe_int(wheel.get('wheellevel'), 0),
             'price': wheel.get('wheelprice')
         })

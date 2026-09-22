@@ -54,6 +54,18 @@ _GAME_TYPE_TO_FRAME_TYPE = {
     'RECUMBENT': 'Standard',
 }
 
+# Halo wheelsets are valid only with their owning frame, never as standalone
+# wheelsets. Most use LOC_BIKE_* records; the Zwift Concept has a dedicated
+# LOC_WHEELNAME_* record instead.
+_FIXED_WHEEL_OWNERS = {
+    ('Brompton', 'PLine'): 'BromptonPLine2025',
+    ('Cannondale', 'CannondalePong'): 'CannondalePong',
+    ('Pinarello', 'PinarelloEspada'): 'PinarelloEspada',
+    ('Roval', 'RovalProject74'): 'SpecializedProject74',
+    ('Zwift', 'Zwift_Concept'): 'Zwift_Concept',
+    ('Zwift', 'Zwift_Concept_Gold'): 'Zwift_Concept_Gold',
+}
+
 
 def _humanize(text: str, strip_prefix: Optional[str] = None) -> str:
     """Turn a CamelCase/PackedDigits identifier into spaced, readable text."""
@@ -175,12 +187,12 @@ class BikeDatabase:
         for wh in raw:
             if not isinstance(wh, dict):
                 continue
-            # Skip bike-integrated wheels: their game name is a LOC_BIKE_* bike
-            # name (Project 74, Espada, Brompton, Big Spin, Tron R4000). These
-            # come welded to one specific halo/special bike and are not
-            # standalone wheelsets, so they must not appear in the general wheel
-            # pool or be paired with other frames in the best-bike search.
-            if str(wh.get('name') or '').startswith('LOC_BIKE_'):
+            owner_frame_id = _FIXED_WHEEL_OWNERS.get((wh.get('brand'), wh.get('model')))
+            is_integrated_wheel = str(wh.get('name') or '').startswith('LOC_BIKE_')
+            # Keep mapped fixed-wheel bike configurations, but record their
+            # sole legal owner. Other bike-integrated wheels remain unavailable
+            # because they do not belong to a supported fixed-wheel configuration.
+            if is_integrated_wheel and owner_frame_id is None:
                 continue
             weight_g = wh.get('pair_weight_g_effective')
             cda_bias = wh.get('pair_cda_bias_effective')
@@ -203,6 +215,7 @@ class BikeDatabase:
                 'wheelmake': brand,
                 'wheelmodel': _humanize(model, strip_prefix=brand),
                 'wheelfitsframe': 'Standard,TT,Gravel,MTB,Tron,Hand',
+                'wheelownerframeid': owner_frame_id,
                 'wheellevel': int(level) if isinstance(level, (int, float)) else 0,
                 'wheelprice': wh.get('price'),
                 'wheelweight_g': weight_g,
@@ -245,13 +258,17 @@ class BikeDatabase:
         """Precompute (frame, wheel) combos with per-upgrade-stage cda/weight arrays."""
         self.bikes = {}
         for fid, frame in self.frames.items():
-            # Built-in / no separate wheelset option (wheel_id == '')
-            builtin = [self._combo_cda_weight(frame, None, lvl) for lvl in range(6)]
-            self.bikes[(fid, '')] = {
-                'cda': [c for c, _ in builtin],
-                'weight': [w for _, w in builtin],
-            }
+            is_halo_frame = any(w.get('wheelownerframeid') == fid for w in self.wheels.values())
+            if not is_halo_frame:
+                # Built-in / no separate wheelset option (wheel_id == '')
+                builtin = [self._combo_cda_weight(frame, None, lvl) for lvl in range(6)]
+                self.bikes[(fid, '')] = {
+                    'cda': [c for c, _ in builtin],
+                    'weight': [w for _, w in builtin],
+                }
             for wid, wheel in self.wheels.items():
+                if is_halo_frame != bool(wheel.get('wheelownerframeid') == fid):
+                    continue
                 stages = [self._combo_cda_weight(frame, wheel, lvl) for lvl in range(6)]
                 self.bikes[(fid, wid)] = {
                     'cda': [c for c, _ in stages],
@@ -274,6 +291,12 @@ class BikeDatabase:
         lookup_wheel_id = wheel_id if wheel_id else ''
         wheel = self.wheels.get(lookup_wheel_id) if lookup_wheel_id else None
         if lookup_wheel_id and wheel is None:
+            return None
+        owned_wheel = next((w for w in self.wheels.values()
+                            if w.get('wheelownerframeid') == frame_id), None)
+        if owned_wheel and wheel is not owned_wheel:
+            return None
+        if wheel and wheel.get('wheelownerframeid') not in (None, frame_id):
             return None
 
         level = max(0, min(5, int(upgrade_level or 0)))

@@ -140,8 +140,11 @@ class BikeSelector {
     _compatibleWheels(frameType) {
         return this.wheels.filter(w => {
             if (w.id === '') return false;   // skip the built-in placeholder
+            if (w.exclusiveFrameId && w.exclusiveFrameId !== this.frameSel.value) return false;
             const fits = (w.fitsFrame || 'Standard,TT').split(',').map(s => s.trim());
-            return fits.includes(frameType);
+            return fits.includes(frameType) &&
+                (!this.wheels.some(candidate => candidate.exclusiveFrameId === this.frameSel.value) ||
+                 w.exclusiveFrameId === this.frameSel.value);
         });
     }
 
