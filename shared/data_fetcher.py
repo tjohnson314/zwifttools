@@ -211,7 +211,7 @@ def convert_telemetry_to_dataframe(telem_data):
         pd.DataFrame with columns: time_sec, power_watts, hr_bpm, cadence_rpm,
                                    speed_kmh, distance_km, altitude_m
     """
-    return pd.DataFrame({
+    frame = pd.DataFrame({
         'time_sec': telem_data.get('timeInSec', []),
         'power_watts': telem_data.get('powerInWatts', []),
         'hr_bpm': telem_data.get('heartRate', []),
@@ -220,6 +220,22 @@ def convert_telemetry_to_dataframe(telem_data):
         'distance_km': [d / 100000 for d in telem_data.get('distanceInCm', [])],
         'altitude_m': [a / 100 for a in telem_data.get('altitudeInCm', [])]
     })
+    # GPS is retained for route and segment matching. API payloads have used
+    # both abbreviated and descriptive field names over time.
+    latitude = (telem_data.get('latitude') or telem_data.get('lat')
+                or telem_data.get('latitudeInDegrees') or telem_data.get('latInDegrees'))
+    longitude = (telem_data.get('longitude') or telem_data.get('lng')
+                 or telem_data.get('lon') or telem_data.get('longitudeInDegrees')
+                 or telem_data.get('lonInDegrees'))
+    if latitude is None and longitude is None:
+        latlng = telem_data.get('latlng') or telem_data.get('latLng')
+        if latlng and len(latlng) == len(frame):
+            latitude = [point[0] for point in latlng]
+            longitude = [point[1] for point in latlng]
+    if latitude is not None and longitude is not None and len(latitude) == len(frame) and len(longitude) == len(frame):
+        frame['lat'] = latitude
+        frame['lng'] = longitude
+    return frame
 
 
 # ---------------------------------------------------------------------------

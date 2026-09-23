@@ -1,0 +1,365 @@
+{
+  "world": "world11",
+  "routes": {
+    "Cr\u00eape Escape": {
+      "name_hash": 3141079998,
+      "segments": [
+        {
+          "hash": 5354271745,
+          "percent_start": 0.21834497,
+          "percent_end": 0.22582254
+        },
+        {
+          "hash": 1055191706,
+          "percent_start": 0.52342969,
+          "percent_end": 0.53589231
+        },
+        {
+          "hash": 1055881124,
+          "percent_start": 0.64257228,
+          "percent_end": 0.70438683
+        },
+        {
+          "hash": -9223372035804541048,
+          "percent_start": 0.83399802,
+          "percent_end": 0.84147555
+        }
+      ]
+    },
+    "La Boucle": {
+      "name_hash": 870135081,
+      "segments": [
+        {
+          "hash": 5354271745,
+          "percent_start": 0.2251282,
+          "percent_end": 0.23282051
+        },
+        {
+          "hash": 1059797545,
+          "percent_start": 0.30769232,
+          "percent_end": 0.32307693
+        },
+        {
+          "hash": 1055881124,
+          "percent_start": 0.42307693,
+          "percent_end": 0.48666668
+        },
+        {
+          "hash": -9223372035804541048,
+          "percent_start": 0.62,
+          "percent_end": 0.62769228
+        }
+      ]
+    },
+    "Paris Toujours": {
+      "name_hash": 2805636083,
+      "segments": [
+        {
+          "hash": 5354271745,
+          "percent_start": 0.059007052,
+          "percent_end": 0.06104178
+        },
+        {
+          "hash": 1056322864,
+          "percent_start": 0.042864893,
+          "percent_end": 0.13334237
+        },
+        {
+          "hash": 5354271745,
+          "percent_start": 0.14948453,
+          "percent_end": 0.15165491
+        },
+        {
+          "hash": 1056322864,
+          "percent_start": 0.13334237,
+          "percent_end": 0.22381985
+        },
+        {
+          "hash": 5354271745,
+          "percent_start": 0.23982637,
+          "percent_end": 0.24186109
+        },
+        {
+          "hash": 1056322864,
+          "percent_start": 0.22381985,
+          "percent_end": 0.31416169
+        },
+        {
+          "hash": 5354271745,
+          "percent_start": 0.33016822,
+          "percent_end": 0.33220294
+        },
+        {
+          "hash": 1055191706,
+          "percent_start": 0.41332066,
+          "percent_end": 0.4167119
+        },
+        {
+          "hash": 1055881124,
+          "percent_start": 0.44574064,
+          "percent_end": 0.46256104
+        },
+        {
+          "hash": -9223372035804541048,
+          "percent_start": 0.49769399,
+          "percent_end": 0.49972871
+        },
+        {
+          "hash": 5354271745,
+          "percent_start": 0.55873573,
+          "percent_end": 0.56077051
+        },
+        {
+          "hash": 1055191706,
+          "percent_start": 0.6417526,
+          "percent_end": 0.64514381
+        },
+        {
+          "hash": 1055881124,
+          "percent_start": 0.67417252,
+          "percent_end": 0.69099295
+        },
+        {
+          "hash": -9223372035804541048,
+          "percent_start": 0.7261259,
+          "percent_end": 0.72816062
+        },
+        {
+          "hash": 5354271745,
+          "percent_start": 0.78716767,
+          "percent_end": 0.78920239
+        },
+        {
+          "hash": 1055191706,
+          "percent_start": 0.87032014,
+          "percent_end": 0.87371135
+        },
+        {
+          "hash": 1055881124,
+          "percent_start": 0.90274012,
+          "percent_end": 0.91956049
+        },
+        {
+          "hash": -9223372035804541048,
+          "percent_start": 0.95469344,
+          "percent_end": 0.95686382
+        }
+      ]
+    },
+    "Heart of Montmartre": {
+      "name_hash": 565111133,
+      "segments": [
+        {
+          "hash": 5354271745,
+          "percent_start": 0.05533747,
+          "percent_end": 0.057236925
+        },
+        {
+          "hash": 1056322864,
+          "percent_start": 0.040141825,
+          "percent_end": 0.12536407
+        },
+        {
+          "hash": 5354271745,
+          "percent_start": 0.14030644,
+          "percent_end": 0.14220589
+        },
+        {
+          "hash": 1056322864,
+          "percent_start": 0.12536407,
+          "percent_end": 0.2102064
+        },
+        {
+          "hash": 5354271745,
+          "percent_start": 0.22527543,
+          "percent_end": 0.22717488
+        },
+        {
+          "hash": 1056322864,
+          "percent_start": 0.2102064,
+          "percent_end": 0.29542863
+        },
+        {
+          "hash": 5354271745,
+          "percent_start": 0.31049767,
+          "percent_end": 0.31239712
+        },
+        {
+          "hash": 1059797545,
+          "percent_start": 0.33075851,
+          "percent_end": 0.33455741
+        },
+        {
+          "hash": 1055881124,
+          "percent_start": 0.35899708,
+          "percent_end": 0.37469926
+        },
+        {
+          "hash": -9223372035804541048,
+          "percent_start": 0.40749651,
+          "percent_end": 0.40939596
+        },
+        {
+          "hash": 5354271745,
+          "percent_start": 0.51677853,
+          "percent_end": 0.51867795
+        },
+        {
+          "hash": 1059797545,
+          "percent_start": 0.537166,
+          "percent_end": 0.5409649
+        },
+        {
+          "hash": 1055881124,
+          "percent_start": 0.56553119,
+          "percent_end": 0.58123338
+        },
+        {
+          "hash": -9223372035804541048,
+          "percent_start": 0.61403066,
+          "percent_end": 0.61593008
+        },
+        {
+          "hash": 5354271745,
+          "percent_start": 0.72331268,
+          "percent_end": 0.7252121
+        },
+        {
+          "hash": 1059797545,
+          "percent_start": 0.74357349,
+          "percent_end": 0.74737245
+        },
+        {
+          "hash": 1055881124,
+          "percent_start": 0.77193868,
+          "percent_end": 0.78764087
+        },
+        {
+          "hash": -9223372035804541048,
+          "percent_start": 0.82043815,
+          "percent_end": 0.82233757
+        },
+        {
+          "hash": 5354271745,
+          "percent_start": 0.92972016,
+          "percent_end": 0.93161958
+        },
+        {
+          "hash": 1056322864,
+          "percent_start": 0.91477776,
+          "percent_end": 0.99962008
+        }
+      ]
+    },
+    "Double Espresso": {
+      "name_hash": 1365497350,
+      "segments": [
+        {
+          "hash": 5354271745,
+          "percent_start": 0.12651998,
+          "percent_end": 0.13086277
+        },
+        {
+          "hash": 1055191706,
+          "percent_start": 0.25101331,
+          "percent_end": 0.25825131
+        },
+        {
+          "hash": 1055881124,
+          "percent_start": 0.32049796,
+          "percent_end": 0.35639837
+        },
+        {
+          "hash": -9223372035804541048,
+          "percent_start": 0.43138391,
+          "percent_end": 0.4357267
+        },
+        {
+          "hash": 5354271745,
+          "percent_start": 0.56166762,
+          "percent_end": 0.56601042
+        },
+        {
+          "hash": 1059797545,
+          "percent_start": 0.60799074,
+          "percent_end": 0.61667633
+        },
+        {
+          "hash": 1055881124,
+          "percent_start": 0.6728431,
+          "percent_end": 0.70874351
+        },
+        {
+          "hash": -9223372035804541048,
+          "percent_start": 0.78372902,
+          "percent_end": 0.78807181
+        }
+      ]
+    },
+    "Montmartre Mixer": {
+      "name_hash": 1247427185,
+      "segments": [
+        {
+          "hash": 5354271745,
+          "percent_start": 0.13242009,
+          "percent_end": 0.1376888
+        },
+        {
+          "hash": 1059797545,
+          "percent_start": 0.18897085,
+          "percent_end": 0.1998595
+        },
+        {
+          "hash": 1055191706,
+          "percent_start": 0.31647348,
+          "percent_end": 0.32525465
+        },
+        {
+          "hash": 1059797545,
+          "percent_start": 0.4738321,
+          "percent_end": 0.48436952
+        },
+        {
+          "hash": 1055881124,
+          "percent_start": 0.55251139,
+          "percent_end": 0.59606606
+        },
+        {
+          "hash": 1055881124,
+          "percent_start": 0.66807163,
+          "percent_end": 0.71127504
+        },
+        {
+          "hash": -9223372035804541048,
+          "percent_start": 0.802248,
+          "percent_end": 0.80751669
+        }
+      ]
+    },
+    "Loop de loop de loop": {
+      "name_hash": 3381223955,
+      "segments": [
+        {
+          "hash": 5354271745,
+          "percent_start": 0.41049671,
+          "percent_end": 0.42455482
+        },
+        {
+          "hash": 1059797545,
+          "percent_start": 0.59793812,
+          "percent_end": 0.62605435
+        }
+      ]
+    },
+    "Cirque du Suffer": {
+      "name_hash": 4234984253,
+      "segments": [
+        {
+          "hash": -9223372031500504063,
+          "percent_start": 0.93052542,
+          "percent_end": 0.94094658
+        }
+      ]
+    }
+  }
+}

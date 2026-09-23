@@ -264,6 +264,63 @@ def race_replay():
     return render_template('race_replay.html')
 
 
+@app.route('/zrl/leaderboard')
+def zrl_leaderboard():
+    """ZRL Stage 1 leaderboard shell until the official activities are loaded."""
+    route = get_route_info(1247427185)
+    subgroup_id = request.args.get('subgroup_id', '').strip()
+    return render_template('zrl_leaderboard.html', route=route, subgroup_id=subgroup_id)
+
+
+@app.route('/api/zrl/leaderboard')
+def api_zrl_leaderboard():
+    """Build the Montmartre Mixer leaderboard from one ZRL event subgroup."""
+    headers = get_headers()
+    if not headers:
+        return jsonify({'error': 'Not authenticated. Please log in first.'}), 401
+
+    raw_subgroup_id = request.args.get('subgroup_id', '').strip()
+    if not raw_subgroup_id:
+        return jsonify({'error': 'subgroup_id is required'}), 400
+    try:
+        subgroup_id = int(raw_subgroup_id)
+    except ValueError:
+        return jsonify({'error': 'subgroup_id must be a number'}), 400
+
+    participants, error = get_race_entries(subgroup_id, headers)
+    if error:
+        return jsonify({'error': error}), 502
+
+    from shared.zrl_leaderboard import build_leaderboard
+
+    def fetch_one(participant):
+        telemetry, _, telemetry_error = fetch_rider_telemetry(
+            participant['activity_id'], headers
+        )
+        if telemetry_error:
+            logger.warning('ZRL telemetry unavailable for %s: %s', participant['activity_id'], telemetry_error)
+            return participant['activity_id'], None
+        return participant['activity_id'], convert_telemetry_to_dataframe(telemetry)
+
+    telemetry_by_activity = {}
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        futures = [pool.submit(fetch_one, participant) for participant in participants]
+        for future in as_completed(futures):
+            activity_id, dataframe = future.result()
+            if dataframe is not None:
+                telemetry_by_activity[str(activity_id)] = dataframe
+
+    if not telemetry_by_activity:
+        return jsonify({'error': 'No rider telemetry could be fetched.'}), 502
+
+    result = build_leaderboard(participants, telemetry_by_activity)
+    result['subgroup_id'] = subgroup_id
+    result['telemetry_riders'] = len(telemetry_by_activity)
+    if not result['segment_geometry_available']:
+        result['segment_geometry_error'] = 'GPS boundary geometry is not loaded for the configured segments.'
+    return jsonify(result)
+
+
 @app.route('/surface-map')
 def surface_map():
     """Surface map / route explorer tool."""

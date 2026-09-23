@@ -37,6 +37,8 @@ ROUTE_DIR = _BASE / "zwift_routes"
 MAPS_DIR = _BASE / "static" / "maps"
 CALIBRATION_FILE = SURFACE_DIR / "world_gps_calibration.json"
 STYLE_MAP_FILE = SURFACE_DIR / "style_surface_map.json"
+WAD_SEGMENTS_FILE = _BASE / "zwift_route_segments_wad.json"
+ZRL_SEGMENTS_FILE = _BASE / "zrl_route_segments.json"
 
 # mapID -> human readable world name (WORLD_NAMES) and mapID -> WORLD_CONFIG key
 # (MAPID_TO_CONFIG) are imported from shared.world_config.
@@ -188,6 +190,118 @@ def _load_surface_world(map_id: int):
 def _load_route_world(map_id: int):
     with open(_route_path(map_id), encoding="utf-8") as f:
         return json.load(f)
+
+
+@lru_cache(maxsize=1)
+def _load_wad_segments() -> dict:
+    if not WAD_SEGMENTS_FILE.exists():
+        return {}
+    with open(WAD_SEGMENTS_FILE, encoding="utf-8") as f:
+        return json.load(f).get("routes", {})
+
+
+@lru_cache(maxsize=1)
+def _load_segment_names() -> dict[int, str]:
+    if not ZRL_SEGMENTS_FILE.exists():
+        return {}
+    with open(ZRL_SEGMENTS_FILE, encoding="utf-8") as f:
+        data = json.load(f)
+    names = {}
+    for route in data.values():
+        for segment in route.get("segments", []):
+            names[int(segment["wad_hash"])] = segment["name"]
+    return names
+
+
+def _path_slice(points, start_fraction, end_fraction):
+    """Return the route polyline between normalized WAD checkpoint positions."""
+    if len(points) < 2:
+        return []
+    points = np.asarray(points, dtype=float)
+    start = start_fraction * (len(points) - 1)
+    end = end_fraction * (len(points) - 1)
+    interior = points[(np.arange(len(points)) > start) & (np.arange(len(points)) < end)]
+    samples = [
+        [float(np.interp(position, np.arange(len(points)), points[:, i])) for i in range(2)]
+        for position in (start, end)
+    ]
+    return [samples[0], *interior.tolist(), samples[1]]
+
+
+def _route_path_slice(route, leadin, main, start_fraction, end_fraction):
+    """Slice packed route legs using the original WAD checkpoint weighting."""
+    segment_path = route.get("segment_path")
+    if segment_path and segment_path.get("x") and segment_path.get("z"):
+        points = list(zip(segment_path["x"], segment_path["z"]))
+        return _path_slice(points, start_fraction, end_fraction)
+    lead_points = list(zip(leadin.get("local_x", []), leadin.get("local_z", []))) if leadin else []
+    main_points = list(zip(main.get("local_x", []), main.get("local_z", []))) if main else []
+    lead_count = max(int(route.get("leadin_checkpoint_count", len(lead_points))), 1)
+    main_count = max(int(route.get("route_checkpoint_count", len(main_points))), 1)
+    total_steps = max(lead_count + main_count - 1, 1)
+    start = start_fraction * total_steps
+    end = end_fraction * total_steps
+    lead_last = lead_count - 1
+    main_start = lead_count
+    chunks = []
+    if lead_points and start <= lead_last:
+        chunks.append(_path_slice(
+            lead_points,
+            max(start, 0) / max(lead_last, 1),
+            min(end, lead_last) / max(lead_last, 1),
+        ))
+    if main_points and end >= main_start:
+        chunks.append(_path_slice(
+            main_points,
+            max(start - main_start, 0) / max(main_count - 1, 1),
+            min(end - main_start, main_count - 1) / max(main_count - 1, 1),
+        ))
+    path = []
+    for chunk in chunks:
+        if path and chunk and path[-1] == chunk[0]:
+            path.extend(chunk[1:])
+        else:
+            path.extend(chunk)
+    return path
+
+
+def _route_segment_markers(map_id: int, route: dict, leadin: dict | None, main: dict | None) -> list[dict]:
+    """Project WAD segment percentage boundaries into surface-map plot space."""
+    segment_entries = route.get("segments")
+    if segment_entries is None:
+        segment_entries = _load_wad_segments().get(route.get("name", "").strip(), {}).get("segments", [])
+    if not segment_entries or not leadin or not main:
+        return []
+    projection = _projection(map_id)
+    names = _load_segment_names()
+    markers = []
+    pass_numbers = {}
+    for index, segment in enumerate(segment_entries, start=1):
+        local_path = _route_path_slice(
+            route, leadin, main, segment["percent_start"], segment["percent_end"]
+        )
+        if len(local_path) < 2:
+            continue
+        x, y = projection["project"](
+            [point[0] for point in local_path],
+            [point[1] for point in local_path],
+        )
+        name = names.get(int(segment["hash"]), f"Segment {index}")
+        segment_hash = int(segment["hash"])
+        pass_numbers[segment_hash] = pass_numbers.get(segment_hash, 0) + 1
+        markers.append({
+            "hash": segment_hash,
+            "pass": pass_numbers[segment_hash],
+            "name": name,
+            "type": "kom" if "KOM" in name else "sprint" if "Sprint" in name else "segment",
+            "start_distance_m": segment.get("start_distance_m"),
+            "end_distance_m": segment.get("end_distance_m"),
+            "path": [
+                {"x": round(float(px), 1), "y": round(float(py), 1)}
+                for px, py in zip(x, y)
+            ],
+        })
+    return markers
 
 
 def _match_surfaces(map_id: int, xs, zs) -> list[str]:
@@ -432,6 +546,7 @@ def get_route(map_id: int, name_hash: int) -> dict | None:
         "event_only": route.get("event_only", False),
         "leadin": leadin,
         "route": main,
+        "segments": _route_segment_markers(map_id, route, leadin, main),
         "breakdown": breakdown_list,
         "bounds": bounds,
     }

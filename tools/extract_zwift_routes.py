@@ -335,6 +335,13 @@ def build_profile(pts: list[tuple[float, float, float]],
     return _resample(dist_m, pts, max_points, surfaces)
 
 
+def build_segment_path(pts: list[tuple[float, float, float]], max_points: int) -> dict | None:
+    """Build a path resampled by WAD checkpoint index for segment percentages."""
+    if len(pts) < 2:
+        return None
+    return _resample([float(i) for i in range(len(pts))], pts, max_points)
+
+
 def _f(el: ET.Element, attr: str, default: float = 0.0) -> float:
     try:
         return float(el.get(attr))
@@ -347,6 +354,28 @@ def _i(el: ET.Element, attr: str, default: int = 0) -> int:
         return int(el.get(attr))
     except (TypeError, ValueError):
         return default
+
+
+def parse_segment_data(root: ET.Element) -> list[dict]:
+    """Extract the route's in-game leaderboard segment boundaries.
+
+    Segment percentages are normalized positions in the route checkpoint
+    sequence, rather than cumulative physical distance or rider odometer data.
+    """
+    segment_data = root.find("segment_data")
+    if segment_data is None:
+        return []
+    segments = []
+    for entry in segment_data.findall("entry"):
+        try:
+            segments.append({
+                "hash": int(entry.get("hash")),
+                "percent_start": float(entry.get("percentStart")),
+                "percent_end": float(entry.get("percentEnd")),
+            })
+        except (TypeError, ValueError):
+            continue
+    return segments
 
 
 def parse_route(data: bytes, map_id: int, max_points: int,
@@ -373,6 +402,23 @@ def parse_route(data: bytes, map_id: int, max_points: int,
 
     route_profile = build_profile(main_pts, max_points, _surfaces(main_rt))
     leadin_profile = build_profile(leadin_pts, max_points, _surfaces(leadin_rt))
+    segment_entries = parse_segment_data(root)
+    if segment_entries:
+        combined_points = leadin_pts + main_pts
+        physical_distance = [value / UNITS_PER_METRE for value in _cumulative_planar(combined_points)]
+        checkpoint_positions = [float(i) for i in range(len(combined_points))]
+        def _distance_at(position: float) -> float:
+            index = min(int(position), len(physical_distance) - 2)
+            fraction = position - index
+            return physical_distance[index] + fraction * (physical_distance[index + 1] - physical_distance[index])
+        for segment in segment_entries:
+            segment["start_distance_m"] = round(
+                _distance_at(segment["percent_start"] * checkpoint_positions[-1]), 2
+            )
+            segment["end_distance_m"] = round(
+                _distance_at(segment["percent_end"] * checkpoint_positions[-1]), 2
+            )
+    segment_path = build_segment_path(leadin_pts + main_pts, max_points * 2) if segment_entries else None
 
     return {
         "name": name,
@@ -388,6 +434,10 @@ def parse_route(data: bytes, map_id: int, max_points: int,
         "supported_laps": _i(r, "supportedLaps"),
         "leadin": leadin_profile,
         "route": route_profile,
+        "leadin_checkpoint_count": len(leadin_pts),
+        "route_checkpoint_count": len(main_pts),
+        "segments": segment_entries,
+        "segment_path": segment_path,
     }
 
 
@@ -407,6 +457,8 @@ def main() -> int:
                     help="Output directory for the cached route profiles.")
     ap.add_argument("--max-points", type=int, default=600,
                     help="Max sample points per profile segment.")
+    ap.add_argument("--world", default=None,
+                    help="Extract only one world folder, e.g. world11.")
     args = ap.parse_args()
 
     worlds_dir = os.path.join(args.zwift_dir, "assets", "Worlds")
@@ -420,9 +472,18 @@ def main() -> int:
 
     world_names = sorted(
         (d for d in os.listdir(worlds_dir)
-         if d.startswith("world") and os.path.isdir(os.path.join(worlds_dir, d))),
+         if d.startswith("world") and os.path.isdir(os.path.join(worlds_dir, d))
+         and (args.world is None or d.lower() == args.world.lower())),
         key=lambda d: int(re.sub(r"\D", "", d) or 0),
     )
+
+    existing_index = []
+    index_path = os.path.join(args.out, "index.json")
+    if args.world and os.path.exists(index_path):
+        with open(index_path, encoding="utf-8") as f:
+            existing_index = json.load(f)
+        selected_map = int(re.sub(r"\D", "", args.world) or 0)
+        existing_index = [entry for entry in existing_index if entry.get("mapID") != selected_map]
 
     for world in world_names:
         wad = os.path.join(worlds_dir, world, "data_1.wad")
@@ -491,6 +552,7 @@ def main() -> int:
                 "file": out_file,
             })
 
+    index = existing_index + index
     index.sort(key=lambda e: (e["mapID"], e["name"].lower()))
     with open(os.path.join(args.out, "index.json"), "w", encoding="utf-8") as f:
         json.dump(index, f, ensure_ascii=False, indent=1)

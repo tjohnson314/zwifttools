@@ -325,6 +325,23 @@ function buildCombinedPath(d) {
 function renderElevation(d) {
     const colors = (state.world && state.world.colors) || {};
     const traces = [];
+    const segmentShapes = [];
+    const segmentAnnotations = [];
+    (d.segments || []).forEach((segment, index) => {
+        if (segment.start_distance_m == null || segment.end_distance_m == null) return;
+        const color = segment.type === 'kom' ? '#e85d75' : '#2ec4ff';
+        const label = `${segment.name}${segment.pass > 1 ? ` ${segment.pass}` : ''}`;
+        segmentShapes.push({
+            type: 'rect', x0: segment.start_distance_m / 1000, x1: segment.end_distance_m / 1000,
+            y0: 0, y1: 1, yref: 'paper', fillcolor: color,
+            opacity: 0.12, line: { color, width: 1 },
+        });
+        segmentAnnotations.push({
+            x: (segment.start_distance_m + segment.end_distance_m) / 2000,
+            y: 1, yref: 'paper', yshift: index % 2 ? -28 : -8,
+            text: label, showarrow: false, font: { color, size: 10 },
+        });
+    });
     let combinedIdx = 0;
 
     // Emit one line trace per contiguous run of the same surface so each run is
@@ -371,7 +388,8 @@ function renderElevation(d) {
         xaxis: { title: 'Distance (km)', gridcolor: 'rgba(255,255,255,0.07)', zeroline: false },
         yaxis: { title: 'Elevation (m)', gridcolor: 'rgba(255,255,255,0.07)', zeroline: false },
         legend: { orientation: 'h', y: 1.12, font: { size: 10 } },
-        shapes: elevationShapes(),
+        shapes: [...elevationShapes(), ...segmentShapes],
+        annotations: segmentAnnotations,
         hovermode: 'closest',
     };
 
@@ -395,7 +413,7 @@ function renderElevation(d) {
         const same = state.pinnedPoint
             && state.pinnedPoint.x === c.x && state.pinnedPoint.y === c.y;
         state.pinnedPoint = same ? null : { x: c.x, y: c.y, km: c.dist_m / 1000 };
-        Plotly.relayout(chart, { shapes: elevationShapes() });
+        Plotly.relayout(chart, { shapes: [...elevationShapes(), ...segmentShapes] });
         paint();
     });
 }
@@ -471,7 +489,44 @@ function renderBase() {
     if (state.route) {
         drawLeg(g, state.route.leadin, 'rgba(255,255,255,0.5)', 2.5, true, zoomK);
         drawLeg(g, state.route.route, '#f7931e', 3.5, false, zoomK);
+        drawRouteSegments(g, state.route.segments, zoomK);
     }
+}
+
+function drawRouteSegments(g, segments, zoomK) {
+    if (!segments || !segments.length) return;
+    const radius = Math.max(4, 5 * (zoomK || 1));
+    segments.forEach((segment, index) => {
+        const path = segment.path.map(point => toScreen(point.x, point.y));
+        const start = path[0];
+        const end = path[path.length - 1];
+        g.strokeStyle = segment.type === 'kom' ? '#e85d75' : '#2ec4ff';
+        g.lineWidth = Math.max(2, 2 * (zoomK || 1));
+        g.setLineDash([5, 4]);
+        g.beginPath();
+        path.forEach((point, pointIndex) => {
+            if (pointIndex === 0) g.moveTo(point.sx, point.sy);
+            else g.lineTo(point.sx, point.sy);
+        });
+        g.stroke();
+        g.setLineDash([]);
+        [start, end].forEach((point, pointIndex) => {
+            g.beginPath();
+            g.arc(point.sx, point.sy, radius, 0, Math.PI * 2);
+            g.fillStyle = pointIndex === 0 ? '#fff' : g.strokeStyle;
+            g.fill();
+            g.strokeStyle = '#101820';
+            g.lineWidth = 2;
+            g.stroke();
+        });
+        g.font = `${Math.max(10, 11 * (state.dpr || 1))}px Segoe UI`;
+        g.fillStyle = '#fff';
+        g.strokeStyle = 'rgba(0,0,0,0.8)';
+        g.lineWidth = 3;
+        const label = `${segment.name}${segment.pass > 1 ? ` ${segment.pass}` : ''}`;
+        g.strokeText(label, start.sx + radius + 3, start.sy - radius - 2);
+        g.fillText(label, start.sx + radius + 3, start.sy - radius - 2);
+    });
 }
 
 function drawLeg(g, leg, color, baseWidth, dashed, zoomK) {

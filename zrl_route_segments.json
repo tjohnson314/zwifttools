@@ -1,0 +1,87 @@
+{
+  "montmartre-mixer": {
+    "source": "C:/Program Files (x86)/Zwift/assets/Worlds/world11/data_1.wad",
+    "source_format": "Zwift WAD segment_data",
+    "segments": [
+      {
+        "name": "Lutece Sprint",
+        "type": "sprint",
+        "route_km": 3.6,
+        "length_km": 0.15,
+        "gradient_percent": 3.5,
+        "wad_hash": 5354271745,
+        "wad_percent_start": 0.13242009,
+        "wad_percent_end": 0.1376888,
+        "pass": 1
+      },
+      {
+        "name": "Monceau Sprint",
+        "type": "sprint",
+        "route_km": 5.1,
+        "length_km": 0.3,
+        "gradient_percent": -0.1,
+        "wad_hash": 1059797545,
+        "wad_percent_start": 0.18897085,
+        "wad_percent_end": 0.1998595,
+        "pass": 1
+      },
+      {
+        "name": "Eglise Sprint",
+        "type": "sprint",
+        "route_km": 8.6,
+        "length_km": 0.25,
+        "gradient_percent": 0.0,
+        "wad_hash": 1055191706,
+        "wad_percent_start": 0.31647348,
+        "wad_percent_end": 0.32525465,
+        "pass": 1
+      },
+      {
+        "name": "Monceau Sprint",
+        "type": "sprint",
+        "route_km": 12.9,
+        "length_km": 0.3,
+        "gradient_percent": -0.1,
+        "wad_hash": 1059797545,
+        "wad_percent_start": 0.4738321,
+        "wad_percent_end": 0.48436952,
+        "pass": 2
+      },
+      {
+        "name": "Montmartre KOM",
+        "type": "kom",
+        "route_km": 15.0,
+        "length_km": 1.2,
+        "elevation_gain_m": 51,
+        "gradient_percent": 4.2,
+        "wad_hash": 1055881124,
+        "wad_percent_start": 0.55251139,
+        "wad_percent_end": 0.59606606,
+        "pass": 1
+      },
+      {
+        "name": "Montmartre KOM",
+        "type": "kom",
+        "route_km": 18.3,
+        "length_km": 1.2,
+        "elevation_gain_m": 51,
+        "gradient_percent": 4.2,
+        "wad_hash": 1055881124,
+        "wad_percent_start": 0.66807163,
+        "wad_percent_end": 0.71127504,
+        "pass": 2
+      },
+      {
+        "name": "Tchou Tchou Sprint",
+        "type": "sprint",
+        "route_km": 22.1,
+        "length_km": 0.15,
+        "gradient_percent": -0.2,
+        "wad_hash": -9223372035804541048,
+        "wad_percent_start": 0.802248,
+        "wad_percent_end": 0.80751669,
+        "pass": 1
+      }
+    ]
+  }
+}

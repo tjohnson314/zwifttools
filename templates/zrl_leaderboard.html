@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZRL Leaderboard - Zwift Tools</title>
+    <link rel="stylesheet" href="/static/css/race_replay.css">
+    <style>
+        .leaderboard-table { width: 100%; border-collapse: collapse; min-width: 760px; }
+        .leaderboard-table th, .leaderboard-table td { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); text-align: left; white-space: nowrap; }
+        .leaderboard-table th { color: #f7931e; }
+        .table-container { overflow-x: auto; }
+        .segment-select { background: #1a1a2e; border: 2px solid #333; border-radius: 8px; color: #fff; padding: 10px 12px; font-size: 0.95rem; min-width: 280px; }
+        .segment-select:focus { outline: none; border-color: #f7931e; }
+        .route-info { display: flex; gap: 28px; flex-wrap: wrap; color: #bbb; }
+        .route-info strong { color: #fff; }
+        .empty-row { color: #888; }
+        .status-msg.error { color: #ffab91; }
+        a { color: #4fc3f7; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header-bar">
+        <div>
+            <a href="/" class="back-link">&larr; Back to Tools</a>
+            <h1><span class="header-icon">🏆</span> ZRL Leaderboard</h1>
+            <p class="subtitle">Stage 1 Race of Truth points and segment scoring</p>
+        </div>
+        <div class="auth-section">
+            <a href="/auth/login?next=/zrl/leaderboard" class="btn-auth">Login with Zwift</a>
+        </div>
+    </div>
+
+    <section class="panel">
+        <h2>Load Event</h2>
+        <div class="race-controls">
+            <div class="race-input-group">
+                <label for="subgroup-input">Event subgroup ID</label>
+                <div class="input-row">
+                    <input type="text" id="subgroup-input" value="{{ subgroup_id }}" placeholder="e.g. 1234567" inputmode="numeric">
+                    <button id="load-btn" class="btn btn-primary">Load Leaderboard</button>
+                </div>
+            </div>
+        </div>
+        <div id="status" class="status-msg" style="display:none;"></div>
+    </section>
+
+    {% if route %}
+    <section class="panel route-info">
+        <span><strong>Route:</strong> {{ route.name }}</span>
+        <span><strong>Lead-in:</strong> {{ '%.2f'|format(route.leadinDistanceInMeters / 1000) }} km / {{ '%.0f'|format(route.leadinAscentInMeters) }} m</span>
+        <span><strong>Route:</strong> {{ '%.2f'|format(route.distanceInMeters / 1000) }} km / {{ '%.0f'|format(route.ascentInMeters) }} m</span>
+        <span><strong>Total:</strong> {{ '%.2f'|format((route.distanceInMeters + route.leadinDistanceInMeters) / 1000) }} km / {{ '%.0f'|format(route.ascentInMeters + route.leadinAscentInMeters) }} m</span>
+    </section>
+    {% endif %}
+
+    <section class="panel">
+        <h2>Overall Points</h2>
+        <div class="table-container"><table class="leaderboard-table" id="overall"><thead><tr><th>Rider</th><th>Activity</th><th>Finish</th><th>FAL</th><th>FTS</th><th>FIN</th><th>Podium</th><th>Total</th></tr></thead><tbody></tbody></table></div>
+    </section>
+
+    <section class="panel">
+        <h2>FAL by Segment</h2>
+        <label for="fal-segment">Segment</label>
+        <select id="fal-segment" class="segment-select"></select>
+        <div class="table-container"><table class="leaderboard-table" id="fal"><thead><tr><th>Rider</th><th>Activity</th><th>Reached End</th><th>FAL</th></tr></thead><tbody></tbody></table></div>
+    </section>
+
+    <section class="panel">
+        <h2>FTS by Segment</h2>
+        <label for="fts-segment">Segment</label>
+        <select id="fts-segment" class="segment-select"></select>
+        <div class="table-container"><table class="leaderboard-table" id="fts"><thead><tr><th>Rider</th><th>Activity</th><th>Segment Time</th><th>FTS</th></tr></thead><tbody></tbody></table></div>
+    </section>
+</div>
+<script>
+const initialSubgroupId = {{ subgroup_id|tojson }};
+const activityUrl = id => `https://www.zwift.com/activity/${encodeURIComponent(id)}`;
+const link = id => `<a href="${activityUrl(id)}" target="_blank" rel="noopener">${id}</a>`;
+const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+let data;
+function setStatus(message, error = false) { const status = document.getElementById('status'); status.textContent = message; status.className = `status-msg${error ? ' error' : ''}`; status.style.display = 'block'; }
+function options(select, segments) {
+    const seen = new Set();
+    select.innerHTML = segments.filter(segment => { const key = `${segment.wad_hash}:${segment.pass}`; if (seen.has(key)) return false; seen.add(key); return true; }).map(segment => `<option value="${segment.wad_hash}:${segment.pass}">${esc(segment.name)} ${segment.pass > 1 ? `(pass ${segment.pass})` : ''}</option>`).join('');
+}
+function renderDetail(kind) {
+    const select = document.getElementById(`${kind}-segment`);
+    const rows = data[kind].filter(row => row.segment_key === select.value);
+    document.querySelector(`#${kind} tbody`).innerHTML = rows.length ? rows.map(row => `<tr><td>${esc(row.name)}</td><td>${link(row.activity_id)}</td><td>${esc(row.time)}</td><td>${row.points}</td></tr>`).join('') : '<tr><td colspan="4" class="empty-row">No telemetry reached this segment.</td></tr>';
+}
+async function loadLeaderboard() {
+    const subgroupId = document.getElementById('subgroup-input').value.trim();
+    if (!/^\d+$/.test(subgroupId)) { setStatus('Enter a numeric event subgroup ID.', true); return; }
+    history.replaceState(null, '', `/zrl/leaderboard?subgroup_id=${encodeURIComponent(subgroupId)}`);
+    setStatus('Loading event results...');
+    try {
+        const response = await fetch(`/api/zrl/leaderboard?subgroup_id=${encodeURIComponent(subgroupId)}`);
+        data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Unable to load leaderboard');
+        document.querySelector('#overall tbody').innerHTML = data.summary.map(row => `<tr><td>${esc(row.name)}</td><td>${link(row.activity_id)}</td><td>${esc(row.finish_time || 'DNF')}</td><td>${row.fal}</td><td>${row.fts}</td><td>${row.fin}</td><td>${row.podium}</td><td>${row.total}</td></tr>`).join('');
+        options(document.getElementById('fal-segment'), data.segments);
+        options(document.getElementById('fts-segment'), data.segments);
+        renderDetail('fal'); renderDetail('fts');
+        setStatus(data.segment_geometry_available ? `Loaded ${data.summary.length} riders; telemetry available for ${data.telemetry_riders}.` : `${data.segment_geometry_error} Overall finish points are available, but segment points are withheld.`);
+    } catch (error) { setStatus(error.message, true); }
+}
+document.getElementById('load-btn').addEventListener('click', loadLeaderboard);
+document.getElementById('subgroup-input').addEventListener('keydown', event => { if (event.key === 'Enter') loadLeaderboard(); });
+document.getElementById('fal-segment').addEventListener('change', () => data && renderDetail('fal'));
+document.getElementById('fts-segment').addEventListener('change', () => data && renderDetail('fts'));
+if (initialSubgroupId) loadLeaderboard();
+</script>
+</body>
+</html>
