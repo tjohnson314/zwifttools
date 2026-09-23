@@ -545,6 +545,67 @@ function displayResults(data, isBuild = false) {
     document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
+async function exportSaucePlan() {
+    if (!lastPlanData || !selectedRoute) return;
+    if (!routeGeometry) await loadRouteMap();
+    const profile = lastPlanData.profile;
+    const distances = profile.distance_km || [];
+    const speeds = profile.speed_kph || [];
+    if (distances.length < 2 || speeds.length !== distances.length) {
+        showError('The pacing plan has no exportable route profile.');
+        return;
+    }
+
+    const planName = (lastPlanData.route_name || selectedRoute.name || '').replace(/,/g, ' ');
+    const rows = ['course_id,route_id,name,date',
+        `${selectedRoute.course_id || ''},${selectedRoute.id || ''},${planName},${new Date().toISOString().substring(0, 10)}`,
+        'time_sec,distance_m,lat,lng'];
+    let elapsed = 0;
+    let previousDistance = 0;
+    rows.push('0.000,0.000,,');
+    for (let i = 0; i < distances.length; i++) {
+        const distanceM = Math.max(0, distances[i] * 1000);
+        const deltaM = Math.max(0, distanceM - previousDistance);
+        const speedMps = Math.max(0.1, Number(speeds[i]) / 3.6);
+        elapsed += deltaM / speedMps;
+        const gps = interpolateRouteGps(distanceM);
+        const lat = gps ? gps[0].toFixed(6) : '';
+        const lng = gps ? gps[1].toFixed(6) : '';
+        rows.push(`${elapsed.toFixed(3)},${distanceM.toFixed(3)},${lat},${lng}`);
+        previousDistance = distanceM;
+    }
+
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `tt_plan_${convertToSlug(lastPlanData.route_name || selectedRoute.name)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function interpolateRouteGps(distanceM) {
+    const points = routeGeometry && routeGeometry.combined;
+    if (!points || points.length < 2 || points.some(p => p.lat == null || p.lng == null)) return null;
+    if (distanceM <= points[0].d) return [points[0].lat, points[0].lng];
+    if (distanceM >= points[points.length - 1].d) {
+        const last = points[points.length - 1];
+        return [last.lat, last.lng];
+    }
+    let lo = 0;
+    let hi = points.length - 1;
+    while (lo < hi - 1) {
+        const mid = (lo + hi) >> 1;
+        if (points[mid].d <= distanceM) lo = mid; else hi = mid;
+    }
+    const span = points[hi].d - points[lo].d;
+    const fraction = span > 0 ? (distanceM - points[lo].d) / span : 0;
+    return [
+        points[lo].lat + fraction * (points[hi].lat - points[lo].lat),
+        points[lo].lng + fraction * (points[hi].lng - points[lo].lng),
+    ];
+}
+
 // ── Smart buckets ─────────────────────────────────────────────────────────────
 // The server places the dividers (best step-fit of the optimal power curve) and
 // returns their distances; we draw them and drive everything from the slider.
@@ -775,7 +836,11 @@ function buildGeometry(key, data) {
     const legs = [];
     const push = (leg, name) => {
         if (!leg || !leg.x || !leg.x.length) return;
-        const pts = leg.x.map((x, i) => ({ x, y: leg.y[i], d: leg.d[i], leg: name }));
+        const pts = leg.x.map((x, i) => ({
+            x, y: leg.y[i], d: leg.d[i], leg: name,
+            lat: leg.latlng && leg.latlng[i] ? leg.latlng[i][0] : null,
+            lng: leg.latlng && leg.latlng[i] ? leg.latlng[i][1] : null,
+        }));
         legs.push({ name, pts });
     };
     push(data.leadin, 'leadin');

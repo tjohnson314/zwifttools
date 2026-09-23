@@ -309,6 +309,8 @@ def _pack_leg(map_id: int, leg: dict | None) -> dict | None:
         "alt": [round(v, 2) for v in leg.get("alt", [])],
         "x": [round(float(v), 1) for v in X],
         "y": [round(float(v), 1) for v in Y],
+        "local_x": [round(float(v), 1) for v in xs],
+        "local_z": [round(float(v), 1) for v in zs],
         "surface": surfaces,
     }
 
@@ -433,3 +435,17 @@ def get_route(map_id: int, name_hash: int) -> dict | None:
         "breakdown": breakdown_list,
         "bounds": bounds,
     }
+
+
+def local_to_latlng(map_id: int, x, z) -> list[list[float]] | None:
+    """Convert local route coordinates to calibrated ``[lat, lng]`` points."""
+    calibration = _load_calibration().get(str(map_id))
+    if not calibration:
+        return None
+    points = np.column_stack([
+        np.asarray(x, dtype=float),
+        np.asarray(z, dtype=float),
+        np.ones(len(x)),
+    ])
+    latlng = points @ np.asarray(calibration["coef"], dtype=float)
+    return latlng.tolist()

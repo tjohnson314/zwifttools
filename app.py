@@ -2416,6 +2416,9 @@ def api_tt_pacing_routes():
     """Return all rideable routes for the pacing planner route selector."""
     try:
         routes = list_routes()
+        from shared.world_config import MAP_TO_WORLD_ID
+        for route in routes:
+            route['course_id'] = MAP_TO_WORLD_ID.get(route.get('world'))
         return jsonify({'routes': routes})
     except Exception as e:
         logger.exception("Error listing pacing planner routes")
@@ -2595,10 +2598,14 @@ def api_tt_pacing_route_geometry():
         """Serialise a leg with distance shifted onto the shared plan axis."""
         if not leg or not leg.get('x'):
             return None
+        latlng = surface_map.local_to_latlng(
+            entry['mapID'], leg.get('local_x', []), leg.get('local_z', [])
+        )
         return {
             'd': [round(v + d_offset, 1) for v in leg.get('d', [])],
             'x': leg['x'],
             'y': leg['y'],
+            'latlng': latlng,
         }
 
     return jsonify({

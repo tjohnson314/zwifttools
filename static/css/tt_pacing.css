@@ -436,6 +436,19 @@ h1 .logo-emoji {
     color: #fff;
 }
 
+.btn-export-plan {
+    margin-left: auto;
+    padding: 8px 14px;
+    border: 1px solid rgba(247,147,30,0.7);
+    border-radius: 6px;
+    background: rgba(247,147,30,0.12);
+    color: #f7931e;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.btn-export-plan:hover { background: rgba(247,147,30,0.24); }
+
 /* Summary cards */
 .summary-cards {
     display: grid;
