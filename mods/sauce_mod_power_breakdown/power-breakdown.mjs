@@ -4,8 +4,8 @@ import * as Surface from './surface.mjs';
 
 Common.enableSentry();
 
-const {BASE_CDA, REF_HEIGHT_M, REF_WEIGHT_KG, HEIGHT_EXPONENT, WEIGHT_EXPONENT,
-       AIR_DENSITY, GRAVITY} = MODEL.constants;
+const {AREA_COEFFICIENT, HEIGHT_EXPONENT, WEIGHT_EXPONENT, AREA_OFFSET,
+    AIR_DENSITY, GRAVITY} = MODEL.constants;
 
 // Category definitions (order = display order); `cls` selects the bar colour.
 const CATEGORIES = [
@@ -204,10 +204,9 @@ function getBikeSetup() {
 
 
 function computeCdA(setup, heightM, riderWeightKg) {
-    // CdA = (BASE_CDA + frameBias + wheelBias) · (H/refH)^hExp · (M/refM)^wExp
-    const scale = Math.pow(heightM / REF_HEIGHT_M, HEIGHT_EXPONENT) *
-                  Math.pow(riderWeightKg / REF_WEIGHT_KG, WEIGHT_EXPONENT);
-    return (BASE_CDA + setup.frameBias + setup.wheelBias) * scale;
+    const riderArea = AREA_COEFFICIENT * Math.pow(heightM * 100, HEIGHT_EXPONENT) *
+                      Math.pow(riderWeightKg, WEIGHT_EXPONENT) - AREA_OFFSET;
+    return 0.5 * AIR_DENSITY * riderArea + setup.frameBias + setup.wheelBias;
 }
 
 

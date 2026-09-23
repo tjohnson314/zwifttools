@@ -31,8 +31,6 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 
 
-# Reference rider frontal area (183 cm / 75 kg), matching physics.frontal_area_from_rider.
-REF_FRONTAL_AREA = 0.3449
 # Baseline absolute CdA (m^2) for a rider on a zero-bias bike at the reference
 # rider.  Calibrated by tools/export_frame_stats.py from Zwift Insider flat and
 # climb speed tests, with the authoritative game CdA biases kept at 1:1 scale.

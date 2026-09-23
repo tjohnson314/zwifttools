@@ -16,7 +16,7 @@ from shared.utils import calculate_normalized_power
 
 
 # Physics constants (from Zwift/Gribble model)
-AIR_DENSITY = 1.225  # kg/m³ at sea level
+AIR_DENSITY = 1.226  # kg/m³ at sea level, matching the recovered Zwift comparison
 GRAVITY = 9.8067  # m/s²
 DRIVETRAIN_LOSS = 0.025  # 2.5% drivetrain loss
 
@@ -163,8 +163,8 @@ def compare_bike_setups(
     # Absolute CdA = the rider's own (frontal-area-scaled) CdA plus the bike's
     # CdA bias, which Zwift applies as an additive delta (not scaled by rider
     # size).
-    actual_cda = _RIDER_BASELINE_CD * frontal_area + actual_setup.cda_bias
-    alternative_cda = _RIDER_BASELINE_CD * alt_frontal_area + alternative_setup.cda_bias
+    actual_cda = rider_cda_from_area(frontal_area) + actual_setup.cda_bias
+    alternative_cda = rider_cda_from_area(alt_frontal_area) + alternative_setup.cda_bias
     
     # Extract required columns
     time_sec = telemetry['time_sec'].values if 'time_sec' in telemetry.columns else telemetry.index.values
@@ -586,47 +586,23 @@ def speed_from_power(
     return (lo + hi) * 0.5
 
 
-# Reference rider used to anchor the frontal-area model.  Zwift Insider's frame,
-# wheel, height and weight speed tests all use a 183 cm / 75 kg rider, so this is
-# the operating point at which the ZwifterBikes-derived Cd values are calibrated.
-_REF_HEIGHT_M = 1.83
-_REF_WEIGHT_KG = 75.0
-# Frontal area at the reference rider.  Kept equal to the previous Faria value so
-# absolute CdA (and therefore the ZwifterBikes Cd calibration) is unchanged for a
-# reference rider; only the sensitivity to height/weight changes below.
-_REF_FRONTAL_AREA = 0.3449
-# Exponents reverse-engineered from Zwift Insider's own speed-test data (see
-# below).  Zwift's effective CdA scales as ~H^0.66 * M^0.44.
-_HEIGHT_EXPONENT = 0.66
+# Recovered from the Zwift game source. H is centimetres, M is kilograms.
+_AREA_COEFFICIENT = 0.003014024
+_HEIGHT_EXPONENT = 0.655
 _WEIGHT_EXPONENT = 0.44
+_AREA_OFFSET = 0.1159
 
 
 def frontal_area_from_rider(height_m: float, weight_kg: float) -> float:
     """
     Estimate cyclist frontal area (m²) from height and weight, matched to Zwift.
 
-    The previous implementation used the Faria formula
-    (FA = 0.0293·H^0.725·M^0.425 + 0.0604).  Faria's weight sensitivity is close
-    to Zwift's, but its additive constant compresses the *height* sensitivity to
-    an effective ~H^0.60 over the human range, whereas Zwift penalises height
-    more strongly.
+        The Zwift source computes rider area as:
 
-    This model instead uses the CdA scaling reverse-engineered directly from
-    Zwift Insider's controlled speed tests:
+                A = 0.003014024 · H^0.655 · M^0.44 - 0.1159
 
-      * "Speed Tests: How Rider Height Affects Speed In Zwift" — 6 heights
-        (153–203 cm) at 75 kg across 150–450 W.
-      * "How Rider Weight Affects Speed on Zwift" — 75 kg vs 82 kg at 183 cm.
-
-    Inverting the flat-ground power balance P = (Crr·m·g + ½·ρ·CdA·v²)·v on that
-    data (ρ = 1.225, Crr = 0.004) yields a CdA that is constant across power
-    (validating the model) and scales as:
-
-        CdA ∝ (H / 1.83)^0.66 · (M / 75)^0.44
-
-    which reproduces both data sets to within ~0.1%.  The formula is anchored so
-    that a 183 cm / 75 kg rider matches the previous frontal area, preserving the
-    absolute CdA calibration of the ZwifterBikes Cd values.
+        where H is height in centimetres and M is mass in kilograms. The game then
+        applies 1/2·rho when converting this area into aerodynamic drag.
 
     Args:
         height_m: Rider height in metres.
@@ -635,18 +611,20 @@ def frontal_area_from_rider(height_m: float, weight_kg: float) -> float:
     Returns:
         Estimated frontal area in m².
     """
+    height_cm = height_m * 100.0
     return (
-        _REF_FRONTAL_AREA
-        * (height_m / _REF_HEIGHT_M) ** _HEIGHT_EXPONENT
-        * (weight_kg / _REF_WEIGHT_KG) ** _WEIGHT_EXPONENT
+        _AREA_COEFFICIENT
+        * height_cm ** _HEIGHT_EXPONENT
+        * weight_kg ** _WEIGHT_EXPONENT
+        - _AREA_OFFSET
     )
 
 
-# Rider drag coefficient for a zero-bias bike.  The rider's CdA scales with
-# frontal area, while a bike's CdA bias is an absolute delta added on top (this
-# matches how Zwift stores per-frame/per-wheel CdA offsets).  Anchored so that a
-# reference rider (183 cm / 75 kg) on a zero-bias bike keeps CdA == BASE_CDA.
-_RIDER_BASELINE_CD = BASE_CDA / _REF_FRONTAL_AREA
+# Rider drag coefficient for a zero-bias bike. A bike's CdA bias is an absolute
+# delta added on top, matching how Zwift stores per-frame/per-wheel offsets.
+def rider_cda_from_area(frontal_area: float, air_density: float = AIR_DENSITY) -> float:
+    """Convert rider frontal area to the effective coefficient used by Zwift."""
+    return 0.5 * air_density * frontal_area
 
 
 def rider_cda(height_m: float, weight_kg: float) -> float:
@@ -654,7 +632,7 @@ def rider_cda(height_m: float, weight_kg: float) -> float:
 
     Add the bike's ``cda_bias`` to this to get the absolute CdA for a setup.
     """
-    return _RIDER_BASELINE_CD * frontal_area_from_rider(height_m, weight_kg)
+    return rider_cda_from_area(frontal_area_from_rider(height_m, weight_kg))
 
 
 if __name__ == "__main__":

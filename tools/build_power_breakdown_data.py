@@ -20,9 +20,9 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from bike_comparison.bike_data import get_bike_database, BASE_CDA, REF_FRONTAL_AREA  # noqa: E402
+from bike_comparison.bike_data import get_bike_database, BASE_CDA  # noqa: E402
 from bike_comparison.physics import (  # noqa: E402
-    _REF_HEIGHT_M, _REF_WEIGHT_KG, _HEIGHT_EXPONENT, _WEIGHT_EXPONENT,
+    _AREA_COEFFICIENT, _HEIGHT_EXPONENT, _WEIGHT_EXPONENT, _AREA_OFFSET,
 )
 from shared.surface_lookup import DEFAULT_CRR, FRAME_TYPE_TO_BIKE_TYPE  # noqa: E402
 
@@ -173,12 +173,11 @@ def main():
     model = {
         "constants": {
             "BASE_CDA": BASE_CDA,
-            "REF_FRONTAL_AREA": REF_FRONTAL_AREA,
-            "REF_HEIGHT_M": _REF_HEIGHT_M,
-            "REF_WEIGHT_KG": _REF_WEIGHT_KG,
+            "AREA_COEFFICIENT": _AREA_COEFFICIENT,
             "HEIGHT_EXPONENT": _HEIGHT_EXPONENT,
             "WEIGHT_EXPONENT": _WEIGHT_EXPONENT,
-            "AIR_DENSITY": 1.225,
+            "AREA_OFFSET": _AREA_OFFSET,
+            "AIR_DENSITY": 1.226,
             "GRAVITY": 9.8067,
         },
         "frameTypeToBikeType": FRAME_TYPE_TO_BIKE_TYPE,
