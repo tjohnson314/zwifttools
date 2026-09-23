@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import json
 
 from shared.zrl_leaderboard import (
     _load_calibrated_route_boundaries,
@@ -8,6 +9,16 @@ from shared.zrl_leaderboard import (
     build_leaderboard,
     load_route_segments,
 )
+
+
+def test_segment_hashes_survive_json_as_exact_strings():
+    segments = json.loads(json.dumps(load_route_segments()))
+    tchou = next(
+        segment for segment in segments
+        if segment["name"] == "Tchou Tchou Sprint"
+    )
+
+    assert tchou["wad_hash"] == "-9223372035804541048"
 
 
 def test_route_matcher_keeps_early_pass_at_overlapping_geometry():

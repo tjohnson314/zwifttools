@@ -16,7 +16,10 @@ ROUTE_MATCH_LOOKAHEAD_POINTS = 10
 
 def load_route_segments(route_slug="montmartre-mixer"):
     with SEGMENTS_FILE.open(encoding="utf-8") as handle:
-        return json.load(handle)[route_slug]["segments"]
+        segments = json.load(handle)[route_slug]["segments"]
+    for segment in segments:
+        segment["wad_hash"] = str(segment["wad_hash"])
+    return segments
 
 
 def _load_calibrated_route_boundaries():
