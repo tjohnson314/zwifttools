@@ -19,6 +19,11 @@
         .empty-row { color: #888; }
         .status-msg.error { color: #ffab91; }
         .warning-tag { display: inline-block; margin-left: 8px; padding: 2px 6px; border: 1px solid #ffb74d; border-radius: 4px; color: #ffcc80; font-size: 0.75rem; font-weight: 600; }
+        .catalog-grid { display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap: 12px; width: 100%; }
+        .catalog-field { display: flex; flex-direction: column; gap: 6px; }
+        .catalog-field .segment-select { min-width: 0; width: 100%; }
+        @media (max-width: 900px) { .catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        @media (max-width: 560px) { .catalog-grid { grid-template-columns: 1fr; } }
         a { color: #4fc3f7; }
     </style>
 </head>
@@ -40,11 +45,24 @@
         <h2>Load Event</h2>
         <div class="race-controls">
             <div class="race-input-group">
-                <label for="subgroup-input">Event subgroup ID</label>
+                <div class="catalog-grid">
+                    <label class="catalog-field" for="race-select">Race
+                        <select id="race-select" class="segment-select"></select>
+                    </label>
+                    <label class="catalog-field" for="competition-select">Competition
+                        <select id="competition-select" class="segment-select"></select>
+                    </label>
+                    <label class="catalog-field" for="league-select">League
+                        <select id="league-select" class="segment-select"></select>
+                    </label>
+                    <label class="catalog-field" for="division-select">Division
+                        <select id="division-select" class="segment-select"></select>
+                    </label>
+                </div>
+                <input type="hidden" id="subgroup-input" value="{{ subgroup_id }}">
                 <div class="input-row">
-                    <input type="text" id="subgroup-input" value="{{ subgroup_id }}" placeholder="e.g. 1234567" inputmode="numeric">
-                    <button id="load-btn" class="btn btn-primary">Load Leaderboard</button>
-                    <button id="refetch-btn" class="btn btn-secondary" title="Re-download rider data from Zwift">Re-fetch</button>
+                    <button id="load-btn" class="btn btn-primary" disabled>Load Leaderboard</button>
+                    <button id="refetch-btn" class="btn btn-secondary" title="Re-download rider data from Zwift" disabled>Re-fetch</button>
                 </div>
             </div>
         </div>
@@ -62,6 +80,11 @@
 
     <section class="panel stream-links-panel" id="stream-links-panel" style="display:none;">
         <div id="stream-links-body"></div>
+    </section>
+
+    <section class="panel" id="team-panel" style="display:none;">
+        <h2>Team Points</h2>
+        <div class="table-container"><table class="leaderboard-table" id="teams"><thead><tr><th>#</th><th>Team</th><th>Riders</th><th>FAL</th><th>FTS</th><th>FIN</th><th>Podium</th><th>Total</th></tr></thead><tbody></tbody></table></div>
     </section>
 
     <section class="panel">
@@ -90,6 +113,7 @@
 <script>
 const initialSubgroupId = {{ subgroup_id|tojson }};
 let leaderboardOpInProgress = false;
+let eventCatalog = [];
 const activityUrl = id => `https://www.zwift.com/activity/${encodeURIComponent(id)}`;
 const link = id => `<a href="${activityUrl(id)}" target="_blank" rel="noopener">${id}</a>`;
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -122,6 +146,52 @@ function handleAuth() {
     window.location.href = isAuthenticated
         ? '/auth/logout'
         : '/auth/login?next=/zrl/leaderboard';
+}
+const uniqueOptions = (rows, valueKey, labelKey = valueKey) => {
+    const seen = new Set();
+    return rows.filter(row => { const value = String(row[valueKey]); if (seen.has(value)) return false; seen.add(value); return true; }).map(row => ({ value: String(row[valueKey]), label: row[labelKey] }));
+};
+function setCatalogOptions(selectId, choices, selectedValue) {
+    const select = document.getElementById(selectId);
+    select.innerHTML = choices.map(choice => `<option value="${esc(choice.value)}">${esc(choice.label)}</option>`).join('');
+    if (selectedValue && choices.some(choice => choice.value === String(selectedValue))) select.value = String(selectedValue);
+}
+function selectedCatalogRow() {
+    const race = document.getElementById('race-select').value;
+    const competition = document.getElementById('competition-select').value;
+    const league = document.getElementById('league-select').value;
+    const division = document.getElementById('division-select').value;
+    return eventCatalog.find(row => row.race === race && row.competition_value === competition && row.league_value === league && row.division === division);
+}
+function syncSelectedSubgroup() {
+    const row = selectedCatalogRow();
+    document.getElementById('subgroup-input').value = row?.event_subgroup_id || '';
+    document.getElementById('load-btn').disabled = !row?.event_subgroup_id || leaderboardOpInProgress;
+    document.getElementById('refetch-btn').disabled = !row?.event_subgroup_id || leaderboardOpInProgress;
+}
+function populateDivisions(selectedValue) {
+    const rows = eventCatalog.filter(row => row.available && row.race === document.getElementById('race-select').value && row.competition_value === document.getElementById('competition-select').value && row.league_value === document.getElementById('league-select').value);
+    setCatalogOptions('division-select', uniqueOptions(rows, 'division'), selectedValue);
+    syncSelectedSubgroup();
+}
+function populateLeagues(selectedLeague, selectedDivision) {
+    const rows = eventCatalog.filter(row => row.available && row.race === document.getElementById('race-select').value && row.competition_value === document.getElementById('competition-select').value);
+    setCatalogOptions('league-select', uniqueOptions(rows, 'league_value', 'league'), selectedLeague);
+    populateDivisions(selectedDivision);
+}
+function populateCompetitions(selectedCompetition, selectedLeague, selectedDivision) {
+    const rows = eventCatalog.filter(row => row.available && row.race === document.getElementById('race-select').value);
+    setCatalogOptions('competition-select', uniqueOptions(rows, 'competition_value', 'competition'), selectedCompetition);
+    populateLeagues(selectedLeague, selectedDivision);
+}
+async function loadEventCatalog() {
+    const response = await fetch('/api/zrl/catalog');
+    const catalog = await response.json();
+    if (!response.ok) throw new Error(catalog.error || 'Unable to load event catalog');
+    eventCatalog = catalog.rows;
+    const initial = eventCatalog.find(row => String(row.event_subgroup_id || '') === String(initialSubgroupId || ''));
+    setCatalogOptions('race-select', uniqueOptions(eventCatalog.filter(row => row.available), 'race', 'race_name'), initial?.race);
+    populateCompetitions(initial?.competition_value, initial?.league_value, initial?.division);
 }
 function setStatus(message, error = false) { const status = document.getElementById('status'); status.textContent = message; status.className = `status-msg${error ? ' error' : ''}`; status.style.display = 'block'; }
 function showLoading(text) {
@@ -189,6 +259,18 @@ function renderOverall() {
     });
     document.querySelector('#overall tbody').innerHTML = rows.map(row => `<tr><td>${esc(row.name)}${row.telemetry_available ? '' : '<span class="warning-tag" title="Activity telemetry unavailable">Incomplete</span>'}</td><td>${link(row.activity_id)}</td><td>${esc(row.finish_time || 'DNF')}</td><td>${row.fal}</td><td>${row.fts}</td><td>${row.fin}</td><td>${row.podium}</td><td>${row.total}</td></tr>`).join('');
 }
+function renderTeams() {
+    const panel = document.getElementById('team-panel');
+    if (!data.teams?.length) {
+        panel.style.display = 'none';
+        return;
+    }
+    document.querySelector('#teams tbody').innerHTML = data.teams.map(team => {
+        const riders = team.riders.map(rider => `${rider.name} (${rider.total})`).join(', ');
+        return `<tr><td>${team.rank}</td><td title="${esc(riders)}">${esc(team.name)}</td><td>${team.rider_count}</td><td>${team.fal}</td><td>${team.fts}</td><td>${team.fin}</td><td>${team.podium}</td><td><strong>${team.total}</strong></td></tr>`;
+    }).join('');
+    panel.style.display = 'block';
+}
 async function loadStreamLinks(subgroupId, forceRefresh = false) {
     const panel = document.getElementById('stream-links-panel');
     const body = document.getElementById('stream-links-body');
@@ -252,6 +334,7 @@ async function loadLeaderboard(forceRefresh = false) {
         if (!data || data.error) throw new Error(data?.error || 'Unable to load leaderboard');
         showLoading('Building leaderboard...');
         showProgress(data.telemetry_riders, data.participants_total);
+        renderTeams();
         renderOverall();
         options(document.getElementById('fal-segment'), data.segments);
         options(document.getElementById('fts-segment'), data.segments, true);
@@ -268,7 +351,10 @@ async function loadLeaderboard(forceRefresh = false) {
 }
 document.getElementById('load-btn').addEventListener('click', () => loadLeaderboard(false));
 document.getElementById('refetch-btn').addEventListener('click', () => loadLeaderboard(true));
-document.getElementById('subgroup-input').addEventListener('keydown', event => { if (event.key === 'Enter') loadLeaderboard(); });
+document.getElementById('race-select').addEventListener('change', () => populateCompetitions());
+document.getElementById('competition-select').addEventListener('change', () => populateLeagues());
+document.getElementById('league-select').addEventListener('change', () => populateDivisions());
+document.getElementById('division-select').addEventListener('change', syncSelectedSubgroup);
 document.getElementById('fal-segment').addEventListener('change', () => data && renderDetail('fal'));
 document.getElementById('fts-segment').addEventListener('change', () => data && renderDetail('fts'));
 document.querySelectorAll('#overall th[data-sort]').forEach(header => header.addEventListener('click', () => {
@@ -278,8 +364,16 @@ document.querySelectorAll('#overall th[data-sort]').forEach(header => header.add
         : { field, direction: 1 };
     renderOverall();
 }));
-checkAuth();
-if (initialSubgroupId) loadLeaderboard(false);
+async function initialize() {
+    checkAuth();
+    try {
+        await loadEventCatalog();
+        if (initialSubgroupId) loadLeaderboard(false);
+    } catch (error) {
+        setStatus(error.message, true);
+    }
+}
+initialize();
 </script>
 </body>
 </html>

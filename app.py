@@ -273,6 +273,7 @@ def zrl_leaderboard():
 
 
 _zrl_stream_cache = {}
+_ZRL_EVENT_CATALOG_FILE = Path(__file__).parent / 'zrl_event_catalog.json'
 
 
 def _zrl_stream_context(participants):
@@ -345,6 +346,8 @@ def api_zrl_leaderboard():
         return jsonify({'error': 'No rider telemetry could be fetched.'}), 502
 
     result = build_leaderboard(participants, telemetry_by_activity)
+    from shared.wtrl_teams import add_team_scores
+    add_team_scores(result, subgroup_id)
     result['subgroup_id'] = subgroup_id
     result['participants_total'] = len(participants)
     result['telemetry_riders'] = len(telemetry_by_activity)
@@ -356,6 +359,17 @@ def api_zrl_leaderboard():
         response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
         response.headers['Pragma'] = 'no-cache'
     return response
+
+
+@app.route('/api/zrl/catalog')
+def api_zrl_catalog():
+    """Return the persisted WTRL selector to Zwift subgroup catalog."""
+    try:
+        with _ZRL_EVENT_CATALOG_FILE.open(encoding='utf-8-sig') as handle:
+            return jsonify(json.load(handle))
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.exception('Could not load ZRL event catalog')
+        return jsonify({'error': str(exc)}), 500
 
 
 @app.route('/api/zrl/leaderboard_stream')
@@ -398,6 +412,8 @@ def api_zrl_leaderboard_stream():
             return
         from shared.zrl_leaderboard import build_leaderboard
         result = build_leaderboard(participants, telemetry_by_activity)
+        from shared.wtrl_teams import add_team_scores
+        add_team_scores(result, subgroup_id)
         result.update({
             'subgroup_id': subgroup_id,
             'participants_total': len(participants),
@@ -451,6 +467,8 @@ def api_zrl_streams():
     }
     _zrl_stream_cache[subgroup_id] = result
     return jsonify(result)
+
+
 
 
 @app.route('/surface-map')
