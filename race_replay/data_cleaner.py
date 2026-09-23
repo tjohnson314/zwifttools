@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # Bump this version when data cleaning logic changes in a way that invalidates
 # previously cached results.  The cache loader will discard stale caches.
-CLEANING_VERSION = 33
+CLEANING_VERSION = 34
 
 # Grace period after the official race start before a rider is treated as a
 # "late joiner".  Riders routinely begin recording / cross the start banner a
@@ -111,101 +111,101 @@ def compute_finish_crossing_time(
     expected_time_sec: Optional[float] = None,
     search_radius_m: float = 500,
     gps_sanity_m: float = 50,
+    finish_tangent_latlng: Optional[np.ndarray] = None,
 ) -> Optional[float]:
     """Return the telemetry-clock time when the rider crosses the finish line.
 
-    Uses the GPS coordinates to time the exact line crossing.
+    Linearly interpolates between consecutive GPS samples. When the local route
+    tangent is supplied, the crossing is measured against the route-normal
+    finish line; otherwise the closest point on each GPS segment is used.
     ``expected_time_sec`` disambiguates multi-lap routes by selecting the pass
     whose telemetry time is closest to it; when ``None`` the last qualifying
     pass is used.
 
+    ``distances_m``, ``finish_distance_m``, and ``search_radius_m`` remain in
+    the public signature for compatibility, but do not determine GPS crossing
+    time or route position.
+
     Returns ``None`` if the finish crossing cannot be determined.
     """
-    # Every telemetry point genuinely at the finish-line coordinates. GPS
-    # proximity is the primary signal; the odometer is only used below to
-    # disambiguate passes, because the rider's odometer at the finish can
-    # drift a few hundred metres from the nominal finish distance and, after a
-    # turnaround, the route-projected odometer even folds back through the
-    # finish window while the rider is heading the wrong way.
-    gps_all = haversine(lats, lngs, finish_lat, finish_lng)
-    near_indices = np.where(gps_all < gps_sanity_m)[0]
-    if len(near_indices) == 0:
+    times = np.asarray(times, dtype=float)
+    lats = np.asarray(lats, dtype=float)
+    lngs = np.asarray(lngs, dtype=float)
+    valid = np.isfinite(times) & np.isfinite(lats) & np.isfinite(lngs)
+    times = times[valid]
+    lats = lats[valid]
+    lngs = lngs[valid]
+    if len(times) < 2:
         return None
 
-    # Split the near-finish points into distinct passes.
-    # Consecutive points in a single pass are recorded every ~1-2 seconds,
-    # so any gap > 5s (or index gap > 3) indicates a distinct pass.
-    # A rider may pass the finish coordinates several times: on the
-    # lead-in, on each lap of a loop, at the real finish, and again during
-    # cool-down if they ride past and double back. For each pass record its
-    # GPS closest-approach index and whether the rider is moving forward
-    # (odometer increasing) through it, so cool-down crossings taken while
-    # doubling back the wrong way can be rejected.
-    splits = np.where(
-        (np.diff(times[near_indices]) > 5.0)
-        | (np.diff(near_indices) > 3)
-    )[0] + 1
-    passes = []
-    for grp in np.split(near_indices, splits):
-        grp_gps = haversine(lats[grp], lngs[grp], finish_lat, finish_lng)
-        closest = int(grp[int(np.argmin(grp_gps))])
-        lo = max(0, int(grp[0]) - 1)
-        hi = min(len(distances_m) - 1, int(grp[-1]) + 1)
-        forward = distances_m[hi] >= distances_m[lo]
-        passes.append((closest, forward))
+    lat_scale = np.cos(np.radians(finish_lat))
+    target = np.array([finish_lat, finish_lng * lat_scale])
+    rider_xy = np.column_stack([lats, lngs * lat_scale])
+    candidates = []
 
-    # Prefer genuine forward crossings; only consider a doubling-back pass if
-    # there is nothing else to go on.
-    forward_passes = [p for p in passes if p[1]]
-    pool = forward_passes if forward_passes else passes
-    if expected_time_sec is not None:
-        # Anchor to the pass whose telemetry time is closest to the expected
-        # finish time. This selects the correct lap on a loop and rejects a
-        # cool-down re-crossing minutes after the rider actually finished.
-        best_idx = min(
-            pool, key=lambda p: abs(times[p[0]] - expected_time_sec)
+    if finish_tangent_latlng is not None:
+        tangent = np.asarray(finish_tangent_latlng, dtype=float)
+        tangent_xy = np.array([tangent[0], tangent[1] * lat_scale])
+        tangent_norm = float(np.linalg.norm(tangent_xy))
+        if not np.isfinite(tangent_norm) or tangent_norm == 0:
+            return None
+        tangent_xy /= tangent_norm
+        along = (rider_xy - target) @ tangent_xy
+        crossing_indices = np.where(
+            (along[:-1] <= 0) & (along[1:] >= 0)
+            & (along[1:] > along[:-1])
         )[0]
+        for index in crossing_indices:
+            fraction = float(-along[index] / (along[index + 1] - along[index]))
+            crossing = rider_xy[index] + fraction * (
+                rider_xy[index + 1] - rider_xy[index]
+            )
+            lateral_m = float(np.linalg.norm(crossing - target) * 111_320)
+            if lateral_m <= gps_sanity_m:
+                crossing_time = float(
+                    times[index]
+                    + fraction * (times[index + 1] - times[index])
+                )
+                candidates.append((index, crossing_time, lateral_m))
     else:
-        # No time anchor: restrict to passes whose odometer is near the finish
-        # (so the lead-in/lap passes on a loop are ignored) and take the last.
-        in_window = [
-            p for p in pool
-            if abs(distances_m[p[0]] - finish_distance_m) < search_radius_m
-        ]
-        candidates = in_window if in_window else pool
-        best_idx = max(candidates, key=lambda p: times[p[0]])[0]
+        for index in range(len(times) - 1):
+            vector = rider_xy[index + 1] - rider_xy[index]
+            length_sq = float(np.dot(vector, vector))
+            if length_sq == 0:
+                continue
+            fraction = float(np.clip(
+                np.dot(target - rider_xy[index], vector) / length_sq,
+                0,
+                1,
+            ))
+            crossing = rider_xy[index] + fraction * vector
+            lateral_m = float(np.linalg.norm(crossing - target) * 111_320)
+            if lateral_m <= gps_sanity_m:
+                crossing_time = float(
+                    times[index]
+                    + fraction * (times[index + 1] - times[index])
+                )
+                candidates.append((index, crossing_time, lateral_m))
 
-    # Refine within a small window around the closest-approach index
-    window_start = max(0, best_idx - 2)
-    window_end = min(len(times) - 1, best_idx + 2) + 1
-    win_indices = np.arange(window_start, window_end)
-    win_gps = haversine(
-        lats[win_indices], lngs[win_indices],
-        finish_lat, finish_lng,
-    )
-    bi = win_indices[np.argmin(win_gps)]
+    if not candidates:
+        return None
 
-    # Quadratic interpolation for sub-second precision.
-    # GPS distance forms a V-shape at the closest approach; fit a
-    # parabola through {bi-1, bi, bi+1} to find the minimum.
-    if bi > 0 and bi < len(times) - 1:
-        g_prev = haversine(lats[bi - 1], lngs[bi - 1], finish_lat, finish_lng)
-        g_curr = haversine(lats[bi], lngs[bi], finish_lat, finish_lng)
-        g_next = haversine(lats[bi + 1], lngs[bi + 1], finish_lat, finish_lng)
-        a_coef = (g_prev + g_next) / 2 - g_curr
-        b_coef = (g_next - g_prev) / 2
-        if a_coef > 0:
-            x_min = np.clip(-b_coef / (2 * a_coef), -1, 1)
+    passes = []
+    current_pass = [candidates[0]]
+    for candidate in candidates[1:]:
+        previous = current_pass[-1]
+        if candidate[0] <= previous[0] + 3 and candidate[1] <= previous[1] + 5:
+            current_pass.append(candidate)
         else:
-            x_min = 0
-        if x_min >= 0:
-            telem_finish = times[bi] + x_min * (times[bi + 1] - times[bi])
-        else:
-            telem_finish = times[bi] + x_min * (times[bi] - times[bi - 1])
+            passes.append(min(current_pass, key=lambda item: item[2]))
+            current_pass = [candidate]
+    passes.append(min(current_pass, key=lambda item: item[2]))
+
+    if expected_time_sec is not None:
+        selected = min(passes, key=lambda item: abs(item[1] - expected_time_sec))
     else:
-        telem_finish = times[bi]
-
-    return float(telem_finish)
+        selected = max(passes, key=lambda item: item[1])
+    return float(selected[1])
 
 
 def compute_ttt_time_offset(
@@ -219,6 +219,7 @@ def compute_ttt_time_offset(
     official_time_sec: float,
     search_radius_m: float = 500,
     gps_sanity_m: float = 50,
+    finish_tangent_latlng: Optional[np.ndarray] = None,
 ) -> Optional[float]:
     """Compute a finish-anchored time offset via GPS proximity to the finish.
 
@@ -235,6 +236,7 @@ def compute_ttt_time_offset(
         expected_time_sec=official_time_sec,
         search_radius_m=search_radius_m,
         gps_sanity_m=gps_sanity_m,
+        finish_tangent_latlng=finish_tangent_latlng,
     )
     if telem_finish is None:
         return None
@@ -2074,11 +2076,34 @@ def _compute_rider_finish_offset(
     times = df['time_sec'].values
     dist_m = df['distance_km'].values * 1000.0
     telem_finish = None
+    has_gps_geometry = (
+        'lat' in df.columns
+        and 'lng' in df.columns
+        and (calibrated_game_route is not None or route_data is not None)
+    )
 
-    if 'lat' in df.columns and 'lng' in df.columns and (
-            calibrated_game_route is not None or route_data is not None):
+    if has_gps_geometry:
+        finish_tangent_latlng = None
         if telemetry_finish_latlng is not None:
             finish_latlng = telemetry_finish_latlng
+            route_latlng = (
+                calibrated_game_route.route_latlng
+                if calibrated_game_route is not None
+                else route_data.latlng
+            )
+            scale = np.cos(np.radians(finish_latlng[0]))
+            route_xy = np.column_stack([
+                route_latlng[:, 0], route_latlng[:, 1] * scale,
+            ])
+            target_xy = np.array([
+                finish_latlng[0], finish_latlng[1] * scale,
+            ])
+            route_index = int(np.argmin(
+                ((route_xy - target_xy) ** 2).sum(axis=1)
+            ))
+            before = max(0, route_index - 1)
+            after = min(len(route_latlng) - 1, route_index + 1)
+            finish_tangent_latlng = route_latlng[after] - route_latlng[before]
         elif calibrated_game_route is not None:
             finish_route_distance_m = max(
                 0.0,
@@ -2092,6 +2117,23 @@ def _compute_rider_finish_offset(
                 )
                 for axis in range(2)
             ])
+            route_index = int(np.clip(
+                np.searchsorted(
+                    calibrated_game_route.route_distance,
+                    finish_route_distance_m,
+                ),
+                0,
+                len(calibrated_game_route.route_latlng) - 1,
+            ))
+            before = max(0, route_index - 1)
+            after = min(
+                len(calibrated_game_route.route_latlng) - 1,
+                route_index + 1,
+            )
+            finish_tangent_latlng = (
+                calibrated_game_route.route_latlng[after]
+                - calibrated_game_route.route_latlng[before]
+            )
         else:
             finish_latlng = np.array([
                 np.interp(
@@ -2101,6 +2143,16 @@ def _compute_rider_finish_offset(
                 )
                 for axis in range(2)
             ])
+            route_index = int(np.clip(
+                np.searchsorted(route_data.distance, finish_line * 1000.0),
+                0,
+                len(route_data.latlng) - 1,
+            ))
+            before = max(0, route_index - 1)
+            after = min(len(route_data.latlng) - 1, route_index + 1)
+            finish_tangent_latlng = (
+                route_data.latlng[after] - route_data.latlng[before]
+            )
         telem_finish = compute_finish_crossing_time(
             times=times,
             distances_m=dist_m,
@@ -2110,9 +2162,10 @@ def _compute_rider_finish_offset(
             finish_lng=finish_latlng[1],
             finish_distance_m=finish_line * 1000.0,
             expected_time_sec=official_time_sec,
+            finish_tangent_latlng=finish_tangent_latlng,
         )
 
-    if telem_finish is None:
+    if telem_finish is None and not has_gps_geometry:
         # Distance-based crossing (landmark path or missing GPS):
         # pick the crossing whose time is closest to the result.
         crossed = np.where(dist_m >= finish_line * 1000.0 - 30.0)[0]

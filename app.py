@@ -9,7 +9,7 @@ Run with: python app.py
 Then open: http://localhost:5000
 """
 
-from flask import Flask, render_template, jsonify, request, redirect, url_for, session, Response, send_file
+from flask import Flask, render_template, jsonify, request, redirect, url_for, session, Response, send_file, stream_with_context
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -315,10 +315,69 @@ def api_zrl_leaderboard():
 
     result = build_leaderboard(participants, telemetry_by_activity)
     result['subgroup_id'] = subgroup_id
+    result['participants_total'] = len(participants)
     result['telemetry_riders'] = len(telemetry_by_activity)
+    result['route_matched_riders'] = result.get('route_matched_riders', 0)
     if not result['segment_geometry_available']:
         result['segment_geometry_error'] = 'GPS boundary geometry is not loaded for the configured segments.'
-    return jsonify(result)
+    response = jsonify(result)
+    if request.args.get('refresh'):
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+    return response
+
+
+@app.route('/api/zrl/leaderboard_stream')
+def api_zrl_leaderboard_stream():
+    """Stream ZRL rider telemetry progress, then emit the final leaderboard."""
+    headers = get_headers()
+    if not headers:
+        return jsonify({'error': 'Not authenticated. Please log in first.'}), 401
+    try:
+        subgroup_id = int(request.args.get('subgroup_id', '').strip())
+    except ValueError:
+        return jsonify({'error': 'subgroup_id is required and must be a number'}), 400
+
+    @stream_with_context
+    def events():
+        participants, error = get_race_entries(subgroup_id, headers)
+        if error:
+            yield f"data: {json.dumps({'error': error})}\n\n"
+            return
+        yield f"data: {json.dumps({'progress': True, 'type': 'status', 'name': 'Found participants', 'current': 0, 'total': len(participants)})}\n\n"
+
+        def fetch_one(participant):
+            telemetry, _, telemetry_error = fetch_rider_telemetry(participant['activity_id'], headers)
+            if telemetry_error:
+                return participant['activity_id'], None
+            return participant['activity_id'], convert_telemetry_to_dataframe(telemetry)
+
+        telemetry_by_activity = {}
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            futures = {pool.submit(fetch_one, participant): participant for participant in participants}
+            for current, future in enumerate(as_completed(futures), start=1):
+                activity_id, dataframe = future.result()
+                if dataframe is not None:
+                    telemetry_by_activity[str(activity_id)] = dataframe
+                participant = futures[future]
+                yield f"data: {json.dumps({'progress': True, 'type': 'rider', 'name': participant.get('name', activity_id), 'current': current, 'total': len(participants)})}\n\n"
+
+        if not telemetry_by_activity:
+            yield f"data: {json.dumps({'error': 'No rider telemetry could be fetched.'})}\n\n"
+            return
+        from shared.zrl_leaderboard import build_leaderboard
+        result = build_leaderboard(participants, telemetry_by_activity)
+        result.update({
+            'subgroup_id': subgroup_id,
+            'participants_total': len(participants),
+            'telemetry_riders': len(telemetry_by_activity),
+            'route_matched_riders': result.get('route_matched_riders', 0),
+        })
+        if not result['segment_geometry_available']:
+            result['segment_geometry_error'] = 'GPS route geometry is not available for the configured segments.'
+        yield f"data: {json.dumps(result)}\n\n"
+
+    return Response(events(), mimetype='text/event-stream', headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
 
 @app.route('/surface-map')
@@ -4562,6 +4621,9 @@ def api_ttt_fetch():
                 finish_lng=finish_lng,
                 finish_distance_m=finish_line_m,
                 official_time_sec=ems / 1000.0,
+                finish_tangent_latlng=(
+                    route_data.latlng[-1] - route_data.latlng[-2]
+                ),
             )
             if offset is not None:
                 rd['time_sec'] = rd['time_sec'] - offset

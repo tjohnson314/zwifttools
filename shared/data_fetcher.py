@@ -230,8 +230,13 @@ def convert_telemetry_to_dataframe(telem_data):
     if latitude is None and longitude is None:
         latlng = telem_data.get('latlng') or telem_data.get('latLng')
         if latlng and len(latlng) == len(frame):
-            latitude = [point[0] for point in latlng]
-            longitude = [point[1] for point in latlng]
+            def coordinates(point):
+                if isinstance(point, dict):
+                    point = point.get('value') or point.get('coordinates')
+                return (point[0], point[1]) if point and len(point) >= 2 else (None, None)
+            pairs = [coordinates(point) for point in latlng]
+            latitude = [pair[0] for pair in pairs]
+            longitude = [pair[1] for pair in pairs]
     if latitude is not None and longitude is not None and len(latitude) == len(frame) and len(longitude) == len(frame):
         frame['lat'] = latitude
         frame['lng'] = longitude

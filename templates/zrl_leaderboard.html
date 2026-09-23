@@ -9,6 +9,8 @@
         .leaderboard-table { width: 100%; border-collapse: collapse; min-width: 760px; }
         .leaderboard-table th, .leaderboard-table td { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); text-align: left; white-space: nowrap; }
         .leaderboard-table th { color: #f7931e; }
+        .leaderboard-table th[data-sort] { cursor: pointer; }
+        .leaderboard-table th[data-sort]:hover { color: #ffb45f; }
         .table-container { overflow-x: auto; }
         .segment-select { background: #1a1a2e; border: 2px solid #333; border-radius: 8px; color: #fff; padding: 10px 12px; font-size: 0.95rem; min-width: 280px; }
         .segment-select:focus { outline: none; border-color: #f7931e; }
@@ -16,6 +18,7 @@
         .route-info strong { color: #fff; }
         .empty-row { color: #888; }
         .status-msg.error { color: #ffab91; }
+        .warning-tag { display: inline-block; margin-left: 8px; padding: 2px 6px; border: 1px solid #ffb74d; border-radius: 4px; color: #ffcc80; font-size: 0.75rem; font-weight: 600; }
         a { color: #4fc3f7; }
     </style>
 </head>
@@ -28,7 +31,8 @@
             <p class="subtitle">Stage 1 Race of Truth points and segment scoring</p>
         </div>
         <div class="auth-section">
-            <a href="/auth/login?next=/zrl/leaderboard" class="btn-auth">Login with Zwift</a>
+            <span id="auth-status-text" class="auth-status">Checking...</span>
+            <button id="authBtn" class="btn-auth" onclick="handleAuth()">Login with Zwift</button>
         </div>
     </div>
 
@@ -40,6 +44,7 @@
                 <div class="input-row">
                     <input type="text" id="subgroup-input" value="{{ subgroup_id }}" placeholder="e.g. 1234567" inputmode="numeric">
                     <button id="load-btn" class="btn btn-primary">Load Leaderboard</button>
+                    <button id="refetch-btn" class="btn btn-secondary" title="Re-download rider data from Zwift">Re-fetch</button>
                 </div>
             </div>
         </div>
@@ -48,7 +53,7 @@
 
     {% if route %}
     <section class="panel route-info">
-        <span><strong>Route:</strong> {{ route.name }}</span>
+        <span><strong>Route:</strong> <a href="/surface-map?world=paris&route=montmartre-mixer">{{ route.name }}</a></span>
         <span><strong>Lead-in:</strong> {{ '%.2f'|format(route.leadinDistanceInMeters / 1000) }} km / {{ '%.0f'|format(route.leadinAscentInMeters) }} m</span>
         <span><strong>Route:</strong> {{ '%.2f'|format(route.distanceInMeters / 1000) }} km / {{ '%.0f'|format(route.ascentInMeters) }} m</span>
         <span><strong>Total:</strong> {{ '%.2f'|format((route.distanceInMeters + route.leadinDistanceInMeters) / 1000) }} km / {{ '%.0f'|format(route.ascentInMeters + route.leadinAscentInMeters) }} m</span>
@@ -57,7 +62,7 @@
 
     <section class="panel">
         <h2>Overall Points</h2>
-        <div class="table-container"><table class="leaderboard-table" id="overall"><thead><tr><th>Rider</th><th>Activity</th><th>Finish</th><th>FAL</th><th>FTS</th><th>FIN</th><th>Podium</th><th>Total</th></tr></thead><tbody></tbody></table></div>
+        <div class="table-container"><table class="leaderboard-table" id="overall"><thead><tr><th data-sort="name">Rider</th><th data-sort="activity_id">Activity</th><th data-sort="finish_time_ms">Finish</th><th data-sort="fal">FAL</th><th data-sort="fts">FTS</th><th data-sort="fin">FIN</th><th data-sort="podium">Podium</th><th data-sort="total">Total</th></tr></thead><tbody></tbody></table></div>
     </section>
 
     <section class="panel">
@@ -74,43 +79,181 @@
         <div class="table-container"><table class="leaderboard-table" id="fts"><thead><tr><th>Rider</th><th>Activity</th><th>Segment Time</th><th>FTS</th></tr></thead><tbody></tbody></table></div>
     </section>
 </div>
+<div id="loading-overlay" class="loading-overlay" style="display:none;">
+    <div class="spinner"></div>
+    <p id="loading-text">Loading...</p>
+</div>
 <script>
 const initialSubgroupId = {{ subgroup_id|tojson }};
+let leaderboardOpInProgress = false;
 const activityUrl = id => `https://www.zwift.com/activity/${encodeURIComponent(id)}`;
 const link = id => `<a href="${activityUrl(id)}" target="_blank" rel="noopener">${id}</a>`;
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 let data;
+let overallSort = { field: 'total', direction: -1 };
+let isAuthenticated = false;
+async function checkAuth() {
+    try {
+        const response = await fetch('/auth/status');
+        const auth = await response.json();
+        const text = document.getElementById('auth-status-text');
+        const button = document.getElementById('authBtn');
+        isAuthenticated = auth.authenticated && auth.method === 'oauth';
+        if (isAuthenticated) {
+            text.textContent = '✓ Logged in via Zwift';
+            text.className = 'auth-status logged-in';
+            button.textContent = 'Logout';
+            button.className = 'btn-auth logout';
+        } else {
+            text.textContent = 'Not logged in';
+            text.className = 'auth-status';
+            button.textContent = 'Login with Zwift';
+            button.className = 'btn-auth';
+        }
+    } catch (error) {
+        document.getElementById('auth-status-text').textContent = 'Authentication unavailable';
+    }
+}
+function handleAuth() {
+    window.location.href = isAuthenticated
+        ? '/auth/logout'
+        : '/auth/login?next=/zrl/leaderboard';
+}
 function setStatus(message, error = false) { const status = document.getElementById('status'); status.textContent = message; status.className = `status-msg${error ? ' error' : ''}`; status.style.display = 'block'; }
-function options(select, segments) {
+function showLoading(text) {
+    document.getElementById('loading-text').textContent = text || 'Loading...';
+    document.getElementById('loading-overlay').style.display = 'flex';
+}
+function hideLoading() { document.getElementById('loading-overlay').style.display = 'none'; }
+function showProgress(current, total) {
+    let bar = document.getElementById('fetch-progress-bar');
+    if (!bar) {
+        const overlay = document.getElementById('loading-overlay');
+        const wrap = document.createElement('div');
+        wrap.id = 'fetch-progress-wrap';
+        wrap.style.cssText = 'width:320px; margin-top:12px; text-align:center;';
+        wrap.innerHTML = '<div style="background:#333; border-radius:6px; overflow:hidden; height:22px; width:100%;"><div id="fetch-progress-bar" style="height:100%; width:0%; background:#4caf50; transition:width 0.3s; border-radius:6px;"></div></div><div id="fetch-progress-text" style="margin-top:6px; font-size:13px; color:#aaa;"></div>';
+        overlay.appendChild(wrap);
+        bar = document.getElementById('fetch-progress-bar');
+    }
+    document.getElementById('fetch-progress-wrap').style.display = '';
+    if (total > 0) {
+        bar.style.width = `${Math.round(current / total * 100)}%`;
+        document.getElementById('fetch-progress-text').textContent = `${current} / ${total} riders`;
+    }
+}
+function hideProgress() {
+    const wrap = document.getElementById('fetch-progress-wrap');
+    if (wrap) wrap.style.display = 'none';
+}
+function passesBySegment(segments) {
+    const passes = new Map();
+    segments.forEach(segment => {
+        const key = String(segment.wad_hash);
+        if (!passes.has(key)) passes.set(key, new Set());
+        passes.get(key).add(segment.pass);
+    });
+    return passes;
+}
+function options(select, segments, combinePasses = false) {
+    const segmentPasses = passesBySegment(segments);
     const seen = new Set();
-    select.innerHTML = segments.filter(segment => { const key = `${segment.wad_hash}:${segment.pass}`; if (seen.has(key)) return false; seen.add(key); return true; }).map(segment => `<option value="${segment.wad_hash}:${segment.pass}">${esc(segment.name)} ${segment.pass > 1 ? `(pass ${segment.pass})` : ''}</option>`).join('');
+    select.innerHTML = segments.filter(segment => { const key = combinePasses ? String(segment.wad_hash) : `${segment.wad_hash}:${segment.pass}`; if (seen.has(key)) return false; seen.add(key); return true; }).map(segment => {
+        const passCount = segmentPasses.get(String(segment.wad_hash)).size;
+        const suffix = combinePasses ? `(${passCount} ${passCount === 1 ? 'pass' : 'passes'})` : segment.pass > 1 ? `(pass ${segment.pass})` : '';
+        return `<option value="${combinePasses ? segment.wad_hash : `${segment.wad_hash}:${segment.pass}`}" >${esc(segment.name)} ${suffix}</option>`;
+    }).join('');
 }
 function renderDetail(kind) {
     const select = document.getElementById(`${kind}-segment`);
     const rows = data[kind].filter(row => row.segment_key === select.value);
-    document.querySelector(`#${kind} tbody`).innerHTML = rows.length ? rows.map(row => `<tr><td>${esc(row.name)}</td><td>${link(row.activity_id)}</td><td>${esc(row.time)}</td><td>${row.points}</td></tr>`).join('') : '<tr><td colspan="4" class="empty-row">No telemetry reached this segment.</td></tr>';
+    const segmentPasses = passesBySegment(data.segments);
+    document.querySelector(`#${kind} tbody`).innerHTML = rows.length ? rows.map(row => {
+        const showPass = kind === 'fts' && segmentPasses.get(row.segment_key).size > 1;
+        const name = showPass ? `${row.name} (pass ${row.pass})` : row.name;
+        return `<tr><td>${esc(name)}</td><td>${link(row.activity_id)}</td><td>${esc(row.time)}</td><td>${row.points}</td></tr>`;
+    }).join('') : '<tr><td colspan="4" class="empty-row">No telemetry reached this segment.</td></tr>';
 }
-async function loadLeaderboard() {
+function renderOverall() {
+    const rows = [...data.summary].sort((left, right) => {
+        const a = left[overallSort.field];
+        const b = right[overallSort.field];
+        if (typeof a === 'string' || typeof b === 'string') {
+            return overallSort.direction * String(a ?? '').localeCompare(String(b ?? ''));
+        }
+        return overallSort.direction * ((a ?? -Infinity) - (b ?? -Infinity));
+    });
+    document.querySelector('#overall tbody').innerHTML = rows.map(row => `<tr><td>${esc(row.name)}${row.telemetry_available ? '' : '<span class="warning-tag" title="Activity telemetry unavailable">Incomplete</span>'}</td><td>${link(row.activity_id)}</td><td>${esc(row.finish_time || 'DNF')}</td><td>${row.fal}</td><td>${row.fts}</td><td>${row.fin}</td><td>${row.podium}</td><td>${row.total}</td></tr>`).join('');
+}
+async function loadLeaderboard(forceRefresh = false) {
+    if (leaderboardOpInProgress) return;
     const subgroupId = document.getElementById('subgroup-input').value.trim();
     if (!/^\d+$/.test(subgroupId)) { setStatus('Enter a numeric event subgroup ID.', true); return; }
+    leaderboardOpInProgress = true;
+    document.getElementById('load-btn').disabled = true;
+    document.getElementById('refetch-btn').disabled = true;
     history.replaceState(null, '', `/zrl/leaderboard?subgroup_id=${encodeURIComponent(subgroupId)}`);
     setStatus('Loading event results...');
+    showLoading('Fetching race data from Zwift API...');
+    showProgress(0, 0);
     try {
-        const response = await fetch(`/api/zrl/leaderboard?subgroup_id=${encodeURIComponent(subgroupId)}`);
-        data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Unable to load leaderboard');
-        document.querySelector('#overall tbody').innerHTML = data.summary.map(row => `<tr><td>${esc(row.name)}</td><td>${link(row.activity_id)}</td><td>${esc(row.finish_time || 'DNF')}</td><td>${row.fal}</td><td>${row.fts}</td><td>${row.fin}</td><td>${row.podium}</td><td>${row.total}</td></tr>`).join('');
+        const cacheBust = forceRefresh ? `&refresh=${Date.now()}` : '';
+        const response = await fetch(`/api/zrl/leaderboard_stream?subgroup_id=${encodeURIComponent(subgroupId)}${cacheBust}`, { cache: forceRefresh ? 'no-store' : 'default' });
+        if (!response.ok) { const error = await response.json(); throw new Error(error.error || 'Unable to load leaderboard'); }
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let finalData = null;
+        while (true) {
+            const chunk = await reader.read();
+            if (chunk.done) break;
+            buffer += decoder.decode(chunk.value, { stream: true });
+            let separator;
+            while ((separator = buffer.indexOf('\n\n')) !== -1) {
+                const event = buffer.slice(0, separator);
+                buffer = buffer.slice(separator + 2);
+                const line = event.split('\n').find(value => value.startsWith('data: '));
+                if (!line) continue;
+                const eventData = JSON.parse(line.slice(6));
+                if (eventData.progress) {
+                    showLoading(eventData.type === 'rider' ? `Fetching rider ${eventData.current}/${eventData.total}: ${eventData.name}` : eventData.name);
+                    showProgress(eventData.current, eventData.total);
+                } else {
+                    finalData = eventData;
+                }
+            }
+        }
+        data = finalData;
+        if (!data || data.error) throw new Error(data?.error || 'Unable to load leaderboard');
+        showLoading('Building leaderboard...');
+        showProgress(data.telemetry_riders, data.participants_total);
+        renderOverall();
         options(document.getElementById('fal-segment'), data.segments);
-        options(document.getElementById('fts-segment'), data.segments);
+        options(document.getElementById('fts-segment'), data.segments, true);
         renderDetail('fal'); renderDetail('fts');
-        setStatus(data.segment_geometry_available ? `Loaded ${data.summary.length} riders; telemetry available for ${data.telemetry_riders}.` : `${data.segment_geometry_error} Overall finish points are available, but segment points are withheld.`);
+        setStatus(data.segment_geometry_available ? `Loaded ${data.summary.length} riders; telemetry available for ${data.telemetry_riders}; route matched for ${data.route_matched_riders}.` : `${data.segment_geometry_error} Overall finish points are available, but segment points are withheld.`);
     } catch (error) { setStatus(error.message, true); }
+    finally {
+        hideProgress(); hideLoading();
+        leaderboardOpInProgress = false;
+        document.getElementById('load-btn').disabled = false;
+        document.getElementById('refetch-btn').disabled = false;
+    }
 }
-document.getElementById('load-btn').addEventListener('click', loadLeaderboard);
+document.getElementById('load-btn').addEventListener('click', () => loadLeaderboard(false));
+document.getElementById('refetch-btn').addEventListener('click', () => loadLeaderboard(true));
 document.getElementById('subgroup-input').addEventListener('keydown', event => { if (event.key === 'Enter') loadLeaderboard(); });
 document.getElementById('fal-segment').addEventListener('change', () => data && renderDetail('fal'));
 document.getElementById('fts-segment').addEventListener('change', () => data && renderDetail('fts'));
-if (initialSubgroupId) loadLeaderboard();
+document.querySelectorAll('#overall th[data-sort]').forEach(header => header.addEventListener('click', () => {
+    const field = header.dataset.sort;
+    overallSort = overallSort.field === field
+        ? { field, direction: overallSort.direction * -1 }
+        : { field, direction: 1 };
+    renderOverall();
+}));
+checkAuth();
+if (initialSubgroupId) loadLeaderboard(false);
 </script>
 </body>
 </html>

@@ -1,6 +1,7 @@
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 
@@ -10,6 +11,7 @@ if str(WORKSPACE_ROOT) not in sys.path:
     sys.path.insert(0, str(WORKSPACE_ROOT))
 
 from race_replay.data_cleaner import (
+    _compute_rider_finish_offset,
     RiderData,
     align_riders_to_elevation_profile,
     clean_race_data,
@@ -222,6 +224,51 @@ class TestRaceReplayTimeOffset(unittest.TestCase):
         self.assertIsNotNone(crossing_time)
         self.assertAlmostEqual(crossing_time, 953.0, delta=1.0,
                                msg=f"Crossing time {crossing_time} should match actual finish (953s), not crossover (893s)")
+
+    def test_finish_line_crossing_uses_linear_gps_interpolation(self):
+        times = np.array([10.0, 11.0])
+        lats = np.array([-0.00001, 0.00003])
+        lngs = np.array([0.00001, 0.00001])
+
+        crossing_time = compute_finish_crossing_time(
+            times=times,
+            distances_m=np.array([5000.0, 9000.0]),
+            lats=lats,
+            lngs=lngs,
+            finish_lat=0.0,
+            finish_lng=0.0,
+            finish_distance_m=10000.0,
+            expected_time_sec=10.25,
+            finish_tangent_latlng=np.array([1.0, 0.0]),
+        )
+
+        self.assertAlmostEqual(crossing_time, 10.25, places=6)
+
+    def test_gps_finish_failure_does_not_fall_back_to_odometer(self):
+        rider = {
+            'elapsed_ms': 100_000,
+            'data': pd.DataFrame({
+                'time_sec': [0.0, 100.0],
+                'distance_km': [0.0, 1.0],
+                'lat': [1.0, 1.0],
+                'lng': [1.0, 1.0],
+            }),
+        }
+        route_data = SimpleNamespace(
+            distance=np.array([0.0, 1000.0]),
+            latlng=np.array([[0.0, 0.0], [0.001, 0.0]]),
+        )
+
+        offset, official_time = _compute_rider_finish_offset(
+            rider=rider,
+            finish_line=1.0,
+            telemetry_finish_latlng=None,
+            calibrated_game_route=None,
+            route_data=route_data,
+        )
+
+        self.assertIsNone(offset)
+        self.assertEqual(official_time, 100.0)
 
 
 if __name__ == '__main__':

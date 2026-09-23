@@ -11,6 +11,7 @@ from shared.zrl_scoring import score_points_race
 SEGMENTS_FILE = Path(__file__).parent.parent / "zrl_route_segments.json"
 ROUTE_FILE = Path(__file__).parent.parent / "zwift_routes" / "world_11.json"
 CALIBRATION_FILE = Path(__file__).parent.parent / "zwift_surfaces" / "world_gps_calibration.json"
+ROUTE_MATCH_LOOKAHEAD_POINTS = 10
 
 
 def load_route_segments(route_slug="montmartre-mixer"):
@@ -38,28 +39,10 @@ def _load_calibrated_route_boundaries():
     return projected, positions
 
 
-def interpolate_time_at_distance(df, distance_km):
-    """Interpolate telemetry time at a distance, returning seconds or None."""
-    if df is None or len(df) < 2 or not {"time_sec", "distance_km"}.issubset(df.columns):
-        return None
-    times = np.asarray(df["time_sec"], dtype=float)
-    distances = np.asarray(df["distance_km"], dtype=float)
-    valid = np.isfinite(times) & np.isfinite(distances)
-    times = times[valid]
-    distances = distances[valid]
-    if len(times) < 2:
-        return None
-    order = np.argsort(distances, kind="stable")
-    distances = distances[order]
-    times = times[order]
-    unique_distances, unique_indices = np.unique(distances, return_index=True)
-    unique_times = times[unique_indices]
-    if distance_km < unique_distances[0] or distance_km > unique_distances[-1]:
-        return None
-    return float(np.interp(distance_km, unique_distances, unique_times))
-
-
-def _crossing_time_at_point(df, latitude, longitude, start_index=0, max_distance_m=100):
+def _crossing_time_at_point(
+    df, latitude, longitude, start_index=0, max_distance_m=100,
+    expected_time_sec=None,
+):
     """Find the first ordered GPS passage near a segment boundary."""
     if df is None or not {"time_sec", "lat", "lng"}.issubset(df.columns):
         return None, start_index
@@ -88,6 +71,16 @@ def _crossing_time_at_point(df, latitude, longitude, start_index=0, max_distance
             candidates.append((index, fraction, distance_m))
     if not candidates:
         return None, start_index
+    if expected_time_sec is not None:
+        index, fraction, _ = min(
+            candidates,
+            key=lambda candidate: abs(
+                (times[candidate[0]] + candidate[1] * (times[candidate[0] + 1] - times[candidate[0]]))
+                - expected_time_sec
+            ),
+        )
+        return float(times[index] + fraction * (times[index + 1] - times[index])), index + 1
+
     # Keep only the first contiguous near-boundary passage. Within that passage
     # choose the closest projected telemetry segment, which preserves route
     # order while avoiding a nearby whole-second sample masking interpolation.
@@ -99,6 +92,152 @@ def _crossing_time_at_point(df, latitude, longitude, start_index=0, max_distance
             break
     index, fraction, _ = min(passage, key=lambda candidate: candidate[2])
     return float(times[index] + fraction * (times[index + 1] - times[index])), index + 1
+
+
+def _crossing_time_at_route_position(
+    df, route_points, position, expected_time_sec=None, max_lateral_m=100,
+):
+    """Interpolate a rider's forward crossing of a route-normal line."""
+    if df is None or not {"time_sec", "lat", "lng"}.issubset(df.columns):
+        return None
+    lat = np.asarray(df["lat"], dtype=float)
+    lng = np.asarray(df["lng"], dtype=float)
+    times = np.asarray(df["time_sec"], dtype=float)
+    valid = np.isfinite(lat) & np.isfinite(lng) & np.isfinite(times)
+    lat = lat[valid]
+    lng = lng[valid]
+    times = times[valid]
+    if len(times) < 2:
+        return None
+
+    route = np.asarray(route_points, dtype=float)
+    position = float(np.clip(position, 0, len(route) - 1))
+    indices = np.arange(len(route), dtype=float)
+    target = np.array([
+        np.interp(position, indices, route[:, 0]),
+        np.interp(position, indices, route[:, 1]),
+    ])
+    before = route[max(0, int(np.floor(position)) - 1)]
+    after = route[min(len(route) - 1, int(np.ceil(position)) + 1)]
+    scale = np.cos(np.radians(target[0]))
+    target_xy = np.array([target[0], target[1] * scale])
+    direction = np.array([
+        after[0] - before[0],
+        (after[1] - before[1]) * scale,
+    ])
+    direction_norm = float(np.linalg.norm(direction))
+    if direction_norm == 0:
+        return None
+    direction /= direction_norm
+
+    rider_xy = np.column_stack([lat, lng * scale])
+    along = (rider_xy - target_xy) @ direction
+    candidates = []
+    for index in np.where((along[:-1] <= 0) & (along[1:] >= 0))[0]:
+        span = along[index + 1] - along[index]
+        if span <= 0:
+            continue
+        fraction = float(-along[index] / span)
+        crossing_xy = rider_xy[index] + fraction * (
+            rider_xy[index + 1] - rider_xy[index]
+        )
+        lateral_m = float(np.linalg.norm(crossing_xy - target_xy) * 111_320)
+        if lateral_m <= max_lateral_m:
+            crossing_time = float(
+                times[index] + fraction * (times[index + 1] - times[index])
+            )
+            candidates.append((crossing_time, lateral_m))
+    if not candidates:
+        return None
+    if expected_time_sec is not None:
+        return min(candidates, key=lambda item: abs(item[0] - expected_time_sec))[0]
+    return candidates[0][0]
+
+
+def _finish_clock_time(df, finish_boundary, expected_time_sec):
+    """Estimate telemetry-clock finish time for the per-rider clock offset."""
+    if finish_boundary is None:
+        return None
+    crossing, _ = _crossing_time_at_point(
+        df, finish_boundary[0], finish_boundary[1],
+        max_distance_m=100, expected_time_sec=expected_time_sec,
+    )
+    if crossing is not None:
+        return crossing
+    if df is None or "time_sec" not in df.columns:
+        return None
+    finite_times = np.asarray(df["time_sec"], dtype=float)
+    finite_times = finite_times[np.isfinite(finite_times)]
+    if not {"lat", "lng"}.issubset(df.columns):
+        return float(finite_times[-1]) if len(finite_times) else None
+    lat = np.asarray(df["lat"], dtype=float)
+    lng = np.asarray(df["lng"], dtype=float)
+    times = np.asarray(df["time_sec"], dtype=float)
+    valid = np.isfinite(lat) & np.isfinite(lng) & np.isfinite(times)
+    if valid.sum() < 1:
+        return None
+    lat = lat[valid]
+    lng = lng[valid]
+    times = times[valid]
+    scale = np.cos(np.radians(finish_boundary[0]))
+    error_m = np.sqrt(
+        ((lat - finish_boundary[0]) * 111_320) ** 2
+        + ((lng - finish_boundary[1]) * scale * 111_320) ** 2
+    )
+    near = np.where(np.abs(times - expected_time_sec) <= 30)[0]
+    if len(near) == 0:
+        near = np.arange(len(times))
+    return float(times[near[np.argmin(error_m[near])]])
+
+
+def _match_rider_to_route(df, route_points):
+    """Project rider GPS samples onto the ordered route axis."""
+    if df is None or not {"time_sec", "lat", "lng"}.issubset(df.columns):
+        return None
+    lat = np.asarray(df["lat"], dtype=float)
+    lng = np.asarray(df["lng"], dtype=float)
+    times = np.asarray(df["time_sec"], dtype=float)
+    valid = np.isfinite(lat) & np.isfinite(lng) & np.isfinite(times)
+    if valid.sum() < 2:
+        return None
+    lat = lat[valid]
+    lng = lng[valid]
+    times = times[valid]
+    route = np.asarray(route_points, dtype=float)
+    scale = np.cos(np.radians(np.mean(route[:, 0])))
+    rider_xy = np.column_stack([lat, lng * scale])
+    route_xy = np.column_stack([route[:, 0], route[:, 1] * scale])
+    progress = np.empty(len(rider_xy), dtype=float)
+    first_stop = min(len(route), ROUTE_MATCH_LOOKAHEAD_POINTS + 1)
+    first_squared = ((route_xy[:first_stop] - rider_xy[0]) ** 2).sum(axis=1)
+    current = int(np.argmin(first_squared))
+    progress[0] = current
+    for sample_index in range(1, len(rider_xy)):
+        stop = min(len(route), current + ROUTE_MATCH_LOOKAHEAD_POINTS + 1)
+        candidate_squared = (
+            (route_xy[current:stop] - rider_xy[sample_index]) ** 2
+        ).sum(axis=1)
+        current += int(np.argmin(candidate_squared))
+        progress[sample_index] = current
+    return times, progress
+
+
+def _route_crossing_time(matched, target, start_index=0, expected_time_sec=None):
+    """Binary-search route progress and interpolate the crossing timestamp."""
+    if matched is None:
+        return None, start_index
+    times, progress = matched
+    search_start = min(max(start_index, 0), len(progress) - 1)
+    index = int(np.searchsorted(progress[search_start:], target, side="left")) + search_start
+    if index <= search_start or index >= len(progress):
+        return None, start_index
+    previous = index - 1
+    span = progress[index] - progress[previous]
+    fraction = 0.0 if span <= 0 else (target - progress[previous]) / span
+    crossing = times[previous] + fraction * (times[index] - times[previous])
+    if expected_time_sec is not None and abs(crossing - expected_time_sec) > 30:
+        return None, start_index
+    return float(crossing), index + 1
 
 
 def _add_reference_gps_boundaries(segments, telemetry_by_activity):
@@ -173,9 +312,11 @@ def build_leaderboard(participants, telemetry_by_activity, segments=None):
     optional ``elapsed_ms``. Telemetry is keyed by activity ID and contains a
     DataFrame with time, latitude, and longitude columns.
     """
+    calibrated_route = _load_calibrated_route_boundaries()
     segments = _add_reference_gps_boundaries(
         segments or load_route_segments(), telemetry_by_activity
     )
+    route_points = None if calibrated_route is None else calibrated_route[0]
     spatial_segments = [
         segment for segment in segments
         if all(key in segment for key in ("start_lat", "start_lng", "end_lat", "end_lng"))
@@ -183,6 +324,8 @@ def build_leaderboard(participants, telemetry_by_activity, segments=None):
     rider_inputs = []
     fal_rows = []
     fts_rows = []
+    clock_offsets = {}
+    route_matched_riders = 0
     for participant in participants:
         activity_id = str(participant["activity_id"])
         df = telemetry_by_activity.get(activity_id)
@@ -197,16 +340,89 @@ def build_leaderboard(participants, telemetry_by_activity, segments=None):
             "disqualified": bool(participant.get("disqualified", False)),
         })
 
+        matched_route = _match_rider_to_route(df, route_points) if route_points is not None else None
+        telemetry_finish = None
+        if finish_time is not None and matched_route is not None:
+            telemetry_finish, _ = _route_crossing_time(
+                matched_route, len(route_points) - 1
+            )
+            if telemetry_finish is None:
+                telemetry_finish, _ = _route_crossing_time(
+                    matched_route, max(0, len(route_points) - 2)
+                )
+            refined_finish = _crossing_time_at_route_position(
+                df,
+                route_points,
+                len(route_points) - 1,
+                expected_time_sec=telemetry_finish,
+            )
+            if refined_finish is None:
+                refined_finish = _finish_clock_time(
+                    df, route_points[-1], telemetry_finish
+                )
+            if refined_finish is not None:
+                telemetry_finish = refined_finish
+        clock_offset = (
+            telemetry_finish - finish_time
+            if telemetry_finish is not None and finish_time is not None
+            else 0.0
+        )
+        clock_offsets[activity_id] = round(float(clock_offset), 3)
+
+        if matched_route is not None:
+            route_matched_riders += 1
+
         path_index = 0
         for segment in segments:
-            if not all(key in segment for key in ("start_lat", "start_lng", "end_lat", "end_lng")):
-                continue
-            start_time, path_index = _crossing_time_at_point(
-                df, segment["start_lat"], segment["start_lng"], path_index
-            )
-            end_time, path_index = _crossing_time_at_point(
-                df, segment["end_lat"], segment["end_lng"], path_index
-            )
+            start_time = None
+            end_time = None
+            if matched_route is not None and "wad_percent_start" in segment and "wad_percent_end" in segment:
+                start_position = (
+                    float(segment["wad_percent_start"]) * (len(route_points) - 1)
+                )
+                end_position = (
+                    float(segment["wad_percent_end"]) * (len(route_points) - 1)
+                )
+                start_time, path_index = _route_crossing_time(
+                    matched_route,
+                    start_position,
+                    path_index,
+                )
+                end_time, path_index = _route_crossing_time(
+                    matched_route,
+                    end_position,
+                    path_index,
+                )
+                refined_start = _crossing_time_at_route_position(
+                    df, route_points, start_position, expected_time_sec=start_time
+                )
+                if start_time is not None and all(
+                    key in segment for key in ("start_lat", "start_lng")
+                ) and refined_start is None:
+                    refined_start, _ = _crossing_time_at_point(
+                        df,
+                        segment["start_lat"],
+                        segment["start_lng"],
+                        max_distance_m=100,
+                        expected_time_sec=start_time,
+                    )
+                if refined_start is not None:
+                    start_time = refined_start
+                refined_end = _crossing_time_at_route_position(
+                    df, route_points, end_position, expected_time_sec=end_time
+                )
+                if end_time is not None and all(
+                    key in segment for key in ("end_lat", "end_lng")
+                ) and refined_end is None:
+                    refined_end, _ = _crossing_time_at_point(
+                        df,
+                        segment["end_lat"],
+                        segment["end_lng"],
+                        max_distance_m=100,
+                        expected_time_sec=end_time,
+                    )
+                if refined_end is not None:
+                    end_time = refined_end
             if end_time is None:
                 continue
             segment_id = str(segment["wad_hash"])
@@ -215,12 +431,13 @@ def build_leaderboard(participants, telemetry_by_activity, segments=None):
                 "segment_id": occurrence_id,
                 "pass": segment["pass"],
                 "rider_id": activity_id,
-                "crossing_seconds": end_time,
+                "crossing_seconds": end_time - clock_offset,
                 "elapsed_seconds": end_time - start_time if start_time is not None else None,
                 "include_fts": False,
             })
             segment_duration = end_time - start_time if start_time is not None else None
-            if start_time is not None and 0 <= segment_duration <= 300:
+            max_segment_duration = 90 if segment.get("type") == "sprint" else 300
+            if start_time is not None and 0 <= segment_duration <= max_segment_duration:
                 fts_rows.append({
                     "segment_id": segment_id,
                     "pass": segment["pass"],
@@ -242,6 +459,10 @@ def build_leaderboard(participants, telemetry_by_activity, segments=None):
             **score,
             "name": participant.get("name", ""),
             "activity_id": rider_id,
+            "telemetry_available": rider_id in telemetry_by_activity,
+            "clock_offset_sec": clock_offsets.get(rider_id, 0.0),
+            "finish_time_ms": int(round(float(participant["elapsed_ms"])))
+            if participant.get("elapsed_ms") is not None else None,
             "finish_time": _format_seconds(float(participant["elapsed_ms"]) / 1000)
             if participant.get("elapsed_ms") is not None else None,
         })
@@ -274,7 +495,11 @@ def build_leaderboard(participants, telemetry_by_activity, segments=None):
                 and segment["pass"] == row["pass"]
             )
             detail.append({
-                "segment_key": f"{segment['wad_hash']}:{segment['pass']}",
+                "segment_key": (
+                    str(segment["wad_hash"])
+                    if points_key == "fts"
+                    else f"{segment['wad_hash']}:{segment['pass']}"
+                ),
                 "segment_name": segment["name"],
                 "pass": segment["pass"],
                 "name": participant.get("name", ""),
@@ -283,7 +508,7 @@ def build_leaderboard(participants, telemetry_by_activity, segments=None):
                 "time_ms": int(round((row["crossing_seconds"] if points_key == "fal" else row["elapsed_seconds"]) * 1000)),
                 "points": ranked_points[(row["segment_id"], row["pass"], row["rider_id"])],
             })
-        detail.sort(key=lambda row: -row["points"])
+        detail.sort(key=lambda row: row["time_ms"])
         return detail
 
     return {
@@ -292,4 +517,6 @@ def build_leaderboard(participants, telemetry_by_activity, segments=None):
         "fts": detail_rows(fts_rows, "fts"),
         "segments": segments,
         "segment_geometry_available": len(spatial_segments) == len(segments),
+        "route_matched_riders": route_matched_riders,
+        "segment_rows": {"fal": len(fal_rows), "fts": len(fts_rows)},
     }
