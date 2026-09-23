@@ -60,6 +60,10 @@
     </section>
     {% endif %}
 
+    <section class="panel stream-links-panel" id="stream-links-panel" style="display:none;">
+        <div id="stream-links-body"></div>
+    </section>
+
     <section class="panel">
         <h2>Overall Points</h2>
         <div class="table-container"><table class="leaderboard-table" id="overall"><thead><tr><th data-sort="name">Rider</th><th data-sort="activity_id">Activity</th><th data-sort="finish_time_ms">Finish</th><th data-sort="fal">FAL</th><th data-sort="fts">FTS</th><th data-sort="fin">FIN</th><th data-sort="podium">Podium</th><th data-sort="total">Total</th></tr></thead><tbody></tbody></table></div>
@@ -185,6 +189,27 @@ function renderOverall() {
     });
     document.querySelector('#overall tbody').innerHTML = rows.map(row => `<tr><td>${esc(row.name)}${row.telemetry_available ? '' : '<span class="warning-tag" title="Activity telemetry unavailable">Incomplete</span>'}</td><td>${link(row.activity_id)}</td><td>${esc(row.finish_time || 'DNF')}</td><td>${row.fal}</td><td>${row.fts}</td><td>${row.fin}</td><td>${row.podium}</td><td>${row.total}</td></tr>`).join('');
 }
+async function loadStreamLinks(subgroupId, forceRefresh = false) {
+    const panel = document.getElementById('stream-links-panel');
+    const body = document.getElementById('stream-links-body');
+    panel.style.display = 'none';
+    body.innerHTML = '';
+    try {
+        const cacheBust = forceRefresh ? `&refresh=${Date.now()}` : '';
+        const response = await fetch(`/api/zrl/streams?subgroup_id=${encodeURIComponent(subgroupId)}${cacheBust}`, { cache: forceRefresh ? 'no-store' : 'default' });
+        if (!response.ok) return;
+        const result = await response.json();
+        if (document.getElementById('subgroup-input').value.trim() !== subgroupId || !result.streams?.length) return;
+        body.innerHTML = `<span class="stream-label">Streams:</span>${result.streams.map(stream => {
+            const offset = Math.max(0, Math.round(stream.offset_seconds || 0));
+            const url = `${stream.youtube_url}&t=${offset}s`;
+            return `<a href="${esc(url)}" target="_blank" rel="noopener" class="stream-link" title="${esc(stream.stream_title)}"><span class="yt-icon">&#9654;</span> ${esc(stream.streamer_name)}</a>`;
+        }).join('')}`;
+        panel.style.display = 'block';
+    } catch (error) {
+        // Stream discovery is optional and must not block leaderboard results.
+    }
+}
 async function loadLeaderboard(forceRefresh = false) {
     if (leaderboardOpInProgress) return;
     const subgroupId = document.getElementById('subgroup-input').value.trim();
@@ -232,6 +257,7 @@ async function loadLeaderboard(forceRefresh = false) {
         options(document.getElementById('fts-segment'), data.segments, true);
         renderDetail('fal'); renderDetail('fts');
         setStatus(data.segment_geometry_available ? `Loaded ${data.summary.length} riders; telemetry available for ${data.telemetry_riders}; route matched for ${data.route_matched_riders}.` : `${data.segment_geometry_error} Overall finish points are available, but segment points are withheld.`);
+        loadStreamLinks(subgroupId, forceRefresh);
     } catch (error) { setStatus(error.message, true); }
     finally {
         hideProgress(); hideLoading();

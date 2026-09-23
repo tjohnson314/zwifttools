@@ -272,6 +272,37 @@ def zrl_leaderboard():
     return render_template('zrl_leaderboard.html', route=route, subgroup_id=subgroup_id)
 
 
+_zrl_stream_cache = {}
+
+
+def _zrl_stream_context(participants):
+    """Return race timing and rider IDs needed for YouTube stream matching."""
+    start_epochs = [
+        start_epoch for participant in participants
+        if (start_epoch := _ttt_rider_start_epoch(participant)) is not None
+    ]
+    elapsed_seconds = [
+        float(participant['elapsed_ms']) / 1000.0
+        for participant in participants
+        if participant.get('elapsed_ms') is not None
+    ]
+    player_ids = sorted({
+        int(participant['player_id'])
+        for participant in participants
+        if participant.get('player_id') is not None
+    })
+    if not start_epochs or not elapsed_seconds:
+        return None
+    race_start = datetime.fromtimestamp(
+        float(np.median(start_epochs)), tz=timezone.utc
+    )
+    return {
+        'race_start_time': race_start.isoformat().replace('+00:00', 'Z'),
+        'race_duration_sec': max(elapsed_seconds),
+        'player_ids': player_ids,
+    }
+
+
 @app.route('/api/zrl/leaderboard')
 def api_zrl_leaderboard():
     """Build the Montmartre Mixer leaderboard from one ZRL event subgroup."""
@@ -378,6 +409,48 @@ def api_zrl_leaderboard_stream():
         yield f"data: {json.dumps(result)}\n\n"
 
     return Response(events(), mimetype='text/event-stream', headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
+
+
+@app.route('/api/zrl/streams')
+def api_zrl_streams():
+    """Find known YouTube streamers who rode in one ZRL subgroup."""
+    headers = get_headers()
+    if not headers:
+        return jsonify({'error': 'Not authenticated. Please log in first.'}), 401
+
+    raw_subgroup_id = request.args.get('subgroup_id', '').strip()
+    if not raw_subgroup_id.isdigit():
+        return jsonify({'error': 'subgroup_id is required and must be a number'}), 400
+    subgroup_id = int(raw_subgroup_id)
+    force_refresh = bool(request.args.get('refresh'))
+    if not force_refresh and subgroup_id in _zrl_stream_cache:
+        return jsonify(_zrl_stream_cache[subgroup_id])
+
+    from shared.youtube_streams import find_matching_streams, get_api_key
+
+    if not get_api_key():
+        return jsonify({'streams': [], 'note': 'YOUTUBE_API_KEY not configured'})
+
+    participants, error = get_race_entries(subgroup_id, headers)
+    if error:
+        return jsonify({'streams': [], 'error': error}), 502
+    context = _zrl_stream_context(participants)
+    if context is None:
+        return jsonify({'streams': [], 'note': 'Race timing is unavailable'})
+    if not context['player_ids']:
+        return jsonify({'streams': [], 'note': 'No player IDs available'})
+
+    streams = find_matching_streams(
+        race_start_time=context['race_start_time'],
+        race_duration_sec=context['race_duration_sec'],
+        rider_player_ids=context['player_ids'],
+    )
+    result = {
+        'streams': streams,
+        'race_start_time': context['race_start_time'],
+    }
+    _zrl_stream_cache[subgroup_id] = result
+    return jsonify(result)
 
 
 @app.route('/surface-map')
