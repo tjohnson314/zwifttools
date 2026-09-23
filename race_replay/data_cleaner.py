@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # Bump this version when data cleaning logic changes in a way that invalidates
 # previously cached results.  The cache loader will discard stale caches.
-CLEANING_VERSION = 34
+CLEANING_VERSION = 36
 
 # Grace period after the official race start before a rider is treated as a
 # "late joiner".  Riders routinely begin recording / cross the start banner a
@@ -88,6 +88,8 @@ class CleanedRaceData:
     source_activity_id: Optional[str] = None  # Activity ID used to fetch the race
     route_slug: Optional[str] = None  # Route slug for linking to Zwift Insider
     world: Optional[str] = None  # Detected Zwift world (WATOPIA, LONDON, etc.)
+    route_geometry_source: Optional[str] = None
+    route_latlng: Optional[np.ndarray] = None
 
 
 def haversine(lat1, lng1, lat2, lng2):
@@ -486,7 +488,8 @@ def calibrate_game_route(
     route_fraction = (route.distance - route.distance[0]) / (
         route.distance[-1] - route.distance[0]
     )
-    target_distance = route_fraction * profile.distance_m
+    route_span_m = profile.route_distance[-1] - profile.route_distance[0]
+    target_distance = profile.route_distance[0] + route_fraction * route_span_m
     matched_x = np.interp(target_distance, profile.route_distance, profile.route_x)
     matched_z = np.interp(target_distance, profile.route_distance, profile.route_z)
     design = np.column_stack([matched_x, matched_z, np.ones(len(matched_x))])
@@ -526,7 +529,7 @@ def calibrate_game_route(
     return CalibratedGameRoute(
         route_name=profile.route_name,
         leadin_distance_m=profile.leadin_distance_m,
-        lap_distance_m=profile.distance_m,
+        lap_distance_m=float(route_span_m),
         leadin_distance=profile.leadin_distance,
         leadin_altitude=profile.leadin_altitude * altitude_scale + altitude_offset,
         leadin_latlng=transform_latlng(profile.leadin_x, profile.leadin_z),
@@ -612,7 +615,9 @@ def calibrate_game_route_from_world(
     return CalibratedGameRoute(
         route_name=profile.route_name,
         leadin_distance_m=profile.leadin_distance_m,
-        lap_distance_m=profile.distance_m,
+        lap_distance_m=float(
+            profile.route_distance[-1] - profile.route_distance[0]
+        ),
         leadin_distance=profile.leadin_distance,
         leadin_altitude=profile.leadin_altitude + altitude_offset,
         leadin_latlng=transform_latlng(profile.leadin_x, profile.leadin_z),
@@ -621,6 +626,52 @@ def calibrate_game_route_from_world(
         route_latlng=transform_latlng(profile.route_x, profile.route_z),
         horizontal_p95_m=p95_m,
     )
+
+
+def load_preferred_route_geometry(
+    route_id: Optional[int],
+    route_name: Optional[str],
+    route_slug: Optional[str],
+    reference_data: Optional[pd.DataFrame] = None,
+) -> tuple[Optional[CalibratedGameRoute], Optional[RouteData], Optional[str]]:
+    """Load Zwift WAD geometry first, then fall back to ZwiftMap/Strava."""
+    game_profile = None
+    if route_id is not None:
+        game_profile = load_game_route_profile(
+            route_id=route_id,
+            route_name=route_name,
+        )
+    if game_profile is not None:
+        world_cal = load_world_calibration(game_profile.map_id)
+        if world_cal is not None:
+            coef, cal_p95_m = world_cal
+            ref_dist_m = ref_alt_m = None
+            if reference_data is not None and {
+                'distance_km', 'altitude_m'
+            }.issubset(reference_data.columns):
+                ref_dist_m = (
+                    reference_data['distance_km'].to_numpy(dtype=float) * 1000.0
+                )
+                ref_alt_m = reference_data['altitude_m'].to_numpy(dtype=float)
+            calibrated = calibrate_game_route_from_world(
+                game_profile,
+                coef,
+                cal_p95_m,
+                ref_distance_m=ref_dist_m,
+                ref_altitude_m=ref_alt_m,
+            )
+            if calibrated is not None:
+                return calibrated, None, 'zwift_wad'
+
+    route_data = load_route_data(route_slug) if route_slug else None
+    if route_data is None:
+        return None, None, None
+    calibrated = (
+        calibrate_game_route(game_profile, route_data)
+        if game_profile is not None
+        else None
+    )
+    return calibrated, route_data, 'zwiftmap_strava'
 
 
 def load_route_data(route_slug: str) -> Optional[RouteData]:
@@ -2332,105 +2383,63 @@ def clean_race_data(
     if progress_callback:
         progress_callback(len(csv_files) + 1, total_steps, "Aligning distances...")
     
-    # Try route-based alignment first (preferred)
-    route_data = None
-    calibrated_game_route = None
+    # Prefer authoritative Zwift WAD geometry. ZwiftMap's Strava-indexed trace
+    # remains a fallback for routes whose WAD/world calibration is unavailable.
+    calibrated_game_route, route_data, route_geometry_source = (
+        load_preferred_route_geometry(
+            route_id,
+            route_name,
+            route_slug,
+            ref_rider['data'],
+        )
+    )
     finish_line = None
     loop_start_offset = None
-    if route_slug:
-        route_data = load_route_data(route_slug)
-        if route_data:
-            logger.info("Using ZwiftMap route data for alignment: %s", route_data.route_name)
-            logger.info("  Route length: %.2f km, %d points", route_data.total_distance_m/1000, len(route_data.distance))
-            game_profile = load_game_route_profile(
-                route_id=route_id,
-                route_name=route_name,
-            )
-            if game_profile is not None:
-                calibrated_game_route = calibrate_game_route(game_profile, route_data)
-
-            if calibrated_game_route is not None:
-                logger.info(
-                    "Using calibrated game route geometry (lead-in %.2f km, "
-                    "profile=%s, GPS p95 %.1fm)",
-                    calibrated_game_route.leadin_distance_m / 1000,
-                    calibrated_game_route.has_leadin,
-                    calibrated_game_route.horizontal_p95_m,
-                )
-                riders, loop_start_offset = align_riders_to_game_route(
-                    riders,
-                    calibrated_game_route,
-                    race_start_time=race_start_time,
-                    detect_late_joiners=not is_ttt,
-                )
-            else:
-                riders, loop_start_offset = align_riders_to_route(
-                    riders, route_data, leadin_distance_m=leadin_distance_m,
-                    race_start_time=race_start_time,
-                    detect_late_joiners=not is_ttt)
-            # Use race metadata for finish line (more reliable than route total,
-            # especially on loop routes where the segment includes lead-in)
-            finish_line = determine_finish_line(riders, data_path)
-            if calibrated_game_route is not None and not segment_distance_cm:
-                inferred_finish_m = infer_loop_finish_distance(
-                    riders, calibrated_game_route
-                )
-                if inferred_finish_m is not None:
-                    finish_line = inferred_finish_m / 1000.0
-            if not finish_line:
-                # Fallback to route total if metadata unavailable
-                finish_line = route_data.total_distance_m / 1000.0
-            logger.info("  Finish line set to: %.3f km", finish_line)
-
-    # No ZwiftMap/Strava route, but the game (WAD) route may still exist. Project
-    # its geometry onto GPS with the shared world calibration (the same affine
-    # fit used by the surface map) so we get full GPS alignment and late-joiner
-    # handling without needing a per-route Strava segment.
-    if route_data is None and route_id is not None:
-        game_profile = load_game_route_profile(
-            route_id=route_id,
-            route_name=route_name,
+    if calibrated_game_route is not None:
+        logger.info(
+            "Using %s geometry for alignment: %s "
+            "(lead-in %.2f km, GPS p95 %.1fm)",
+            route_geometry_source,
+            calibrated_game_route.route_name,
+            calibrated_game_route.leadin_distance_m / 1000,
+            calibrated_game_route.horizontal_p95_m,
         )
-        if game_profile is not None:
-            world_cal = load_world_calibration(game_profile.map_id)
-            if world_cal is not None:
-                coef, cal_p95_m = world_cal
-                alt_ref = max(riders, key=lambda r: len(r['data']))['data']
-                ref_dist_m = ref_alt_m = None
-                if 'altitude_m' in alt_ref.columns:
-                    ref_dist_m = alt_ref['distance_km'].to_numpy(dtype=float) * 1000.0
-                    ref_alt_m = alt_ref['altitude_m'].to_numpy(dtype=float)
-                calibrated_game_route = calibrate_game_route_from_world(
-                    game_profile, coef, cal_p95_m,
-                    ref_distance_m=ref_dist_m, ref_altitude_m=ref_alt_m,
-                )
-        if calibrated_game_route is not None:
-            logger.info(
-                "Using world-calibrated WAD geometry for alignment: %s "
-                "(lead-in %.2f km, world GPS p95 %.1fm)",
-                calibrated_game_route.route_name,
-                calibrated_game_route.leadin_distance_m / 1000,
-                calibrated_game_route.horizontal_p95_m,
+        riders, loop_start_offset = align_riders_to_game_route(
+            riders,
+            calibrated_game_route,
+            race_start_time=race_start_time,
+            detect_late_joiners=not is_ttt,
+        )
+    elif route_data is not None:
+        logger.warning(
+            "Falling back to ZwiftMap/Strava geometry for alignment: %s",
+            route_data.route_name,
+        )
+        riders, loop_start_offset = align_riders_to_route(
+            riders,
+            route_data,
+            leadin_distance_m=leadin_distance_m,
+            race_start_time=race_start_time,
+            detect_late_joiners=not is_ttt,
+        )
+
+    if calibrated_game_route is not None or route_data is not None:
+        finish_line = determine_finish_line(riders, data_path)
+        if calibrated_game_route is not None and not segment_distance_cm:
+            inferred_finish_m = infer_loop_finish_distance(
+                riders, calibrated_game_route
             )
-            riders, loop_start_offset = align_riders_to_game_route(
-                riders,
-                calibrated_game_route,
-                race_start_time=race_start_time,
-                detect_late_joiners=not is_ttt,
-            )
-            finish_line = determine_finish_line(riders, data_path)
-            if not segment_distance_cm:
-                inferred_finish_m = infer_loop_finish_distance(
-                    riders, calibrated_game_route
-                )
-                if inferred_finish_m is not None:
-                    finish_line = inferred_finish_m / 1000.0
-            if not finish_line:
+            if inferred_finish_m is not None:
+                finish_line = inferred_finish_m / 1000.0
+        if not finish_line:
+            if route_data is not None:
+                finish_line = route_data.total_distance_m / 1000.0
+            else:
                 finish_line = (
                     calibrated_game_route.leadin_distance_m
                     + calibrated_game_route.lap_distance_m
                 ) / 1000.0
-            logger.info("  Finish line set to: %.3f km", finish_line)
+        logger.info("  Finish line set to: %.3f km", finish_line)
 
     # Fallback to landmark-based alignment if no route data
     if route_data is None and calibrated_game_route is None:
@@ -2754,6 +2763,16 @@ def clean_race_data(
         except Exception:
             pass
     
+    route_latlng = None
+    if calibrated_game_route is not None:
+        route_parts = []
+        if calibrated_game_route.has_leadin:
+            route_parts.append(calibrated_game_route.leadin_latlng)
+        route_parts.append(calibrated_game_route.route_latlng)
+        route_latlng = np.vstack(route_parts)
+    elif route_data is not None:
+        route_latlng = route_data.latlng.copy()
+
     result = CleanedRaceData(
         race_id=data_path.name,
         route_name=route_name,
@@ -2764,7 +2783,9 @@ def clean_race_data(
         max_time=max_time,
         source_activity_id=source_activity_id,
         route_slug=route_slug,
-        world=world
+        world=world,
+        route_geometry_source=route_geometry_source,
+        route_latlng=route_latlng,
     )
     
     # Cache if requested
@@ -2916,6 +2937,12 @@ def save_to_cache(data: CleanedRaceData, cache_path: Path):
         'max_time': float(data.max_time),
         'source_activity_id': str(data.source_activity_id) if data.source_activity_id else None,
         'world': data.world,
+        'route_geometry_source': data.route_geometry_source,
+        'route_latlng': (
+            data.route_latlng.tolist()
+            if data.route_latlng is not None
+            else None
+        ),
         'riders': riders_info
     }
     
@@ -2980,7 +3007,13 @@ def load_from_cache(cache_path: Path) -> Optional[CleanedRaceData]:
             max_time=meta['max_time'],
             source_activity_id=meta.get('source_activity_id'),
             route_slug=meta.get('route_slug'),
-            world=meta.get('world')
+            world=meta.get('world'),
+            route_geometry_source=meta.get('route_geometry_source'),
+            route_latlng=(
+                np.asarray(meta['route_latlng'], dtype=float)
+                if meta.get('route_latlng') is not None
+                else None
+            ),
         )
     except Exception as e:
         logger.warning("Cache load failed: %s", e)

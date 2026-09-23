@@ -1592,7 +1592,7 @@ function initMap(config, routeLatlng) {
     img.crossOrigin = 'anonymous';
     img.src = config.image;
 
-    // Build route points from ZwiftMap official route data
+    // Build route points from the geometry selected by the cleaner.
     let routePoints = null;
     if (routeLatlng && routeLatlng.length > 1) {
         routePoints = routeLatlng.map(pt => ({ lat: pt[0], lng: pt[1] }));
@@ -1614,7 +1614,7 @@ function initMap(config, routeLatlng) {
         dragStartY: 0,
         dragStartLat: 0,
         dragStartLng: 0,
-        // Official route polyline from ZwiftMap
+        // Route polyline, normally from calibrated Zwift WAD geometry.
         routePoints,
         // Background color
         bgColor: config.bg_color || '#0a1a2e',

@@ -1,4 +1,4 @@
-﻿{
+{
     "generated_at":  "2026-09-23",
     "source":  "WTRL results + Zwift activity event metadata",
     "row_count":  221,
@@ -20,7 +20,8 @@
                      "event_id":  5673121,
                      "event_subgroup_id":  7294310,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Cherry League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232580129836548112"
                  },
                  {
                      "season":  "20",
@@ -37,7 +38,8 @@
                      "event_id":  5673121,
                      "event_subgroup_id":  7294309,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Cherry League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232581535414927408"
                  },
                  {
                      "season":  "20",
@@ -54,7 +56,8 @@
                      "event_id":  5673121,
                      "event_subgroup_id":  7294308,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Cherry League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232580580195745792"
                  },
                  {
                      "season":  "20",
@@ -71,7 +74,8 @@
                      "event_id":  5711253,
                      "event_subgroup_id":  7354669,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Cherry League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232580672764035120"
                  },
                  {
                      "season":  "20",
@@ -88,7 +92,8 @@
                      "event_id":  5673121,
                      "event_subgroup_id":  7294313,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Cherry League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232581559985176592"
                  },
                  {
                      "season":  "20",
@@ -105,7 +110,8 @@
                      "event_id":  5711254,
                      "event_subgroup_id":  7354671,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Crimson League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232656446456135728"
                  },
                  {
                      "season":  "20",
@@ -122,7 +128,8 @@
                      "event_id":  5711254,
                      "event_subgroup_id":  7354670,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Crimson League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232655319958339632"
                  },
                  {
                      "season":  "20",
@@ -139,7 +146,8 @@
                      "event_id":  5711254,
                      "event_subgroup_id":  7354673,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Crimson League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232655862969729024"
                  },
                  {
                      "season":  "20",
@@ -156,7 +164,8 @@
                      "event_id":  5711260,
                      "event_subgroup_id":  7354674,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Yellow League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232686160306552832"
                  },
                  {
                      "season":  "20",
@@ -173,7 +182,8 @@
                      "event_id":  5711262,
                      "event_subgroup_id":  7354681,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Amber League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232702288563077136"
                  },
                  {
                      "season":  "20",
@@ -190,7 +200,8 @@
                      "event_id":  5711262,
                      "event_subgroup_id":  7354682,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Amber League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232703694569291776"
                  },
                  {
                      "season":  "20",
@@ -207,7 +218,8 @@
                      "event_id":  5711262,
                      "event_subgroup_id":  7354679,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Amber League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232696117215166496"
                  },
                  {
                      "season":  "20",
@@ -224,7 +236,8 @@
                      "event_id":  5711263,
                      "event_subgroup_id":  7354692,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Pink League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232717090488401968"
                  },
                  {
                      "season":  "20",
@@ -241,7 +254,8 @@
                      "event_id":  5711265,
                      "event_subgroup_id":  7354697,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Pink League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232717820305686576"
                  },
                  {
                      "season":  "20",
@@ -258,7 +272,8 @@
                      "event_id":  5711263,
                      "event_subgroup_id":  7354691,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Pink League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232718226968608816"
                  },
                  {
                      "season":  "20",
@@ -275,7 +290,8 @@
                      "event_id":  5711265,
                      "event_subgroup_id":  7354696,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Pink League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232719221907849248"
                  },
                  {
                      "season":  "20",
@@ -292,7 +308,8 @@
                      "event_id":  5711263,
                      "event_subgroup_id":  7354690,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Pink League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232719394461515808"
                  },
                  {
                      "season":  "20",
@@ -309,7 +326,8 @@
                      "event_id":  5711265,
                      "event_subgroup_id":  7354695,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Pink League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232715109401165856"
                  },
                  {
                      "season":  "20",
@@ -326,7 +344,8 @@
                      "event_id":  5711263,
                      "event_subgroup_id":  7354689,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Pink League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232716190172659712"
                  },
                  {
                      "season":  "20",
@@ -343,7 +362,8 @@
                      "event_id":  5711257,
                      "event_subgroup_id":  7354698,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Orange League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232732404311719936"
                  },
                  {
                      "season":  "20",
@@ -360,7 +380,8 @@
                      "event_id":  5711257,
                      "event_subgroup_id":  7354699,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Orange League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232732900942495792"
                  },
                  {
                      "season":  "20",
@@ -377,7 +398,8 @@
                      "event_id":  5711257,
                      "event_subgroup_id":  7354701,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Orange League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232734092326141968"
                  },
                  {
                      "season":  "20",
@@ -394,7 +416,8 @@
                      "event_id":  5711256,
                      "event_subgroup_id":  7354707,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Ruby League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232761610777182240"
                  },
                  {
                      "season":  "20",
@@ -411,7 +434,8 @@
                      "event_id":  5711256,
                      "event_subgroup_id":  7354705,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Ruby League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232763899936063536"
                  },
                  {
                      "season":  "20",
@@ -428,7 +452,8 @@
                      "event_id":  5711256,
                      "event_subgroup_id":  7354706,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Ruby League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232763845854674992"
                  },
                  {
                      "season":  "20",
@@ -445,7 +470,8 @@
                      "event_id":  5711256,
                      "event_subgroup_id":  7354704,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Ruby League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232761413552635952"
                  },
                  {
                      "season":  "20",
@@ -462,7 +488,8 @@
                      "event_id":  5711259,
                      "event_subgroup_id":  7354711,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Topaz League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232790444545196048"
                  },
                  {
                      "season":  "20",
@@ -479,7 +506,8 @@
                      "event_id":  5711255,
                      "event_subgroup_id":  7354712,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Topaz League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232790851745021984"
                  },
                  {
                      "season":  "20",
@@ -496,7 +524,8 @@
                      "event_id":  5711259,
                      "event_subgroup_id":  7354709,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Topaz League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232785190986530848"
                  },
                  {
                      "season":  "20",
@@ -513,7 +542,8 @@
                      "event_id":  5711277,
                      "event_subgroup_id":  7354715,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Green League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232913622395338800"
                  },
                  {
                      "season":  "20",
@@ -530,7 +560,8 @@
                      "event_id":  5711277,
                      "event_subgroup_id":  7354716,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Green League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232913601541242896"
                  },
                  {
                      "season":  "20",
@@ -547,7 +578,8 @@
                      "event_id":  5711277,
                      "event_subgroup_id":  7354717,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Green League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232914484425457712"
                  },
                  {
                      "season":  "20",
@@ -564,7 +596,8 @@
                      "event_id":  5711268,
                      "event_subgroup_id":  7354722,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Emerald League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232925751768842240"
                  },
                  {
                      "season":  "20",
@@ -581,7 +614,8 @@
                      "event_id":  null,
                      "event_subgroup_id":  null,
                      "event_name":  null,
-                     "available":  false
+                     "available":  false,
+                     "replay_activity_id":  null
                  },
                  {
                      "season":  "20",
@@ -598,7 +632,8 @@
                      "event_id":  5711268,
                      "event_subgroup_id":  7354721,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Emerald League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232921391278129200"
                  },
                  {
                      "season":  "20",
@@ -615,7 +650,8 @@
                      "event_id":  5711269,
                      "event_subgroup_id":  7354723,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Emerald League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232928134712311824"
                  },
                  {
                      "season":  "20",
@@ -632,7 +668,8 @@
                      "event_id":  5711268,
                      "event_subgroup_id":  7354718,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Emerald League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232919236949377024"
                  },
                  {
                      "season":  "20",
@@ -649,7 +686,8 @@
                      "event_id":  null,
                      "event_subgroup_id":  null,
                      "event_name":  null,
-                     "available":  false
+                     "available":  false,
+                     "replay_activity_id":  null
                  },
                  {
                      "season":  "20",
@@ -666,7 +704,8 @@
                      "event_id":  5711268,
                      "event_subgroup_id":  7354719,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Emerald League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232927508108492800"
                  },
                  {
                      "season":  "20",
@@ -683,7 +722,8 @@
                      "event_id":  5711267,
                      "event_subgroup_id":  7354731,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Lime League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232938456282087472"
                  },
                  {
                      "season":  "20",
@@ -700,7 +740,8 @@
                      "event_id":  5711270,
                      "event_subgroup_id":  7354740,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Lime League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232946595471605776"
                  },
                  {
                      "season":  "20",
@@ -717,7 +758,8 @@
                      "event_id":  5711267,
                      "event_subgroup_id":  7354734,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Lime League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232945598032576560"
                  },
                  {
                      "season":  "20",
@@ -734,7 +776,8 @@
                      "event_id":  5711270,
                      "event_subgroup_id":  7354738,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Lime League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232945007902375936"
                  },
                  {
                      "season":  "20",
@@ -751,7 +794,8 @@
                      "event_id":  5711274,
                      "event_subgroup_id":  7354741,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Lime League Division 3 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232946718222106656"
                  },
                  {
                      "season":  "20",
@@ -768,7 +812,8 @@
                      "event_id":  5711272,
                      "event_subgroup_id":  7354746,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Lime League Division 4 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232933011169558560"
                  },
                  {
                      "season":  "20",
@@ -785,7 +830,8 @@
                      "event_id":  5711267,
                      "event_subgroup_id":  7354735,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Lime League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232946417733795872"
                  },
                  {
                      "season":  "20",
@@ -802,7 +848,8 @@
                      "event_id":  5711270,
                      "event_subgroup_id":  7354736,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Lime League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232940258566160432"
                  },
                  {
                      "season":  "20",
@@ -819,7 +866,8 @@
                      "event_id":  5711274,
                      "event_subgroup_id":  7354742,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Lime League Division 3 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232944423702953984"
                  },
                  {
                      "season":  "20",
@@ -836,7 +884,8 @@
                      "event_id":  5711272,
                      "event_subgroup_id":  7354745,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Lime League Division 4 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232944556947619888"
                  },
                  {
                      "season":  "20",
@@ -853,7 +902,8 @@
                      "event_id":  5711267,
                      "event_subgroup_id":  7354733,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Lime League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232947620458840112"
                  },
                  {
                      "season":  "20",
@@ -870,7 +920,8 @@
                      "event_id":  5711270,
                      "event_subgroup_id":  7354739,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Lime League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232946153702342704"
                  },
                  {
                      "season":  "20",
@@ -887,7 +938,8 @@
                      "event_id":  5711276,
                      "event_subgroup_id":  7354769,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Mint League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232953365405450240"
                  },
                  {
                      "season":  "20",
@@ -904,7 +956,8 @@
                      "event_id":  5711290,
                      "event_subgroup_id":  7354775,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Mint League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232954328451186688"
                  },
                  {
                      "season":  "20",
@@ -921,7 +974,8 @@
                      "event_id":  5711276,
                      "event_subgroup_id":  7354770,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Mint League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232954784455934000"
                  },
                  {
                      "season":  "20",
@@ -938,7 +992,8 @@
                      "event_id":  5711290,
                      "event_subgroup_id":  7354774,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Mint League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232951083200757776"
                  },
                  {
                      "season":  "20",
@@ -955,7 +1010,8 @@
                      "event_id":  5711276,
                      "event_subgroup_id":  7354771,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Mint League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232953343041388560"
                  },
                  {
                      "season":  "20",
@@ -972,7 +1028,8 @@
                      "event_id":  5711290,
                      "event_subgroup_id":  7354772,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Mint League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232942907126530080"
                  },
                  {
                      "season":  "20",
@@ -989,7 +1046,8 @@
                      "event_id":  5711283,
                      "event_subgroup_id":  7354777,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Mint League Division 3 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232949051664433168"
                  },
                  {
                      "season":  "20",
@@ -1006,7 +1064,8 @@
                      "event_id":  5713207,
                      "event_subgroup_id":  7357478,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Mint League Division 4 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232953610151477280"
                  },
                  {
                      "season":  "20",
@@ -1023,7 +1082,8 @@
                      "event_id":  5711276,
                      "event_subgroup_id":  7354768,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Mint League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232951556569890816"
                  },
                  {
                      "season":  "20",
@@ -1040,7 +1100,8 @@
                      "event_id":  5711294,
                      "event_subgroup_id":  7354792,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Shamrock League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232951336024981504"
                  },
                  {
                      "season":  "20",
@@ -1057,7 +1118,8 @@
                      "event_id":  5711295,
                      "event_subgroup_id":  7354796,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Shamrock League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232961138683854848"
                  },
                  {
                      "season":  "20",
@@ -1074,7 +1136,8 @@
                      "event_id":  5711291,
                      "event_subgroup_id":  7357484,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Shamrock League Division 3 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232963989418065936"
                  },
                  {
                      "season":  "20",
@@ -1091,7 +1154,8 @@
                      "event_id":  5711294,
                      "event_subgroup_id":  7354793,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Shamrock League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232958063621521440"
                  },
                  {
                      "season":  "20",
@@ -1108,7 +1172,8 @@
                      "event_id":  5711295,
                      "event_subgroup_id":  7354794,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Shamrock League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232961445220384768"
                  },
                  {
                      "season":  "20",
@@ -1125,7 +1190,8 @@
                      "event_id":  5711291,
                      "event_subgroup_id":  7354800,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Shamrock League Division 3 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232957786696777728"
                  },
                  {
                      "season":  "20",
@@ -1142,7 +1208,8 @@
                      "event_id":  5711287,
                      "event_subgroup_id":  7354805,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Shamrock League Division 4 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232963391327092752"
                  },
                  {
                      "season":  "20",
@@ -1159,7 +1226,8 @@
                      "event_id":  5711294,
                      "event_subgroup_id":  7354791,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Shamrock League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232958681895485456"
                  },
                  {
                      "season":  "20",
@@ -1176,7 +1244,8 @@
                      "event_id":  5711295,
                      "event_subgroup_id":  7354798,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Shamrock League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232957661664575520"
                  },
                  {
                      "season":  "20",
@@ -1193,7 +1262,8 @@
                      "event_id":  5711291,
                      "event_subgroup_id":  7354799,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Shamrock League Division 3 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232961940131463168"
                  },
                  {
                      "season":  "20",
@@ -1210,7 +1280,8 @@
                      "event_id":  5711287,
                      "event_subgroup_id":  7354804,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Shamrock League Division 4 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232962889973579792"
                  },
                  {
                      "season":  "20",
@@ -1227,7 +1298,8 @@
                      "event_id":  5713209,
                      "event_subgroup_id":  7357483,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Shamrock League Division 5 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232958560487161856"
                  },
                  {
                      "season":  "20",
@@ -1244,7 +1316,8 @@
                      "event_id":  5711294,
                      "event_subgroup_id":  7354789,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Shamrock League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232960124358574112"
                  },
                  {
                      "season":  "20",
@@ -1261,7 +1334,8 @@
                      "event_id":  5711295,
                      "event_subgroup_id":  7354797,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Shamrock League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232962470434095152"
                  },
                  {
                      "season":  "20",
@@ -1278,7 +1352,8 @@
                      "event_id":  5711291,
                      "event_subgroup_id":  7354801,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Shamrock League Division 3 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232949685046296576"
                  },
                  {
                      "season":  "20",
@@ -1295,7 +1370,8 @@
                      "event_id":  5711292,
                      "event_subgroup_id":  7354807,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Olive League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232961411212984352"
                  },
                  {
                      "season":  "20",
@@ -1312,7 +1388,8 @@
                      "event_id":  5711292,
                      "event_subgroup_id":  7354808,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Olive League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232963555114663984"
                  },
                  {
                      "season":  "20",
@@ -1329,7 +1406,8 @@
                      "event_id":  5711285,
                      "event_subgroup_id":  7354810,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Olive League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232965013977481264"
                  },
                  {
                      "season":  "20",
@@ -1346,7 +1424,8 @@
                      "event_id":  5711282,
                      "event_subgroup_id":  7354813,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Olive League Division 3 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232963841896038448"
                  },
                  {
                      "season":  "20",
@@ -1363,7 +1442,8 @@
                      "event_id":  5711292,
                      "event_subgroup_id":  7354806,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Olive League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232964197312954416"
                  },
                  {
                      "season":  "20",
@@ -1380,7 +1460,8 @@
                      "event_id":  5711285,
                      "event_subgroup_id":  7354812,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Olive League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232962647559569408"
                  },
                  {
                      "season":  "20",
@@ -1397,7 +1478,8 @@
                      "event_id":  5711282,
                      "event_subgroup_id":  7354814,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Olive League Division 3 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232962507058790400"
                  },
                  {
                      "season":  "20",
@@ -1414,7 +1496,8 @@
                      "event_id":  5711284,
                      "event_subgroup_id":  7354817,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Olive League Division 4 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232961551059468304"
                  },
                  {
                      "season":  "20",
@@ -1431,7 +1514,8 @@
                      "event_id":  5711286,
                      "event_subgroup_id":  7354818,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Blue League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232965505969356816"
                  },
                  {
                      "season":  "20",
@@ -1448,7 +1532,8 @@
                      "event_id":  5711303,
                      "event_subgroup_id":  7354829,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Blue League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232966080832258096"
                  },
                  {
                      "season":  "20",
@@ -1465,7 +1550,8 @@
                      "event_id":  5711286,
                      "event_subgroup_id":  7354819,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Blue League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232963150548893744"
                  },
                  {
                      "season":  "20",
@@ -1482,7 +1568,8 @@
                      "event_id":  5711303,
                      "event_subgroup_id":  7354830,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Blue League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232956172493717536"
                  },
                  {
                      "season":  "20",
@@ -1499,7 +1586,8 @@
                      "event_id":  5711304,
                      "event_subgroup_id":  7354843,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Aqua League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232974899465486384"
                  },
                  {
                      "season":  "20",
@@ -1516,7 +1604,8 @@
                      "event_id":  5711308,
                      "event_subgroup_id":  7354846,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Aqua League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232974759686094848"
                  },
                  {
                      "season":  "20",
@@ -1533,7 +1622,8 @@
                      "event_id":  5711310,
                      "event_subgroup_id":  7354852,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Aqua League Division 3 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232976158150950928"
                  },
                  {
                      "season":  "20",
@@ -1550,7 +1640,8 @@
                      "event_id":  5711304,
                      "event_subgroup_id":  7354844,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Aqua League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232975940021960736"
                  },
                  {
                      "season":  "20",
@@ -1567,7 +1658,8 @@
                      "event_id":  5711308,
                      "event_subgroup_id":  7354847,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Aqua League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232977067459297280"
                  },
                  {
                      "season":  "20",
@@ -1584,7 +1676,8 @@
                      "event_id":  5711310,
                      "event_subgroup_id":  7354854,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Aqua League Division 3 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232972407033905184"
                  },
                  {
                      "season":  "20",
@@ -1601,7 +1694,8 @@
                      "event_id":  5711306,
                      "event_subgroup_id":  7354856,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Aqua League Division 4 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232976793034375168"
                  },
                  {
                      "season":  "20",
@@ -1618,7 +1712,8 @@
                      "event_id":  5711307,
                      "event_subgroup_id":  7354859,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Aqua League Division 5 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232967037100048384"
                  },
                  {
                      "season":  "20",
@@ -1635,7 +1730,8 @@
                      "event_id":  5711304,
                      "event_subgroup_id":  7354845,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Aqua League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232975506364497968"
                  },
                  {
                      "season":  "20",
@@ -1652,7 +1748,8 @@
                      "event_id":  5711308,
                      "event_subgroup_id":  7354850,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Aqua League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232975761529159728"
                  },
                  {
                      "season":  "20",
@@ -1669,7 +1766,8 @@
                      "event_id":  5711310,
                      "event_subgroup_id":  7354853,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Aqua League Division 3 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232972934895435808"
                  },
                  {
                      "season":  "20",
@@ -1686,7 +1784,8 @@
                      "event_id":  5711306,
                      "event_subgroup_id":  7354857,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Aqua League Division 4 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232977919465013296"
                  },
                  {
                      "season":  "20",
@@ -1703,7 +1802,8 @@
                      "event_id":  5711307,
                      "event_subgroup_id":  7354860,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Aqua League Division 5 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232967107480453168"
                  },
                  {
                      "season":  "20",
@@ -1720,7 +1820,8 @@
                      "event_id":  5711304,
                      "event_subgroup_id":  7354842,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Aqua League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232967984006103040"
                  },
                  {
                      "season":  "20",
@@ -1737,7 +1838,8 @@
                      "event_id":  5711308,
                      "event_subgroup_id":  7354849,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Aqua League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232977947759788032"
                  },
                  {
                      "season":  "20",
@@ -1754,7 +1856,8 @@
                      "event_id":  5711310,
                      "event_subgroup_id":  7354855,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Aqua League Division 3 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232975332149886992"
                  },
                  {
                      "season":  "20",
@@ -1771,7 +1874,8 @@
                      "event_id":  5711317,
                      "event_subgroup_id":  7354874,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Cobalt League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232982267616100368"
                  },
                  {
                      "season":  "20",
@@ -1788,7 +1892,8 @@
                      "event_id":  5711317,
                      "event_subgroup_id":  7354872,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Cobalt League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232982958485094400"
                  },
                  {
                      "season":  "20",
@@ -1805,7 +1910,8 @@
                      "event_id":  5711318,
                      "event_subgroup_id":  7354877,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Cobalt League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232983373310148608"
                  },
                  {
                      "season":  "20",
@@ -1822,7 +1928,8 @@
                      "event_id":  5711317,
                      "event_subgroup_id":  7354873,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Cobalt League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232984656381296688"
                  },
                  {
                      "season":  "20",
@@ -1839,7 +1946,8 @@
                      "event_id":  5711318,
                      "event_subgroup_id":  7354878,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Cobalt League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232981082398048288"
                  },
                  {
                      "season":  "20",
@@ -1856,7 +1964,8 @@
                      "event_id":  5711323,
                      "event_subgroup_id":  7354885,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Navy League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232989964675661856"
                  },
                  {
                      "season":  "20",
@@ -1873,7 +1982,8 @@
                      "event_id":  5711314,
                      "event_subgroup_id":  7354891,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Navy League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232988241387143216"
                  },
                  {
                      "season":  "20",
@@ -1890,7 +2000,8 @@
                      "event_id":  5711323,
                      "event_subgroup_id":  7354888,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Navy League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232991833330368560"
                  },
                  {
                      "season":  "20",
@@ -1907,7 +2018,8 @@
                      "event_id":  5711314,
                      "event_subgroup_id":  7354890,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Navy League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232992517756862480"
                  },
                  {
                      "season":  "20",
@@ -1924,7 +2036,8 @@
                      "event_id":  5711322,
                      "event_subgroup_id":  7354893,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Navy League Division 3 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232986150325272608"
                  },
                  {
                      "season":  "20",
@@ -1941,7 +2054,8 @@
                      "event_id":  5711325,
                      "event_subgroup_id":  7354896,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Navy League Division 4 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232991429989318672"
                  },
                  {
                      "season":  "20",
@@ -1958,7 +2072,8 @@
                      "event_id":  5711321,
                      "event_subgroup_id":  7354899,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Navy League Division 5 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232989848275320832"
                  },
                  {
                      "season":  "20",
@@ -1975,7 +2090,8 @@
                      "event_id":  5711323,
                      "event_subgroup_id":  7354884,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Navy League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232985522739920896"
                  },
                  {
                      "season":  "20",
@@ -1992,7 +2108,8 @@
                      "event_id":  5711314,
                      "event_subgroup_id":  7354892,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Navy League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232992101598019584"
                  },
                  {
                      "season":  "20",
@@ -2009,7 +2126,8 @@
                      "event_id":  5711322,
                      "event_subgroup_id":  7354895,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Navy League Division 3 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232991269540380720"
                  },
                  {
                      "season":  "20",
@@ -2026,7 +2144,8 @@
                      "event_id":  5711325,
                      "event_subgroup_id":  7354897,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Navy League Division 4 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232988825058099232"
                  },
                  {
                      "season":  "20",
@@ -2043,7 +2162,8 @@
                      "event_id":  5711323,
                      "event_subgroup_id":  7354886,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Navy League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232984983746723888"
                  },
                  {
                      "season":  "20",
@@ -2060,7 +2180,8 @@
                      "event_id":  5711319,
                      "event_subgroup_id":  7354903,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Royal League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232997540419158032"
                  },
                  {
                      "season":  "20",
@@ -2077,7 +2198,8 @@
                      "event_id":  5711319,
                      "event_subgroup_id":  7354904,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Royal League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232992261283594272"
                  },
                  {
                      "season":  "20",
@@ -2094,7 +2216,8 @@
                      "event_id":  5711315,
                      "event_subgroup_id":  7354905,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Royal League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232983991072374832"
                  },
                  {
                      "season":  "20",
@@ -2111,7 +2234,8 @@
                      "event_id":  5711319,
                      "event_subgroup_id":  7354901,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Royal League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232996882248957984"
                  },
                  {
                      "season":  "20",
@@ -2128,7 +2252,8 @@
                      "event_id":  null,
                      "event_subgroup_id":  null,
                      "event_name":  null,
-                     "available":  false
+                     "available":  false,
+                     "replay_activity_id":  null
                  },
                  {
                      "season":  "20",
@@ -2145,7 +2270,8 @@
                      "event_id":  5713213,
                      "event_subgroup_id":  7357489,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Teal League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233034206009704464"
                  },
                  {
                      "season":  "20",
@@ -2162,7 +2288,8 @@
                      "event_id":  null,
                      "event_subgroup_id":  null,
                      "event_name":  null,
-                     "available":  false
+                     "available":  false,
+                     "replay_activity_id":  null
                  },
                  {
                      "season":  "20",
@@ -2179,7 +2306,8 @@
                      "event_id":  5711326,
                      "event_subgroup_id":  7354909,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Purple League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233109668148854832"
                  },
                  {
                      "season":  "20",
@@ -2196,7 +2324,8 @@
                      "event_id":  5711326,
                      "event_subgroup_id":  7354908,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Purple League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233109890967093248"
                  },
                  {
                      "season":  "20",
@@ -2213,7 +2342,8 @@
                      "event_id":  null,
                      "event_subgroup_id":  null,
                      "event_name":  null,
-                     "available":  false
+                     "available":  false,
+                     "replay_activity_id":  null
                  },
                  {
                      "season":  "20",
@@ -2230,7 +2360,8 @@
                      "event_id":  5711343,
                      "event_subgroup_id":  7354934,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Indigo League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233141343985664016"
                  },
                  {
                      "season":  "20",
@@ -2247,7 +2378,8 @@
                      "event_id":  5711336,
                      "event_subgroup_id":  7354941,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Indigo League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233142454746431488"
                  },
                  {
                      "season":  "20",
@@ -2264,7 +2396,8 @@
                      "event_id":  5711340,
                      "event_subgroup_id":  7357491,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Indigo League Division 3 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233144588313346096"
                  },
                  {
                      "season":  "20",
@@ -2281,7 +2414,8 @@
                      "event_id":  5711343,
                      "event_subgroup_id":  7354932,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Indigo League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233142011483963424"
                  },
                  {
                      "season":  "20",
@@ -2298,7 +2432,8 @@
                      "event_id":  5711336,
                      "event_subgroup_id":  7354937,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Indigo League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233144418385346560"
                  },
                  {
                      "season":  "20",
@@ -2315,7 +2450,8 @@
                      "event_id":  5711340,
                      "event_subgroup_id":  7354945,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Indigo League Division 3 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233143962045054976"
                  },
                  {
                      "season":  "20",
@@ -2332,7 +2468,8 @@
                      "event_id":  5711343,
                      "event_subgroup_id":  7354936,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Indigo League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233143570716475408"
                  },
                  {
                      "season":  "20",
@@ -2349,7 +2486,8 @@
                      "event_id":  5711336,
                      "event_subgroup_id":  7354938,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Indigo League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233130748443951120"
                  },
                  {
                      "season":  "20",
@@ -2366,7 +2504,8 @@
                      "event_id":  5711340,
                      "event_subgroup_id":  7354942,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Indigo League Division 3 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233137587608944688"
                  },
                  {
                      "season":  "20",
@@ -2383,7 +2522,8 @@
                      "event_id":  5711333,
                      "event_subgroup_id":  7354946,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Indigo League Division 4 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233144468767309840"
                  },
                  {
                      "season":  "20",
@@ -2400,7 +2540,8 @@
                      "event_id":  5711342,
                      "event_subgroup_id":  7354949,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Indigo League Division 5 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233142574669971504"
                  },
                  {
                      "season":  "20",
@@ -2417,7 +2558,8 @@
                      "event_id":  5711343,
                      "event_subgroup_id":  7354935,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Indigo League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233139952449798160"
                  },
                  {
                      "season":  "20",
@@ -2434,7 +2576,8 @@
                      "event_id":  5711336,
                      "event_subgroup_id":  7354940,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Indigo League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233136791110615072"
                  },
                  {
                      "season":  "20",
@@ -2451,7 +2594,8 @@
                      "event_id":  5711340,
                      "event_subgroup_id":  7354944,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Indigo League Division 3 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233141358531526688"
                  },
                  {
                      "season":  "20",
@@ -2468,7 +2612,8 @@
                      "event_id":  5711339,
                      "event_subgroup_id":  7354957,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Lavender League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233171102052450304"
                  },
                  {
                      "season":  "20",
@@ -2485,7 +2630,8 @@
                      "event_id":  5711339,
                      "event_subgroup_id":  7354955,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Lavender League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233171457788166192"
                  },
                  {
                      "season":  "20",
@@ -2502,7 +2648,8 @@
                      "event_id":  5711331,
                      "event_subgroup_id":  7357492,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Lavender League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233171859149488128"
                  },
                  {
                      "season":  "20",
@@ -2519,7 +2666,8 @@
                      "event_id":  5711339,
                      "event_subgroup_id":  7354954,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Lavender League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233160464173432864"
                  },
                  {
                      "season":  "20",
@@ -2536,7 +2684,8 @@
                      "event_id":  5711331,
                      "event_subgroup_id":  7354959,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Lavender League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233168853360246832"
                  },
                  {
                      "season":  "20",
@@ -2553,7 +2702,8 @@
                      "event_id":  5711339,
                      "event_subgroup_id":  7354953,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Lavender League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233171485722198032"
                  },
                  {
                      "season":  "20",
@@ -2570,7 +2720,8 @@
                      "event_id":  5711338,
                      "event_subgroup_id":  7354968,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Lilac League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233207785477193728"
                  },
                  {
                      "season":  "20",
@@ -2587,7 +2738,8 @@
                      "event_id":  5711338,
                      "event_subgroup_id":  7354969,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Lilac League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233209684809007136"
                  },
                  {
                      "season":  "20",
@@ -2604,7 +2756,8 @@
                      "event_id":  5711337,
                      "event_subgroup_id":  7354971,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Lilac League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233208778847764512"
                  },
                  {
                      "season":  "20",
@@ -2621,7 +2774,8 @@
                      "event_id":  5711338,
                      "event_subgroup_id":  7354965,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Lilac League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233210718847565824"
                  },
                  {
                      "season":  "20",
@@ -2638,7 +2792,8 @@
                      "event_id":  5711337,
                      "event_subgroup_id":  7354972,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Lilac League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233207719265894400"
                  },
                  {
                      "season":  "20",
@@ -2655,7 +2810,8 @@
                      "event_id":  5711338,
                      "event_subgroup_id":  7354967,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Lilac League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233209599865995264"
                  },
                  {
                      "season":  "20",
@@ -2672,7 +2828,8 @@
                      "event_id":  5711264,
                      "event_subgroup_id":  7354678,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Amber League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232700903276757024"
                  },
                  {
                      "season":  "20",
@@ -2689,7 +2846,8 @@
                      "event_id":  null,
                      "event_subgroup_id":  null,
                      "event_name":  null,
-                     "available":  false
+                     "available":  false,
+                     "replay_activity_id":  null
                  },
                  {
                      "season":  "20",
@@ -2706,7 +2864,8 @@
                      "event_id":  5711252,
                      "event_subgroup_id":  7354686,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Pink League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232717425655218192"
                  },
                  {
                      "season":  "20",
@@ -2723,7 +2882,8 @@
                      "event_id":  5711252,
                      "event_subgroup_id":  7354688,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Pink League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232707197274472480"
                  },
                  {
                      "season":  "20",
@@ -2740,7 +2900,8 @@
                      "event_id":  5711251,
                      "event_subgroup_id":  7354703,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Saffron League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232763091467157536"
                  },
                  {
                      "season":  "20",
@@ -2757,7 +2918,8 @@
                      "event_id":  5711278,
                      "event_subgroup_id":  7354725,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Lime League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232943136815005744"
                  },
                  {
                      "season":  "20",
@@ -2774,7 +2936,8 @@
                      "event_id":  5711278,
                      "event_subgroup_id":  7354727,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Lime League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232943956541374496"
                  },
                  {
                      "season":  "20",
@@ -2791,7 +2954,8 @@
                      "event_id":  5711266,
                      "event_subgroup_id":  7354729,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Lime League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232944072849440800"
                  },
                  {
                      "season":  "20",
@@ -2808,7 +2972,8 @@
                      "event_id":  5711278,
                      "event_subgroup_id":  7354726,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Lime League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232941241828425744"
                  },
                  {
                      "season":  "20",
@@ -2825,7 +2990,8 @@
                      "event_id":  5711275,
                      "event_subgroup_id":  7354764,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Mint League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232953488013328400"
                  },
                  {
                      "season":  "20",
@@ -2842,7 +3008,8 @@
                      "event_id":  5711275,
                      "event_subgroup_id":  7354766,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Mint League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232953902964195376"
                  },
                  {
                      "season":  "20",
@@ -2859,7 +3026,8 @@
                      "event_id":  5711275,
                      "event_subgroup_id":  7354765,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Mint League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232952865276608512"
                  },
                  {
                      "season":  "20",
@@ -2876,7 +3044,8 @@
                      "event_id":  5711293,
                      "event_subgroup_id":  7354781,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Shamrock League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232960573316841472"
                  },
                  {
                      "season":  "20",
@@ -2893,7 +3062,8 @@
                      "event_id":  5711293,
                      "event_subgroup_id":  7354778,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Shamrock League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232960095132647456"
                  },
                  {
                      "season":  "20",
@@ -2910,7 +3080,8 @@
                      "event_id":  5711288,
                      "event_subgroup_id":  7354782,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Shamrock League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232960321163706384"
                  },
                  {
                      "season":  "20",
@@ -2927,7 +3098,8 @@
                      "event_id":  5711281,
                      "event_subgroup_id":  7354785,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Shamrock League Division 3 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232958389384708144"
                  },
                  {
                      "season":  "20",
@@ -2944,7 +3116,8 @@
                      "event_id":  5711289,
                      "event_subgroup_id":  7354788,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Shamrock League Division 4 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232955126635626544"
                  },
                  {
                      "season":  "20",
@@ -2961,7 +3134,8 @@
                      "event_id":  5711293,
                      "event_subgroup_id":  7354779,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Shamrock League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232960035883892768"
                  },
                  {
                      "season":  "20",
@@ -2978,7 +3152,8 @@
                      "event_id":  5711288,
                      "event_subgroup_id":  7354784,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Shamrock League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232957617917984784"
                  },
                  {
                      "season":  "20",
@@ -2995,7 +3170,8 @@
                      "event_id":  5711299,
                      "event_subgroup_id":  7354835,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Aqua League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232973281168801840"
                  },
                  {
                      "season":  "20",
@@ -3012,7 +3188,8 @@
                      "event_id":  5711299,
                      "event_subgroup_id":  7354834,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Aqua League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232972152582225952"
                  },
                  {
                      "season":  "20",
@@ -3029,7 +3206,8 @@
                      "event_id":  5711296,
                      "event_subgroup_id":  7354836,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Aqua League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232973733415419920"
                  },
                  {
                      "season":  "20",
@@ -3046,7 +3224,8 @@
                      "event_id":  5711302,
                      "event_subgroup_id":  7354840,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Aqua League Division 3 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232973424874045472"
                  },
                  {
                      "season":  "20",
@@ -3063,7 +3242,8 @@
                      "event_id":  5711299,
                      "event_subgroup_id":  7354833,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Aqua League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232974731374559248"
                  },
                  {
                      "season":  "20",
@@ -3080,7 +3260,8 @@
                      "event_id":  5711296,
                      "event_subgroup_id":  7354838,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Aqua League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232971681469612080"
                  },
                  {
                      "season":  "20",
@@ -3097,7 +3278,8 @@
                      "event_id":  5711297,
                      "event_subgroup_id":  7354869,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Cobalt League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232979874404958224"
                  },
                  {
                      "season":  "20",
@@ -3114,7 +3296,8 @@
                      "event_id":  5711297,
                      "event_subgroup_id":  7354868,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Cobalt League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232969956570497072"
                  },
                  {
                      "season":  "20",
@@ -3131,7 +3314,8 @@
                      "event_id":  5711316,
                      "event_subgroup_id":  7354880,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Navy League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232989343230771248"
                  },
                  {
                      "season":  "20",
@@ -3148,7 +3332,8 @@
                      "event_id":  5711324,
                      "event_subgroup_id":  7354882,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Navy League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232984957448405024"
                  },
                  {
                      "season":  "20",
@@ -3165,7 +3350,8 @@
                      "event_id":  5711316,
                      "event_subgroup_id":  7354881,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Navy League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232985752461983760"
                  },
                  {
                      "season":  "20",
@@ -3182,7 +3368,8 @@
                      "event_id":  5711341,
                      "event_subgroup_id":  7354926,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Indigo League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233138390927212544"
                  },
                  {
                      "season":  "20",
@@ -3199,7 +3386,8 @@
                      "event_id":  5711334,
                      "event_subgroup_id":  7354929,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Indigo League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233136261428740144"
                  },
                  {
                      "season":  "20",
@@ -3216,7 +3404,8 @@
                      "event_id":  5711341,
                      "event_subgroup_id":  7354925,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Indigo League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233130892140822576"
                  },
                  {
                      "season":  "20",
@@ -3233,7 +3422,8 @@
                      "event_id":  5711334,
                      "event_subgroup_id":  7354930,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Indigo League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233143162241630208"
                  },
                  {
                      "season":  "20",
@@ -3250,7 +3440,8 @@
                      "event_id":  5711341,
                      "event_subgroup_id":  7354928,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Indigo League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233142955797954592"
                  },
                  {
                      "season":  "20",
@@ -3267,7 +3458,8 @@
                      "event_id":  5711335,
                      "event_subgroup_id":  7354951,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Lavender League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233169896961802272"
                  },
                  {
                      "season":  "20",
@@ -3284,7 +3476,8 @@
                      "event_id":  5711335,
                      "event_subgroup_id":  7354950,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Lavender League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233165055384420400"
                  },
                  {
                      "season":  "20",
@@ -3301,7 +3494,8 @@
                      "event_id":  5711330,
                      "event_subgroup_id":  7354962,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Lilac League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233207985327374336"
                  },
                  {
                      "season":  "20",
@@ -3318,7 +3512,8 @@
                      "event_id":  5711330,
                      "event_subgroup_id":  7354964,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Open Dev Lilac League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233206416691216400"
                  },
                  {
                      "season":  "20",
@@ -3335,7 +3530,8 @@
                      "event_id":  5711261,
                      "event_subgroup_id":  7354683,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Womens Pink League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232715278565851184"
                  },
                  {
                      "season":  "20",
@@ -3352,7 +3548,8 @@
                      "event_id":  5711261,
                      "event_subgroup_id":  7354684,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Womens Pink League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232716215489478704"
                  },
                  {
                      "season":  "20",
@@ -3369,7 +3566,8 @@
                      "event_id":  5711280,
                      "event_subgroup_id":  7354752,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Womens Mint League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232950428234989584"
                  },
                  {
                      "season":  "20",
@@ -3386,7 +3584,8 @@
                      "event_id":  5711279,
                      "event_subgroup_id":  7354758,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Womens Mint League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232951673247055920"
                  },
                  {
                      "season":  "20",
@@ -3403,7 +3602,8 @@
                      "event_id":  5711280,
                      "event_subgroup_id":  7354754,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Womens Mint League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232953415091175456"
                  },
                  {
                      "season":  "20",
@@ -3420,7 +3620,8 @@
                      "event_id":  5711280,
                      "event_subgroup_id":  7354755,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Womens Mint League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232952134184288288"
                  },
                  {
                      "season":  "20",
@@ -3437,7 +3638,8 @@
                      "event_id":  5711279,
                      "event_subgroup_id":  7354759,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Womens Mint League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232950729226649600"
                  },
                  {
                      "season":  "20",
@@ -3454,7 +3656,8 @@
                      "event_id":  5711271,
                      "event_subgroup_id":  7354761,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Womens Mint League Division 3 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232939575196581904"
                  },
                  {
                      "season":  "20",
@@ -3471,7 +3674,8 @@
                      "event_id":  5711280,
                      "event_subgroup_id":  7354753,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Womens Mint League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232952983354654752"
                  },
                  {
                      "season":  "20",
@@ -3488,7 +3692,8 @@
                      "event_id":  5711279,
                      "event_subgroup_id":  7354756,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Womens Mint League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232951304911634448"
                  },
                  {
                      "season":  "20",
@@ -3505,7 +3710,8 @@
                      "event_id":  5711271,
                      "event_subgroup_id":  7354760,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Womens Mint League Division 3 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232948916398112816"
                  },
                  {
                      "season":  "20",
@@ -3522,7 +3728,8 @@
                      "event_id":  5711305,
                      "event_subgroup_id":  7354865,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Womens Cobalt League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232969382085050384"
                  },
                  {
                      "season":  "20",
@@ -3539,7 +3746,8 @@
                      "event_id":  5711305,
                      "event_subgroup_id":  7354862,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Womens Cobalt League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232979957863235616"
                  },
                  {
                      "season":  "20",
@@ -3556,7 +3764,8 @@
                      "event_id":  5711298,
                      "event_subgroup_id":  7354866,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Womens Cobalt League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232973442423013408"
                  },
                  {
                      "season":  "20",
@@ -3573,7 +3782,8 @@
                      "event_id":  5711305,
                      "event_subgroup_id":  7354864,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Womens Cobalt League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232979930340196400"
                  },
                  {
                      "season":  "20",
@@ -3590,7 +3800,8 @@
                      "event_id":  5711320,
                      "event_subgroup_id":  7354916,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Womens Indigo League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233131953064837136"
                  },
                  {
                      "season":  "20",
@@ -3607,7 +3818,8 @@
                      "event_id":  5711320,
                      "event_subgroup_id":  7354919,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Womens Indigo League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233140706224947232"
                  },
                  {
                      "season":  "20",
@@ -3624,7 +3836,8 @@
                      "event_id":  5711320,
                      "event_subgroup_id":  7354918,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Womens Indigo League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233136555575296016"
                  },
                  {
                      "season":  "20",
@@ -3641,7 +3854,8 @@
                      "event_id":  5711312,
                      "event_subgroup_id":  7354920,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Womens Indigo League Division 2 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233135614448943136"
                  },
                  {
                      "season":  "20",
@@ -3658,7 +3872,8 @@
                      "event_id":  5711320,
                      "event_subgroup_id":  7354915,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Womens Indigo League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233128874017882144"
                  },
                  {
                      "season":  "20",
@@ -3675,7 +3890,8 @@
                      "event_id":  5711332,
                      "event_subgroup_id":  7354960,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Womens Lilac League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233207241945694240"
                  },
                  {
                      "season":  "20",
@@ -3692,7 +3908,8 @@
                      "event_id":  5711273,
                      "event_subgroup_id":  7354748,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Womens Dev Mint League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232950552931663888"
                  },
                  {
                      "season":  "20",
@@ -3709,7 +3926,8 @@
                      "event_id":  5711273,
                      "event_subgroup_id":  7354747,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Womens Dev Mint League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232938502788562992"
                  },
                  {
                      "season":  "20",
@@ -3726,7 +3944,8 @@
                      "event_id":  5711273,
                      "event_subgroup_id":  7354749,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Womens Dev Mint League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2232940947019218960"
                  },
                  {
                      "season":  "20",
@@ -3743,7 +3962,8 @@
                      "event_id":  5711313,
                      "event_subgroup_id":  7354913,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Womens Dev Indigo League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233139214948581408"
                  },
                  {
                      "season":  "20",
@@ -3760,7 +3980,8 @@
                      "event_id":  5711313,
                      "event_subgroup_id":  7354912,
                      "event_name":  "Zwift Racing League 26/27: Fresh \u0026 Fast: Womens Dev Indigo League Division 1 - Race 1",
-                     "available":  true
+                     "available":  true,
+                     "replay_activity_id":  "2233139186267930640"
                  }
              ]
 }

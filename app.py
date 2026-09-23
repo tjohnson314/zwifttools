@@ -3463,6 +3463,7 @@ def api_race_load():
             'race_id': race_id,
             'route_name': race_data.route_name or 'Unknown',
             'route_slug': race_data.route_slug,
+            'route_geometry_source': race_data.route_geometry_source,
             'finish_line_km': round(float(race_data.finish_line_km), 3),
             'rider_count': len(race_data.riders),
             'min_time': int(race_data.min_time),
@@ -3507,6 +3508,8 @@ def _load_multi_subgroup_race(race_id):
     merged_max_time = float('-inf')
     merged_elevation = None
     merged_world = None
+    merged_route_geometry_source = None
+    merged_route_latlng = None
     base_rank = 0
 
     for sg_info in manifest['subgroups']:
@@ -3534,6 +3537,8 @@ def _load_multi_subgroup_race(race_id):
             merged_route_slug = sg_data.route_slug
             merged_elevation = sg_data.elevation_profile
             merged_world = sg_data.world
+            merged_route_geometry_source = sg_data.route_geometry_source
+            merged_route_latlng = sg_data.route_latlng
         else:
             align_riders_to_elevation_profile(
                 sg_data.riders, merged_elevation
@@ -3592,6 +3597,8 @@ def _load_multi_subgroup_race(race_id):
         source_activity_id=merged_source_activity_id,
         route_slug=merged_route_slug,
         world=merged_world,
+        route_geometry_source=merged_route_geometry_source,
+        route_latlng=merged_route_latlng,
     )
     _race_data_cache[race_id] = merged
 
@@ -3757,23 +3764,18 @@ def api_race_data(race_id):
         from shared.world_config import get_world_map_config
         map_config = get_world_map_config(world)
 
-    # Load official route polyline from ZwiftMap (if available)
-    route_latlng = None
-    if race_data.route_slug:
-        try:
-            from race_replay.data_cleaner import load_route_data
-            rd = load_route_data(race_data.route_slug)
-            if rd is not None:
-                route_latlng = rd.latlng.tolist()
-        except Exception as e:
-            logger.warning("Could not load route latlng: %s", e)
+    route_latlng = (
+        race_data.route_latlng.tolist()
+        if race_data.route_latlng is not None
+        else None
+    )
 
     # Collect dev warnings for localhost debugging
     dev_warnings = []
-    if race_data.route_slug:
-        from race_replay.data_cleaner import ROUTE_STRAVA_SEGMENTS
-        if race_data.route_slug not in ROUTE_STRAVA_SEGMENTS:
-            dev_warnings.append(f"Missing Strava segment ID for route: {race_data.route_slug}")
+    if race_data.route_geometry_source == 'zwiftmap_strava':
+        dev_warnings.append(
+            f"Using ZwiftMap/Strava route geometry fallback: {race_data.route_slug}"
+        )
     try:
         from shared.youtube_streams import get_api_key
         if not get_api_key():
@@ -3788,6 +3790,7 @@ def api_race_data(race_id):
         'race_id': race_id,
         'route_name': race_data.route_name,
         'route_slug': race_data.route_slug,
+        'route_geometry_source': race_data.route_geometry_source,
         'world': world,
         'course_id': course_id,
         'source_activity_id': str(race_data.source_activity_id) if race_data.source_activity_id else None,

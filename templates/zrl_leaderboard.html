@@ -63,6 +63,7 @@
                 <div class="input-row">
                     <button id="load-btn" class="btn btn-primary" disabled>Load Leaderboard</button>
                     <button id="refetch-btn" class="btn btn-secondary" title="Re-download rider data from Zwift" disabled>Re-fetch</button>
+                    <a id="race-replay-link" class="btn btn-secondary" href="/race-replay" title="Open this race in Race Replay" hidden>Race Replay</a>
                 </div>
             </div>
         </div>
@@ -165,9 +166,14 @@ function selectedCatalogRow() {
 }
 function syncSelectedSubgroup() {
     const row = selectedCatalogRow();
+    const replayLink = document.getElementById('race-replay-link');
     document.getElementById('subgroup-input').value = row?.event_subgroup_id || '';
     document.getElementById('load-btn').disabled = !row?.event_subgroup_id || leaderboardOpInProgress;
     document.getElementById('refetch-btn').disabled = !row?.event_subgroup_id || leaderboardOpInProgress;
+    replayLink.hidden = !row?.replay_activity_id;
+    if (row?.replay_activity_id) {
+        replayLink.href = `/race-replay?activity_id=${encodeURIComponent(row.replay_activity_id)}`;
+    }
 }
 function populateDivisions(selectedValue) {
     const rows = eventCatalog.filter(row => row.available && row.race === document.getElementById('race-select').value && row.competition_value === document.getElementById('competition-select').value && row.league_value === document.getElementById('league-select').value);
