@@ -89,21 +89,21 @@
 
     <section class="panel">
         <h2>Overall Points</h2>
-        <div class="table-container"><table class="leaderboard-table" id="overall"><thead><tr><th data-sort="name">Rider</th><th data-sort="activity_id">Activity</th><th data-sort="finish_time_ms">Finish</th><th data-sort="fal">FAL</th><th data-sort="fts">FTS</th><th data-sort="fin">FIN</th><th data-sort="podium">Podium</th><th data-sort="total">Total</th></tr></thead><tbody></tbody></table></div>
+        <div class="table-container"><table class="leaderboard-table" id="overall"><thead><tr><th>#</th><th data-sort="name">Rider</th><th data-sort="activity_id">Activity</th><th data-sort="finish_time_ms">Finish</th><th data-sort="fal">FAL</th><th data-sort="fts">FTS</th><th data-sort="fin">FIN</th><th data-sort="podium">Podium</th><th data-sort="total">Total</th></tr></thead><tbody></tbody></table></div>
     </section>
 
     <section class="panel">
         <h2>FAL by Segment</h2>
         <label for="fal-segment">Segment</label>
         <select id="fal-segment" class="segment-select"></select>
-        <div class="table-container"><table class="leaderboard-table" id="fal"><thead><tr><th>Rider</th><th>Activity</th><th>Reached End</th><th>FAL</th></tr></thead><tbody></tbody></table></div>
+        <div class="table-container"><table class="leaderboard-table" id="fal"><thead><tr><th>#</th><th>Rider</th><th>Activity</th><th>Reached End</th><th>FAL</th></tr></thead><tbody></tbody></table></div>
     </section>
 
     <section class="panel">
         <h2>FTS by Segment</h2>
         <label for="fts-segment">Segment</label>
         <select id="fts-segment" class="segment-select"></select>
-        <div class="table-container"><table class="leaderboard-table" id="fts"><thead><tr><th>Rider</th><th>Activity</th><th>Segment Time</th><th>FTS</th></tr></thead><tbody></tbody></table></div>
+        <div class="table-container"><table class="leaderboard-table" id="fts"><thead><tr><th>#</th><th>Rider</th><th>Activity</th><th>Segment Time</th><th>FTS</th></tr></thead><tbody></tbody></table></div>
     </section>
 </div>
 <div id="loading-overlay" class="loading-overlay" style="display:none;">
@@ -242,11 +242,11 @@ function renderDetail(kind) {
     const select = document.getElementById(`${kind}-segment`);
     const rows = data[kind].filter(row => row.segment_key === select.value);
     const segmentPasses = passesBySegment(data.segments);
-    document.querySelector(`#${kind} tbody`).innerHTML = rows.length ? rows.map(row => {
+    document.querySelector(`#${kind} tbody`).innerHTML = rows.length ? rows.map((row, index) => {
         const showPass = kind === 'fts' && segmentPasses.get(row.segment_key).size > 1;
         const name = showPass ? `${row.name} (pass ${row.pass})` : row.name;
-        return `<tr><td>${esc(name)}</td><td>${link(row.activity_id)}</td><td>${esc(row.time)}</td><td>${row.points}</td></tr>`;
-    }).join('') : '<tr><td colspan="4" class="empty-row">No telemetry reached this segment.</td></tr>';
+        return `<tr><td>${index + 1}</td><td>${esc(name)}</td><td>${link(row.activity_id)}</td><td>${esc(row.time)}</td><td>${row.points}</td></tr>`;
+    }).join('') : '<tr><td colspan="5" class="empty-row">No telemetry reached this segment.</td></tr>';
 }
 function renderOverall() {
     const rows = [...data.summary].sort((left, right) => {
@@ -257,7 +257,7 @@ function renderOverall() {
         }
         return overallSort.direction * ((a ?? -Infinity) - (b ?? -Infinity));
     });
-    document.querySelector('#overall tbody').innerHTML = rows.map(row => `<tr><td>${esc(row.name)}${row.telemetry_available ? '' : '<span class="warning-tag" title="Activity telemetry unavailable">Incomplete</span>'}</td><td>${link(row.activity_id)}</td><td>${esc(row.finish_time || 'DNF')}</td><td>${row.fal}</td><td>${row.fts}</td><td>${row.fin}</td><td>${row.podium}</td><td>${row.total}</td></tr>`).join('');
+    document.querySelector('#overall tbody').innerHTML = rows.map((row, index) => `<tr><td>${index + 1}</td><td>${esc(row.name)}${row.telemetry_available ? '' : '<span class="warning-tag" title="Activity telemetry unavailable">Incomplete</span>'}</td><td>${link(row.activity_id)}</td><td>${esc(row.finish_time || 'DNF')}</td><td>${row.fal}</td><td>${row.fts}</td><td>${row.fin}</td><td>${row.podium}</td><td>${row.total}</td></tr>`).join('');
 }
 function renderTeams() {
     const panel = document.getElementById('team-panel');
