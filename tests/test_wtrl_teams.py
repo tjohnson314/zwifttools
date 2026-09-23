@@ -53,6 +53,7 @@ def test_lime_b1_has_eleven_five_rider_teams():
     assert len(source["teams"]) == 11
     assert all(len(team["riders"]) == 5 for team in source["teams"])
     assert len(assignments) == 55
+    assert assignments["2232941382010470400"] == "RTB ÆRO"
 
 
 def test_team_totals_use_local_rider_scores_only():
