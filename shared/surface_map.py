@@ -270,7 +270,7 @@ def _route_segment_markers(map_id: int, route: dict, leadin: dict | None, main: 
     segment_entries = route.get("segments")
     if segment_entries is None:
         segment_entries = _load_wad_segments().get(route.get("name", "").strip(), {}).get("segments", [])
-    if not segment_entries or not leadin or not main:
+    if not segment_entries or not (leadin or main):
         return []
     projection = _projection(map_id)
     names = _load_segment_names()
@@ -286,7 +286,7 @@ def _route_segment_markers(map_id: int, route: dict, leadin: dict | None, main: 
             [point[0] for point in local_path],
             [point[1] for point in local_path],
         )
-        name = names.get(int(segment["hash"]), f"Segment {index}")
+        name = segment.get("name") or names.get(int(segment["hash"]), f"Segment {index}")
         segment_hash = int(segment["hash"])
         pass_numbers[segment_hash] = pass_numbers.get(segment_hash, 0) + 1
         markers.append({

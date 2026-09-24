@@ -378,9 +378,154 @@ def parse_segment_data(root: ET.Element) -> list[dict]:
     return segments
 
 
+def parse_segment_names(data: bytes) -> dict[int, str]:
+    """Return leaderboard segment names keyed by their directional network hash."""
+    root = load_multiroot(data)
+    names: dict[int, str] = {}
+    for element in root.iter():
+        attributes = element.attrib
+        for direction in ("F", "R"):
+            hash_value = attributes.get(f"m_overrideNetworkHash{direction}")
+            if not hash_value:
+                continue
+            name = next((
+                attributes.get(key, "").strip()
+                for key in (
+                    f"m_ArchFriendlyMaleName{direction}",
+                    f"m_ArchFriendlyName{direction}",
+                    f"m_ArchSegmentName{direction}",
+                    f"m_ArchName{direction}",
+                    "m_ArchFriendlyMaleName",
+                    "m_ArchFriendlyName",
+                    "m_ArchSegmentName",
+                    "m_ArchName",
+                    "m_Name",
+                    "m_leaderJersey_Name",
+                )
+                if attributes.get(key, "").strip()
+            ), "")
+            if name:
+                names.setdefault(int(hash_value), name)
+    return names
+
+
+def parse_segment_definitions(data: bytes) -> list[dict]:
+    """Extract directional segment boundaries from timing-arch entities."""
+    root = load_multiroot(data)
+    definitions = []
+    for element in root.iter("ent"):
+        attributes = element.attrib
+        if attributes.get("type") != "ENTITY_TYPE_TIMINGARCH":
+            continue
+        try:
+            road_id = int(attributes["m_roadId"])
+            finish_time = float(attributes["m_roadTime"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        for direction in ("F", "R"):
+            try:
+                start_time = float(attributes[f"m_startLineSplineTime{direction}"])
+                segment_hash = int(attributes[f"m_overrideNetworkHash{direction}"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            name = next((
+                attributes.get(key, "").strip()
+                for key in (
+                    f"m_ArchFriendlyMaleName{direction}",
+                    f"m_ArchFriendlyName{direction}",
+                    "m_ArchFriendlyMaleName",
+                    "m_ArchFriendlyName",
+                )
+                if attributes.get(key, "").strip()
+            ), "")
+            if not name:
+                continue
+            try:
+                segment_distance = float(attributes[f"m_ArchSegmentDistance{direction}"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            definitions.append({
+                "hash": segment_hash,
+                "name": name,
+                "road_id": road_id,
+                "start_time": start_time,
+                "end_time": finish_time,
+                "distance_m": segment_distance * 1000,
+            })
+    return definitions
+
+
+def derive_segment_data(root: ET.Element, definitions: list[dict]) -> list[dict]:
+    """Derive segment passages from route checkpoints and timing-arch bounds."""
+    legs = [root.find("leadinhighrescheckpoint"), root.find("highrescheckpoint")]
+    entries = [entry for leg in legs if leg is not None for entry in leg.findall("entry")]
+    points = []
+    for entry in entries:
+        try:
+            points.append((float(entry.get("x")), float(entry.get("z"))))
+        except (TypeError, ValueError):
+            points.append(None)
+    cumulative = [0.0]
+    for previous, current in zip(points, points[1:]):
+        if previous is None or current is None:
+            cumulative.append(cumulative[-1])
+        else:
+            cumulative.append(cumulative[-1] + math.hypot(
+                current[0] - previous[0], current[1] - previous[1]
+            ) / UNITS_PER_METRE)
+    derived = []
+    for definition in definitions:
+        low = min(definition["start_time"], definition["end_time"])
+        high = max(definition["start_time"], definition["end_time"])
+        matching = []
+        for index, entry in enumerate(entries):
+            try:
+                road_id = int(entry.get("road"))
+                road_time = float(entry.get("time"))
+            except (TypeError, ValueError):
+                continue
+            if road_id == definition["road_id"] and low <= road_time <= high:
+                matching.append(index)
+        if not matching:
+            continue
+        start = matching[0]
+        previous = matching[0]
+        for current in matching[1:] + [None]:
+            if current is None or current != previous + 1:
+                if previous > start:
+                    distance_m = cumulative[previous] - cumulative[start]
+                    expected_m = definition["distance_m"]
+                    try:
+                        first_time = float(entries[start].get("time"))
+                        last_time = float(entries[previous].get("time"))
+                    except (TypeError, ValueError):
+                        first_time = last_time = 0.0
+                    expected_direction = definition["end_time"] - definition["start_time"]
+                    actual_direction = last_time - first_time
+                    direction_matches = expected_direction * actual_direction > 0
+                    distance_matches = expected_m and 0.5 <= distance_m / expected_m <= 1.5
+                    if not direction_matches or not distance_matches:
+                        if current is not None:
+                            start = current
+                        previous = current
+                        continue
+                    derived.append({
+                        "hash": definition["hash"],
+                        "percent_start": start / max(len(entries) - 1, 1),
+                        "percent_end": previous / max(len(entries) - 1, 1),
+                        "name": definition["name"],
+                    })
+                if current is not None:
+                    start = current
+            previous = current
+    return derived
+
+
 def parse_route(data: bytes, map_id: int, max_points: int,
                 roads: dict | None = None, styles: list[str] | None = None,
-                surface_map: dict | None = None) -> dict | None:
+                surface_map: dict | None = None,
+                segment_names: dict[int, str] | None = None,
+                segment_definitions: list[dict] | None = None) -> dict | None:
     root = load_multiroot(data)
     r = root.find("route")
     if r is None:
@@ -403,6 +548,8 @@ def parse_route(data: bytes, map_id: int, max_points: int,
     route_profile = build_profile(main_pts, max_points, _surfaces(main_rt))
     leadin_profile = build_profile(leadin_pts, max_points, _surfaces(leadin_rt))
     segment_entries = parse_segment_data(root)
+    if not segment_entries and segment_definitions:
+        segment_entries = derive_segment_data(root, segment_definitions)
     if segment_entries:
         combined_points = leadin_pts + main_pts
         physical_distance = [value / UNITS_PER_METRE for value in _cumulative_planar(combined_points)]
@@ -418,6 +565,8 @@ def parse_route(data: bytes, map_id: int, max_points: int,
             segment["end_distance_m"] = round(
                 _distance_at(segment["percent_end"] * checkpoint_positions[-1]), 2
             )
+            if segment_names and segment["hash"] in segment_names:
+                segment["name"] = segment_names[segment["hash"]]
     segment_path = build_segment_path(leadin_pts + main_pts, max_points * 2) if segment_entries else None
 
     return {
@@ -492,7 +641,7 @@ def main() -> int:
         map_id = int(re.sub(r"\D", "", world) or 0)
         try:
             entries = read_wad_entries(
-                wad, keep_substrings=("/routes/", "road.xml", "roadstyle.xml"))
+                wad, keep_substrings=("/routes/", "road.xml", "roadstyle.xml", "entities.xml"))
         except Exception as exc:  # noqa: BLE001 - report and continue
             print(f"  {world}: FAILED to read wad ({exc})", file=sys.stderr)
             continue
@@ -505,6 +654,10 @@ def main() -> int:
                             if k.lower().endswith("roadstyle.xml")), None)
         roads = parse_roads(road_bytes.decode("utf-8", "replace")) if road_bytes else {}
         styles = parse_roadstyles(style_bytes) if style_bytes else []
+        entity_bytes = next((v for k, v in entries.items()
+                     if k.lower().endswith("entities.xml")), None)
+        segment_names = parse_segment_names(entity_bytes) if entity_bytes else {}
+        segment_definitions = parse_segment_definitions(entity_bytes) if entity_bytes else []
 
         route_files = sorted(
             (nm for nm in entries if "/routes/" in nm and nm.endswith(".xml")),
@@ -517,7 +670,8 @@ def main() -> int:
         for nm in route_files:
             try:
                 route = parse_route(entries[nm], map_id, args.max_points,
-                                    roads, styles, surface_map)
+                                    roads, styles, surface_map, segment_names,
+                                    segment_definitions)
             except Exception as exc:  # noqa: BLE001
                 print(f"  {world}/{nm}: parse error ({exc})", file=sys.stderr)
                 continue
