@@ -456,7 +456,7 @@ def estimate_draft_efficiency(
         crr = crr[valid]
 
     # Absolute CdA: rider's own (frontal-area-scaled) CdA plus the bike's bias.
-    cda = _RIDER_BASELINE_CD * frontal_area + setup.cda_bias
+    cda = rider_cda_from_area(frontal_area) + setup.cda_bias
     total_mass = rider_weight_kg + setup.weight_kg
 
     safe_speed = np.maximum(speed_mps, 0.5)
