@@ -15,10 +15,10 @@ from bike_comparison.bike_data import BikeSetup, get_bike_stats, get_bike_databa
 from shared.utils import calculate_normalized_power
 
 
-# Physics constants (from Zwift/Gribble model)
+# Physics constants (from Zwift source code)
 AIR_DENSITY = 1.226  # kg/m³ at sea level, matching the recovered Zwift comparison
-GRAVITY = 9.8067  # m/s²
-DRIVETRAIN_LOSS = 0.025  # 2.5% drivetrain loss
+GRAVITY = 9.81  # m/s²
+DRIVETRAIN_LOSS = 0.0  # No drivetrain loss
 
 
 @dataclass
