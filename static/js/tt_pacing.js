@@ -14,6 +14,7 @@ let planChart = null;     // Chart.js instance
 let lastPlanData = null;  // most recent plan response, for re-rendering on unit change
 let serverDividerIdx = []; // profile-point indices of the current buckets' dividers
 let bucketSliderTimer = null;
+let planRequestSeq = 0;
 let draftSliderTimer = null;
 let laps = 1;             // number of laps for looped routes
 let routeSlugMap = {};    // slug → route object, for URL deep-linking
@@ -454,7 +455,7 @@ function onBucketSliderInput() {
     clearTimeout(bucketSliderTimer);
     bucketSliderTimer = setTimeout(() => {
         requestPlan({ numBuckets: k >= max ? null : k, isBuild: false });
-    }, 220);
+    }, 400);
 }
 
 async function requestPlan({ numBuckets = null, isBuild = false } = {}) {
@@ -470,11 +471,14 @@ async function requestPlan({ numBuckets = null, isBuild = false } = {}) {
         return;
     }
 
+    const seq = ++planRequestSeq;
     const btn = document.getElementById('planBtn');
     btn.disabled = true;
     btn.classList.add('loading');
-    if (isBuild) btn.textContent = '⏳ Optimising…';
-    document.getElementById('bucketSlider').disabled = true;
+    if (isBuild) {
+        btn.textContent = '⏳ Optimising…';
+        document.getElementById('bucketSlider').disabled = true;
+    }
     document.getElementById('planHint').textContent = '';
 
     try {
@@ -499,14 +503,16 @@ async function requestPlan({ numBuckets = null, isBuild = false } = {}) {
         });
 
         const data = await resp.json();
+        if (seq !== planRequestSeq) return;  // superseded by a newer request
         if (!resp.ok) {
             showError(data.error || 'Planning failed');
             return;
         }
         displayResults(data, isBuild);
     } catch (err) {
-        showError('Network error: ' + err.message);
+        if (seq === planRequestSeq) showError('Network error: ' + err.message);
     } finally {
+        if (seq !== planRequestSeq) return;
         btn.disabled = false;
         btn.classList.remove('loading');
         btn.textContent = '▶ Build Pacing Plan';
