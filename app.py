@@ -9,7 +9,7 @@ Run with: python app.py
 Then open: http://localhost:5000
 """
 
-from flask import Flask, render_template, jsonify, request, redirect, url_for, session, Response, send_file, stream_with_context
+from flask import Flask, render_template, jsonify, request, redirect, url_for, session, Response, send_file, send_from_directory, stream_with_context
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -244,6 +244,14 @@ def index():
     logged_in = 'tokens' in session
     return render_template('landing.html', logged_in=logged_in,
                            dev_tools=_surface_map_dev_available())
+
+
+@app.route('/favicon.ico')
+def favicon():
+    """Serve favicon.ico from the app root, which browsers request directly."""
+    return send_from_directory(
+        os.path.join(app.static_folder, 'img'), 'favicon.ico', mimetype='image/vnd.microsoft.icon'
+    )
 
 
 @app.route('/bike-comparison')
@@ -3650,6 +3658,14 @@ def api_race_data(race_id):
         except Exception as e:
             return jsonify({'error': str(e)}), 500
 
+    try:
+        return _build_race_data_response(race_id)
+    except Exception as e:
+        logger.exception("Error building race data response for %s", race_id)
+        return jsonify({'error': str(e)}), 500
+
+
+def _build_race_data_response(race_id):
     race_data = _race_data_cache[race_id]
     no_drafting = 'NO_DRAFTING' in _race_rules(race_id)
 
