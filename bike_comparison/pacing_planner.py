@@ -471,6 +471,45 @@ def load_route_profile(
     )
 
 
+def truncate_route_profile(route: RouteProfile, distance_m: float) -> RouteProfile:
+    """Return the initial section of a route, interpolating its final sample."""
+    distances = np.asarray(route.distance_m, dtype=float)
+    end_distance = float(distances[0]) + distance_m
+    if not np.isfinite(distance_m) or distance_m <= 0 or end_distance >= distances[-1]:
+        raise ValueError("Custom distance must be positive and shorter than the full route")
+
+    end_index = int(np.searchsorted(distances, end_distance, side="left"))
+    cropped_distance = np.append(distances[:end_index], end_distance)
+    cropped_altitude = np.append(
+        route.altitude_m[:end_index],
+        np.interp(end_distance, distances, route.altitude_m),
+    )
+
+    cropped_surfaces = None
+    if route.surfaces is not None:
+        surface_index = np.searchsorted(distances, end_distance, side="right") - 1
+        cropped_surfaces = np.append(route.surfaces[:end_index], route.surfaces[surface_index])
+
+    cropped_lats = cropped_lngs = None
+    if route.lats is not None and route.lngs is not None:
+        cropped_lats = np.append(
+            route.lats[:end_index], np.interp(end_distance, distances, route.lats)
+        )
+        cropped_lngs = np.append(
+            route.lngs[:end_index], np.interp(end_distance, distances, route.lngs)
+        )
+
+    return RouteProfile(
+        name=route.name,
+        distance_m=cropped_distance,
+        altitude_m=cropped_altitude,
+        lats=cropped_lats,
+        lngs=cropped_lngs,
+        surfaces=cropped_surfaces,
+        world=route.world,
+    )
+
+
 def _traverse(v0, drive, f_grav, f_roll, aero_k, inv_mass, length):
     """Integrate one chunk, returning (exit_speed, time_seconds).
 

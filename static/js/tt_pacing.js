@@ -70,6 +70,12 @@ function getHeightCm() {
     return isImperial() ? v / CM_TO_IN : v;
 }
 
+function getCustomDistanceKm() {
+    const value = parseFloat(document.getElementById('customDistance').value);
+    if (isNaN(value)) return null;
+    return isImperial() ? value / KM_TO_MI : value;
+}
+
 function setUnits(unit) {
     if (unit === currentUnit) return;
     convertInputs(unit);          // convert field values before switching
@@ -82,14 +88,18 @@ function setUnits(unit) {
 function convertInputs(newUnit) {
     const wEl = document.getElementById('riderWeight');
     const hEl = document.getElementById('riderHeight');
+    const distanceEl = document.getElementById('customDistance');
     const w = parseFloat(wEl.value);
     const h = parseFloat(hEl.value);
+    const distance = parseFloat(distanceEl.value);
     if (newUnit === 'imperial') {
         if (!isNaN(w)) wEl.value = Math.round(w * KG_TO_LB);
         if (!isNaN(h)) hEl.value = (h * CM_TO_IN).toFixed(1);
+        if (!isNaN(distance)) distanceEl.value = (distance * KM_TO_MI).toFixed(1);
     } else {
         if (!isNaN(w)) wEl.value = (w / KG_TO_LB).toFixed(1);
         if (!isNaN(h)) hEl.value = Math.round(h / CM_TO_IN);
+        if (!isNaN(distance)) distanceEl.value = (distance / KM_TO_MI).toFixed(1);
     }
 }
 
@@ -101,11 +111,13 @@ function updateInputConstraints() {
         wEl.min = 66; wEl.max = 440; wEl.step = 1;
         document.getElementById('heightLabel').textContent = 'Height (in)';
         hEl.min = 55; hEl.max = 87; hEl.step = 0.5;
+        document.getElementById('customDistanceLabel').textContent = 'Custom distance (mi)';
     } else {
         document.getElementById('weightLabel').textContent = 'Weight (kg)';
         wEl.min = 30; wEl.max = 200; wEl.step = 0.5;
         document.getElementById('heightLabel').textContent = 'Height (cm)';
         hEl.min = 140; hEl.max = 220; hEl.step = 1;
+        document.getElementById('customDistanceLabel').textContent = 'Custom distance (km)';
     }
 }
 
@@ -152,6 +164,7 @@ function saveSettings() {
         includeLeadin: document.getElementById('includeLeadin').checked,
         draftLevel: document.getElementById('draftLevel').value,
         laps: laps,
+        customDistanceKm: getCustomDistanceKm(),
     };
     try { localStorage.setItem(TT_SETTINGS_KEY, JSON.stringify(data)); } catch (e) { /* ignore */ }
 }
@@ -193,6 +206,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (settings.weightKg != null) document.getElementById('riderWeight').value = settings.weightKg;
     if (settings.heightCm != null) document.getElementById('riderHeight').value = settings.heightCm;
     if (settings.npTarget != null) document.getElementById('avgPower').value = settings.npTarget;
+    if (settings.customDistanceKm != null) {
+        const value = isImperial() ? settings.customDistanceKm * KM_TO_MI : settings.customDistanceKm;
+        document.getElementById('customDistance').value = value.toFixed(1);
+    }
     if (settings.includeLeadin != null) document.getElementById('includeLeadin').checked = settings.includeLeadin;
     if (settings.draftLevel != null) document.getElementById('draftLevel').value = settings.draftLevel;
     onDraftLevelInput();
@@ -226,7 +243,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Persist choices whenever the user changes them. Bike selections persist
     // via the BikeSelector onChange handler.
-    ['riderWeight', 'riderHeight', 'avgPower', 'worldFilter', 'routeSelect',
+    ['riderWeight', 'riderHeight', 'avgPower', 'customDistance', 'worldFilter', 'routeSelect',
      'includeLeadin', 'draftLevel'].forEach(id => {
         const el = document.getElementById(id);
         el.addEventListener('change', saveSettings);
@@ -498,6 +515,7 @@ async function requestPlan({ numBuckets = null, isBuild = false } = {}) {
                 upgrade_level:   level,
                 draft_fraction:  getDraftFraction(),
                 laps:            (selectedRoute.is_loop ? laps : 1),
+                custom_distance_km: getCustomDistanceKm(),
                 num_buckets:     numBuckets != null ? numBuckets : undefined,
             }),
         });

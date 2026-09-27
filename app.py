@@ -35,7 +35,12 @@ logger = logging.getLogger(__name__)
 
 from bike_comparison.bike_data import get_bike_database, get_bike_stats, BASE_CDA
 from bike_comparison.physics import compare_bike_setups, frontal_area_from_rider, rider_cda, estimate_draft_efficiency
-from bike_comparison.pacing_planner import plan_tt_pacing, list_routes, load_route_profile
+from bike_comparison.pacing_planner import (
+    list_routes,
+    load_route_profile,
+    plan_tt_pacing,
+    truncate_route_profile,
+)
 from shared.utils import calculate_normalized_power
 from shared.data_fetcher import (
     fetch_rider_telemetry, convert_telemetry_to_dataframe,
@@ -2662,6 +2667,8 @@ def api_tt_pacing_plan():
                         dividers are placed optimally and this wins over dividers_km
         laps            (int, optional) — number of laps for looped routes; the
                         main leg is repeated this many times (lead-in ridden once)
+        custom_distance_km (float, optional) — plan only the initial section of
+                              the course, shorter than its full distance
     """
     body = request.get_json(force=True, silent=True) or {}
 
@@ -2705,6 +2712,15 @@ def api_tt_pacing_plan():
     if weight_kg <= 0 or height_cm <= 0:
         return jsonify({'error': 'rider_weight_kg and rider_height_cm must be positive'}), 400
 
+    custom_distance_km = body.get('custom_distance_km')
+    if custom_distance_km is not None:
+        try:
+            custom_distance_km = float(custom_distance_km)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'custom_distance_km must be a number'}), 400
+        if custom_distance_km <= 0:
+            return jsonify({'error': 'custom_distance_km must be positive'}), 400
+
     db = get_db()
     bike_setup = db.get_bike_stats(frame_id, wheel_id, level)
     if bike_setup is None:
@@ -2734,6 +2750,8 @@ def api_tt_pacing_plan():
             include_leadin=bool(body.get('include_leadin', True)),
             laps=laps,
         )
+        if custom_distance_km is not None:
+            route = truncate_route_profile(route, custom_distance_km * 1000.0)
         result = plan_tt_pacing(
             route=route,
             rider_weight_kg=weight_kg,
