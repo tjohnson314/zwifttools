@@ -15,7 +15,7 @@
             <div>
                 <a href="/" class="back-link">&#8592; Back to Tools</a>
                 <h1>Power Dashboard</h1>
-                <p class="subtitle">Best power curve from your last 90 days. Add dividers in the activity list to compare power across date ranges.</p>
+                <p class="subtitle">Best power curve from your last 90 days. Add dividers in the activity list to compare date ranges. W/kg is only shown when an event weight is available.</p>
             </div>
             <div id="loadSummary" class="load-summary" style="display:none;"></div>
         </header>
@@ -34,7 +34,13 @@
             <section class="panel panel-left">
                 <div class="panel-title-row">
                     <h2>Peak Power Curve</h2>
-                    <span id="pinState" class="pin-state">Hover to inspect</span>
+                    <div class="power-heading-tools">
+                        <div class="power-unit-control" role="group" aria-label="Power unit">
+                            <button type="button" class="active" data-power-unit="W" aria-pressed="true">W</button>
+                            <button type="button" data-power-unit="W/kg" aria-pressed="false">W/kg</button>
+                        </div>
+                        <span id="pinState" class="pin-state">Hover to inspect</span>
+                    </div>
                 </div>
                 <div id="partitionLegend" class="partition-legend"></div>
                 <div class="chart-wrap line-wrap">
@@ -93,7 +99,7 @@
                             <th>Name</th>
                             <th class="num">Distance</th>
                             <th class="num">Time</th>
-                            <th class="num">Avg Power</th>
+                            <th id="avgPowerHeading" class="num">Avg Power (W)</th>
                             <th class="num">Avg HR</th>
                             <th class="col-status">Power data</th>
                             <th>Links</th>

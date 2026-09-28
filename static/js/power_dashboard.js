@@ -30,6 +30,7 @@ let dividers = new Set();   // boundary-before-index positions (1..activities.le
 let powerCurveChart = null;
 let weeklyBarChart = null;
 let weeklyDurationSec = 1200;
+let powerUnit = 'W';
 
 let selectedIndex = 0;
 let pinnedIndex = null;
@@ -90,11 +91,43 @@ function formatDateShort(value) {
     return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-function formatWatts(value) {
+function powerValue(value, activity) {
+    if (value === null || value === undefined) {
+        return null;
+    }
+    if (powerUnit === 'W') {
+        return value;
+    }
+    const weight = activityWeightKg(activity);
+    return weight !== null ? value / weight : null;
+}
+
+function activityWeightKg(activity) {
+    const weight = Number(activity.weight_kg);
+    return Number.isFinite(weight) && weight > 0 ? weight : null;
+}
+
+function formatPower(value) {
     if (value === null || value === undefined) {
         return '—';
     }
-    return `${Math.round(value)} W`;
+    return powerUnit === 'W'
+        ? `${Math.round(value)} W`
+        : `${value.toFixed(2)} W/kg`;
+}
+
+function formatPowerAxisTick(value) {
+    const maximumFractionDigits = powerUnit === 'W/kg' ? 2 : 0;
+    const formatted = new Intl.NumberFormat(undefined, { maximumFractionDigits })
+        .format(Number(value));
+    return `${formatted} ${powerUnit}`;
+}
+
+function activityPowerText(activity, value) {
+    if (activity.status === 'pending' || activity.status === 'loading') {
+        return '…';
+    }
+    return formatPower(powerValue(value, activity));
 }
 
 function activityHref(activityId) {
@@ -153,7 +186,7 @@ function partitionCurve(startIdx, endIdx) {
             if (!pw) {
                 continue;
             }
-            const v = pw[i];
+            const v = powerValue(pw[i], activities[a]);
             if (v === null || v === undefined) {
                 continue;
             }
@@ -174,7 +207,7 @@ function partitionBestAt(startIdx, endIdx, i) {
         if (!pw) {
             continue;
         }
-        const v = pw[i];
+        const v = powerValue(pw[i], activities[a]);
         if (v === null || v === undefined) {
             continue;
         }
@@ -260,7 +293,7 @@ function renderPowerCurveChart() {
                     ticks: {
                         color: '#9fb0cc',
                         callback(value) {
-                            return `${value} W`;
+                            return formatPowerAxisTick(value);
                         },
                     },
                 },
@@ -371,7 +404,7 @@ function updateInspectPanel(index) {
 
         const value = document.createElement('div');
         value.className = 'metric-value';
-        value.textContent = formatWatts(power);
+        value.textContent = formatPower(power);
 
         const context = document.createElement('div');
         context.className = 'metric-context';
@@ -444,7 +477,7 @@ function computeWeeklySeries(durationSec) {
         if (!activity.peak_watts) {
             continue;
         }
-        const val = activity.peak_watts[durIdx];
+        const val = powerValue(activity.peak_watts[durIdx], activity);
         if (val === null || val === undefined) {
             continue;
         }
@@ -473,7 +506,7 @@ function renderWeeklyBarChart() {
         data: {
             labels,
             datasets: [{
-                label: 'Weekly peak power',
+                label: `Weekly peak power (${powerUnit})`,
                 data,
                 backgroundColor: '#72aee8',
                 borderColor: '#72aee8',
@@ -496,7 +529,7 @@ function renderWeeklyBarChart() {
                     ticks: {
                         color: '#9fb0cc',
                         callback(value) {
-                            return `${value} W`;
+                            return formatPowerAxisTick(value);
                         },
                     },
                     grid: { color: 'rgba(255,255,255,0.08)' },
@@ -514,6 +547,7 @@ function updateWeeklyBars(durationSec) {
     }
     const { labels, data } = computeWeeklySeries(durationSec);
     weeklyBarChart.data.labels = labels;
+    weeklyBarChart.data.datasets[0].label = `Weekly peak power (${powerUnit})`;
     weeklyBarChart.data.datasets[0].data = data;
     weeklyBarChart.update('none');
 }
@@ -532,6 +566,9 @@ function partitionIndexOf(activityIndex) {
 function statusCellHtml(activity) {
     switch (activity.status) {
         case 'loaded':
+            if (powerUnit === 'W/kg' && activityWeightKg(activity) === null) {
+                return '<span class="status-badge warning"><span aria-hidden="true">&#9888;</span> Weight unavailable</span>';
+            }
             return '<span class="status-badge ok">&#10003; Loaded</span>';
         case 'loading':
             return '<span class="status-badge loading"><span class="mini-spinner"></span> Loading…</span>';
@@ -622,7 +659,7 @@ function renderActivityList() {
 
         const avgPowerTd = document.createElement('td');
         avgPowerTd.className = 'num';
-        avgPowerTd.textContent = metricCellText(activity, activity.avg_power, ' W');
+        avgPowerTd.textContent = activityPowerText(activity, activity.avg_power);
 
         const avgHrTd = document.createElement('td');
         avgHrTd.className = 'num';
@@ -716,6 +753,7 @@ async function loadAllActivities() {
             const data = await fetchActivityCurve(activity);
             if (data.has_power && Array.isArray(data.peak_watts)) {
                 activity.peak_watts = data.peak_watts;
+                activity.weight_kg = data.weight_kg ?? null;
                 activity.avg_power = data.avg_power ?? null;
                 activity.avg_hr = data.avg_hr ?? null;
                 activity.is_race = Boolean(data.is_race);
@@ -740,6 +778,25 @@ async function loadAllActivities() {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 function bindControls() {
+    document.querySelectorAll('[data-power-unit]').forEach((button) => {
+        button.addEventListener('click', () => {
+            powerUnit = button.dataset.powerUnit;
+            document.querySelectorAll('[data-power-unit]').forEach((option) => {
+                const active = option.dataset.powerUnit === powerUnit;
+                option.classList.toggle('active', active);
+                option.setAttribute('aria-pressed', String(active));
+            });
+            refreshChart();
+            updateInspectPanel(pinnedIndex !== null ? pinnedIndex : selectedIndex);
+            updateWeeklyBars(weeklyDurationSec);
+            renderActivityList();
+            const heading = document.getElementById('avgPowerHeading');
+            if (heading) {
+                heading.textContent = `Avg Power (${powerUnit})`;
+            }
+        });
+    });
+
     const durationSelect = document.getElementById('weeklyDurationSelect');
     if (durationSelect) {
         durationSelect.value = String(weeklyDurationSec);
@@ -784,6 +841,7 @@ async function init() {
             duration_sec: a.duration_sec,
             distance_km: a.distance_km,
             peak_watts: null,
+            weight_kg: null,
             avg_power: null,
             avg_hr: null,
             is_race: false,

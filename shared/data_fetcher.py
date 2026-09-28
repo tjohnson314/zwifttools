@@ -11,6 +11,7 @@ import pandas as pd
 import json
 import os
 import logging
+import math
 import time as _time
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -318,7 +319,16 @@ def get_race_entries(event_subgroup_id, headers, limit=50):
         name = f"{profile_data.get('firstName', '')} {profile_data.get('lastName', '')}".strip()
         result_activity_id = activity_data_entry.get('activityId')
         weight_grams = profile_data.get('weightInGrams', 0) or profile_data.get('weight', 0)
-        weight_kg = round(weight_grams / 1000, 1) if weight_grams else 75.0  # Default 75kg
+        try:
+            recorded_weight_kg = float(weight_grams) / 1000 if weight_grams else None
+        except (TypeError, ValueError):
+            recorded_weight_kg = None
+        weight_is_event_recorded = (
+            recorded_weight_kg is not None
+            and math.isfinite(recorded_weight_kg)
+            and recorded_weight_kg > 0
+        )
+        weight_kg = round(recorded_weight_kg, 1) if weight_is_event_recorded else 75.0
         player_id = entry.get('profileId')  # Numeric Zwift profile ID
 
         # Extract race distance from the entry if available
@@ -332,6 +342,7 @@ def get_race_entries(event_subgroup_id, headers, limit=50):
                 'name': name,
                 'activity_id': str(result_activity_id),
                 'weight_kg': weight_kg,
+                'weight_is_event_recorded': weight_is_event_recorded,
                 'player_id': int(player_id) if player_id else None,
             }
             if segment_distance_cm:

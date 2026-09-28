@@ -975,6 +975,19 @@ def _fetch_recent_activities_for_profile(headers, profile_id, days=90, page_size
     return recent
 
 
+def _profile_weight_kg(profile):
+    if not isinstance(profile, dict):
+        return None
+    weight_grams = profile.get('weightInGrams') or profile.get('weight')
+    try:
+        weight_kg = float(weight_grams) / 1000 if weight_grams else None
+    except (TypeError, ValueError):
+        return None
+    if weight_kg is None or not np.isfinite(weight_kg) or weight_kg <= 0:
+        return None
+    return round(weight_kg, 1)
+
+
 @app.route('/api/power_dashboard/activities')
 def api_power_dashboard_activities():
     """List recent activities (last 90 days) for the progressive power dashboard.
@@ -1067,6 +1080,19 @@ def api_power_dashboard_activity(activity_id):
         event_info = (activity_data or {}).get('eventInfo') or {}
         event_subgroup_id = event_info.get('eventSubGroupId') or event_info.get('eventSubgroupId')
         event_id = event_info.get('id') or event_info.get('eventId')
+        weight_kg = _profile_weight_kg((activity_data or {}).get('profile'))
+        if weight_kg is None and event_subgroup_id:
+            try:
+                participants, _ = get_race_entries(event_subgroup_id, headers)
+                if participants:
+                    race_entry = next(
+                        (p for p in participants if p.get('activity_id') == str(activity_id)),
+                        None,
+                    )
+                    if race_entry and race_entry.get('weight_is_event_recorded'):
+                        weight_kg = race_entry['weight_kg']
+            except Exception as exc:
+                logger.debug('Could not resolve event weight for activity %s: %s', activity_id, exc)
 
         power_arr = np.asarray(power_values, dtype=np.float64)
         power_arr = np.nan_to_num(power_arr, nan=0.0, posinf=0.0, neginf=0.0)
@@ -1082,6 +1108,7 @@ def api_power_dashboard_activity(activity_id):
             'has_power': True,
             'is_race': bool(event_subgroup_id),
             'event_id': event_id,
+            'weight_kg': weight_kg,
             'avg_power': avg_power,
             'avg_hr': avg_hr,
             'peak_watts': [round(peaks.get(sec), 1) if peaks.get(sec) is not None else None for sec in intervals],
