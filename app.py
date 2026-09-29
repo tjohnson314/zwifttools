@@ -3771,9 +3771,33 @@ def _build_race_data_response(race_id):
     pacing_route = None
     if race_data.route_name:
         try:
-            pacing_route = load_route_profile(
+            base_route = load_route_profile(
                 race_data.route_slug or '', race_data.route_name, world=world
             )
+            pacing_laps = 1
+            if race_data.finish_line_km > base_route.total_distance_km:
+                target_distance_m = race_data.finish_line_km * 1000.0
+                candidate_routes = [
+                    (laps, load_route_profile(
+                        race_data.route_slug or '', race_data.route_name,
+                        world=world, laps=laps
+                    ))
+                    for laps in range(2, 21)
+                ]
+                pacing_laps, pacing_route = min(
+                    candidate_routes,
+                    key=lambda item: abs(item[1].distance_m[-1] - target_distance_m),
+                )
+                if abs(pacing_route.distance_m[-1] - target_distance_m) > 500:
+                    pacing_laps = 1
+                    pacing_route = base_route
+            else:
+                pacing_route = base_route
+            if pacing_laps > 1:
+                logger.info(
+                    "Using %d laps for race-efficiency pacing (%.3f km)",
+                    pacing_laps, pacing_route.total_distance_km,
+                )
         except ValueError as exc:
             logger.warning("Could not load pacing profile for %s: %s", race_data.route_name, exc)
 
