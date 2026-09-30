@@ -40,6 +40,39 @@ html, body {
 .surface-type { color: #cfc; }
 .surface-crr { margin-left: auto; color: #9aa; font-variant-numeric: tabular-nums; }
 
+/* Draft bar ------------------------------------------------------------- */
+.pb-draft { margin-bottom: 8px; }
+.draft-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    font-size: 16px;
+    margin-bottom: 3px;
+}
+.draft-label { color: #8a9; }
+.draft-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+.draft-bar {
+    display: flex;
+    height: 16px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.draft-eff, .draft-res {
+    height: 100%;
+    width: 0;
+    transition: width 0.15s ease-out;
+}
+.draft-eff { background: #45a86e; }
+.draft-res { background: #4c8fd6; }
+.draft-scale {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: #9aa;
+    font-variant-numeric: tabular-nums;
+}
+
 /* Breakdown rows -------------------------------------------------------- */
 .breakdown-rows { display: flex; flex-direction: column; gap: 4px; }
 

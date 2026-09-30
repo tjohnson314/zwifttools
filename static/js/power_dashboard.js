@@ -26,6 +26,7 @@ let durationsSec = [];
 let durationsLabel = [];
 let activities = [];        // ordered newest-first; each gets peak_watts + status
 let dividers = new Set();   // boundary-before-index positions (1..activities.length-1)
+let hiddenPartitions = new Set(); // keyed by partitionKey() so visibility survives divider edits
 
 let powerCurveChart = null;
 let weeklyBarChart = null;
@@ -173,6 +174,27 @@ function partitionBounds() {
     return parts;
 }
 
+function partitionKey(startIdx) {
+    const activity = activities[startIdx];
+    return activity ? String(activity.activity_id) : `idx:${startIdx}`;
+}
+
+function isPartitionHidden(startIdx) {
+    return hiddenPartitions.has(partitionKey(startIdx));
+}
+
+function togglePartitionVisibility(startIdx) {
+    const key = partitionKey(startIdx);
+    if (hiddenPartitions.has(key)) {
+        hiddenPartitions.delete(key);
+    } else {
+        hiddenPartitions.add(key);
+    }
+    refreshChart();
+    renderPartitionLegend();
+    updateInspectPanel(pinnedIndex !== null ? pinnedIndex : selectedIndex);
+}
+
 function partitionColor(index) {
     return PARTITION_COLORS[index % PARTITION_COLORS.length];
 }
@@ -239,6 +261,7 @@ function buildChartDatasets() {
         const curve = partitionCurve(startIdx, endIdx);
         return {
             label: partitionLabel(startIdx, endIdx),
+            hidden: isPartitionHidden(startIdx),
             data: durationsSec.map((sec, i) => ({ x: sec, y: curve[i] })),
             borderColor: color,
             backgroundColor: 'transparent',
@@ -354,7 +377,20 @@ function renderPartitionLegend() {
     container.innerHTML = '';
     partitionBounds().forEach(([startIdx, endIdx], idx) => {
         const item = document.createElement('span');
-        item.className = 'legend-item';
+        item.className = 'legend-item legend-item-toggle';
+        const hidden = isPartitionHidden(startIdx);
+        item.classList.toggle('legend-item-hidden', hidden);
+        item.setAttribute('role', 'button');
+        item.setAttribute('tabindex', '0');
+        item.setAttribute('aria-pressed', String(!hidden));
+        item.title = hidden ? 'Click to show' : 'Click to hide';
+        item.addEventListener('click', () => togglePartitionVisibility(startIdx));
+        item.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                togglePartitionVisibility(startIdx);
+            }
+        });
         const line = document.createElement('span');
         line.className = 'legend-line';
         line.style.borderTopColor = partitionColor(idx);
@@ -393,6 +429,9 @@ function updateInspectPanel(index) {
 
     const bounds = partitionBounds();
     bounds.forEach(([startIdx, endIdx], idx) => {
+        if (isPartitionHidden(startIdx)) {
+            return;
+        }
         const { power, activity } = partitionBestAt(startIdx, endIdx, index);
 
         const row = document.createElement('div');

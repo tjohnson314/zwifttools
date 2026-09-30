@@ -23,6 +23,7 @@ sys.path.insert(0, ROOT)
 from bike_comparison.bike_data import get_bike_database, BASE_CDA  # noqa: E402
 from bike_comparison.physics import (  # noqa: E402
     _AREA_COEFFICIENT, _HEIGHT_EXPONENT, _WEIGHT_EXPONENT, _AREA_OFFSET,
+    AIR_DENSITY, GRAVITY, DRIVETRAIN_LOSS,
 )
 from shared.surface_lookup import DEFAULT_CRR, FRAME_TYPE_TO_BIKE_TYPE  # noqa: E402
 
@@ -177,8 +178,9 @@ def main():
             "HEIGHT_EXPONENT": _HEIGHT_EXPONENT,
             "WEIGHT_EXPONENT": _WEIGHT_EXPONENT,
             "AREA_OFFSET": _AREA_OFFSET,
-            "AIR_DENSITY": 1.226,
-            "GRAVITY": 9.8067,
+            "AIR_DENSITY": AIR_DENSITY,
+            "GRAVITY": GRAVITY,
+            "DRIVETRAIN_LOSS": DRIVETRAIN_LOSS,
         },
         "frameTypeToBikeType": FRAME_TYPE_TO_BIKE_TYPE,
         "crr": build_crr_table(),

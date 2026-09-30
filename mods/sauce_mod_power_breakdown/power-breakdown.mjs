@@ -6,6 +6,11 @@ Common.enableSentry();
 
 const {AREA_COEFFICIENT, HEIGHT_EXPONENT, WEIGHT_EXPONENT, AREA_OFFSET,
     AIR_DENSITY, GRAVITY} = MODEL.constants;
+const DRIVETRAIN_LOSS = MODEL.constants.DRIVETRAIN_LOSS ?? 0;
+
+// Zwift's draft benefit saturates near half of the solo aero cost.
+const MAX_DRAFT_FRACTION = 0.5;
+const EARTH_RADIUS_M = 6371000;
 
 // Category definitions (order = display order); `cls` selects the bar colour.
 const CATEGORIES = [
@@ -29,6 +34,7 @@ const DEFAULTS = {
     manualSurface: 'Tarmac',
     smoothSec: 3,
     draftIsWatts: true,      // Sauce state.draft interpreted as watts
+    physicalSpeed: true,     // measure speed from world position, not route distance
 };
 
 let settings;
@@ -36,10 +42,20 @@ let els = {};
 let rowEls = {};            // key -> {value, barPos, barNeg}
 
 // Smoothed running state.
-let prev = null;            // {worldTime, altitude, speedMps}
-let sm = {dAltDt: 0, dvDt: 0};     // smoothed derivatives
+let prev = null;            // {worldTime, altitude, latlng, speedMps}
+let sm = {dAltDt: 0, dvDt: 0, speed: 0};   // smoothed derivatives + speed
 let smVals = null;          // smoothed category watts
 let lastAthlete = {weightKg: null, heightCm: null};
+
+
+// Horizontal ground distance (m) between two [lat, lng] pairs. Equirectangular
+// is exact enough over the few metres covered between samples.
+function groundDistance(a, b) {
+    const rad = Math.PI / 180;
+    const dLat = (b[0] - a[0]) * rad;
+    const dLng = (b[1] - a[1]) * rad * Math.cos((a[0] + b[0]) * 0.5 * rad);
+    return EARTH_RADIUS_M * Math.hypot(dLat, dLng);
+}
 
 
 function loadSettings() {
@@ -88,6 +104,10 @@ function cacheEls() {
     els.surfaceStyle = document.querySelector('.surface-style');
     els.surfaceType = document.querySelector('.surface-type');
     els.surfaceCrr = document.querySelector('.surface-crr');
+    els.draftValue = document.querySelector('.draft-value');
+    els.draftEff = document.querySelector('.draft-eff');
+    els.draftRes = document.querySelector('.draft-res');
+    els.draftMax = document.querySelector('.draft-max');
     els.checkSum = document.querySelector('.check-sum');
     els.frameSel = document.querySelector('[data-set="frameId"]');
     els.wheelSel = document.querySelector('[data-set="wheelId"]');
@@ -96,6 +116,7 @@ function cacheEls() {
     els.weightKg = document.querySelector('[data-set="weightKg"]');
     els.heightCm = document.querySelector('[data-set="heightCm"]');
     els.smoothSec = document.querySelector('[data-set="smoothSec"]');
+    els.physicalSpeed = document.querySelector('[data-set="physicalSpeed"]');
     els.autoSurface = document.querySelector('[data-set="autoSurface"]');
     els.manualSurface = document.querySelector('[data-set="manualSurface"]');
 }
@@ -154,6 +175,7 @@ function populatePickers() {
     els.weightKg.value = settings.weightKg;
     els.heightCm.value = settings.heightCm;
     els.smoothSec.value = settings.smoothSec;
+    els.physicalSpeed.checked = settings.physicalSpeed;
     els.autoSurface.checked = settings.autoSurface;
     applyWeightEnable();
     applySurfaceEnable();
@@ -253,10 +275,12 @@ function onSelfUpdate(data) {
     const mass = riderWeightKg + setup.bikeWeightKg;
 
     const power = Number.isFinite(state.power) ? state.power : 0;
-    const v = (Number.isFinite(state.speed) ? state.speed : 0) / 3.6;   // km/h -> m/s
+    const vGame = (Number.isFinite(state.speed) ? state.speed : 0) / 3.6;   // km/h -> m/s
     const alt = Number.isFinite(state.altitude) ? state.altitude : (prev ? prev.altitude : 0);
     const wt = Number.isFinite(state.worldTime) ? state.worldTime : null;
     const draftRaw = Number.isFinite(state.draft) ? state.draft : 0;
+    const latlng = Array.isArray(state.latlng) && Number.isFinite(state.latlng[0]) ?
+        state.latlng : null;
 
     // --- Surface ---------------------------------------------------------
     let style = 'NORMAL';
@@ -275,26 +299,46 @@ function onSelfUpdate(data) {
     // --- Time derivatives (smoothed) ------------------------------------
     let dt = 0;
     if (prev && wt != null && prev.worldTime != null) dt = (wt - prev.worldTime) / 1000;
-    let instAltDt = 0, instVdt = 0;
-    if (dt > 0.05 && dt < 3) {
-        instAltDt = (alt - prev.altitude) / dt;
-        instVdt = (v - prev.speedMps) / dt;
-        const alpha = 1 - Math.exp(-dt / Math.max(0.5, settings.smoothSec));
-        sm.dAltDt += (instAltDt - sm.dAltDt) * alpha;
-        sm.dvDt += (instVdt - sm.dvDt) * alpha;
+    if (dt < 0 || dt > 30) dt = 0;      // session restart / world change
+    const stepOk = dt > 0.05 && dt < 3;
+
+    // Physical speed from the world position. Zwift's own `speed`/`distance`
+    // track progress ALONG THE ROUTE, which under-reads whenever steering takes
+    // a wider (or narrower) line than the road centreline.
+    let vPhys = null;
+    if (stepOk && latlng && prev.latlng) {
+        const dGround = groundDistance(prev.latlng, latlng);
+        const d3 = Math.hypot(dGround, alt - prev.altitude);
+        if (d3 / dt < 40) vPhys = d3 / dt;      // ignore teleports / world changes
     }
-    prev = {worldTime: wt, altitude: alt, speedMps: v};
+
+    const usePhys = settings.physicalSpeed && vPhys != null;
+    const vRaw = usePhys ? vPhys : vGame;
+
+    if (stepOk) {
+        const alpha = 1 - Math.exp(-dt / Math.max(0.5, settings.smoothSec));
+        sm.dAltDt += ((alt - prev.altitude) / dt - sm.dAltDt) * alpha;
+        // Position-derived speed is quantised, so smooth it before use; the game
+        // speed is already clean and is taken as-is.
+        if (usePhys && sm.speed === 0) sm.speed = vGame;
+        sm.speed = usePhys ? sm.speed + (vRaw - sm.speed) * alpha : vRaw;
+        sm.dvDt += ((sm.speed - prev.speedMps) / dt - sm.dvDt) * alpha;
+    } else if (!usePhys) {
+        sm.speed = vRaw;
+    }
+    const v = sm.speed;
+    prev = {worldTime: wt, altitude: alt, speedMps: v, latlng};
 
     const grad = v > 0.5 ? Math.max(-0.5, Math.min(0.5, sm.dAltDt / v)) : 0;
     const cosT = Math.cos(Math.atan(grad));
 
     // --- Power categories (W), signed so they sum to zero ---------------
-    const riderToWheel = power;
-    const draftW = settings.draftIsWatts ? draftRaw : draftRaw * (0.5 * AIR_DENSITY * cda * v * v * v) / 100;
+    const riderToWheel = power * (1 - DRIVETRAIN_LOSS);
+    const cAero = -(0.5 * AIR_DENSITY * cda * v * v * v);
+    const draftW = settings.draftIsWatts ? draftRaw : draftRaw * -cAero / 100;
 
     const cRider = riderToWheel;
     const cDraft = draftW;
-    const cAero = -(0.5 * AIR_DENSITY * cda * v * v * v);
     const cRolling = -(crr * mass * GRAVITY * cosT * v);
     const cPE = -(mass * GRAVITY * sm.dAltDt);
     const cKE = -(mass * v * sm.dvDt);
@@ -330,6 +374,8 @@ function render(vals, ctx) {
         }
     }
 
+    renderDraft(vals);
+
     els.surfaceStyle.textContent = ctx.style;
     els.surfaceType.textContent = `→ ${ctx.surfaceType}`;
     els.surfaceCrr.textContent = `Crr ${ctx.crr.toFixed(4)}`;
@@ -339,3 +385,22 @@ function render(vals, ctx) {
     els.bikeSummary.textContent =
         `${ctx.setup.frame.name} · ${wheelName} · L${settings.upgradeLevel}`.trim();
 }
+
+
+// Draft bar: full scale = the maximum draft Zwift gives (half the solo aero
+// cost). A negative residual means the model over-credits the draft, so it is
+// taken back out: green = effective draft, blue = the residual it swallowed.
+function renderDraft(vals) {
+    const maxDraft = Math.abs(vals.aero) * MAX_DRAFT_FRACTION;
+    const draft = Math.max(0, vals.draft);
+    const effective = vals.residual < 0 ? Math.max(0, draft + vals.residual) : draft;
+    const resPart = draft - effective;
+    const toPct = w => maxDraft > 1 ? Math.min(100, Math.max(0, w / maxDraft * 100)) : 0;
+
+    els.draftEff.style.width = `${toPct(effective)}%`;
+    els.draftRes.style.width = `${toPct(Math.min(resPart, Math.max(0, maxDraft - effective)))}%`;
+    const pct = maxDraft > 1 ? (effective / maxDraft * 100) : 0;
+    els.draftValue.textContent = `${effective.toFixed(0)} W (${pct.toFixed(0)}% of max)`;
+    els.draftMax.textContent = `max ${maxDraft.toFixed(0)} W`;
+}
+

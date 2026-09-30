@@ -216,6 +216,16 @@ body {
     border-radius: 2px;
 }
 
+.legend-item-toggle {
+    cursor: pointer;
+    user-select: none;
+}
+
+.legend-item-hidden {
+    opacity: 0.4;
+    text-decoration: line-through;
+}
+
 .legend-line-all {
     border-top-color: #f0f4ff;
 }
