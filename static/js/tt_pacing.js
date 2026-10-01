@@ -976,9 +976,25 @@ function drawRouteMap() {
     }
 }
 
+// Map a full-plan distance onto the single lap represented by the map geometry.
+function mapDistanceToGeometry(targetM) {
+    if (!routeGeometry) return targetM;
+    const route = routeGeometry.legs.find(l => l.name === 'route');
+    if (!route || route.pts.length < 2) return targetM;
+
+    const routeStartM = route.pts[0].d;
+    const routeEndM = route.pts[route.pts.length - 1].d;
+    const lapDistanceM = routeEndM - routeStartM;
+    if (targetM <= routeEndM || lapDistanceM <= 0) return targetM;
+
+    const lapOffsetM = (targetM - routeStartM) % lapDistanceM;
+    return routeStartM + (lapOffsetM || lapDistanceM);
+}
+
 // Nearest stitched-geometry point to a cumulative distance (metres).
 function nearestGeometryPoint(targetM) {
     if (!routeGeometry) return null;
+    targetM = mapDistanceToGeometry(targetM);
     const arr = routeGeometry.combined;
     let best = null, bd = Infinity;
     for (const p of arr) {
