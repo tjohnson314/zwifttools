@@ -1158,6 +1158,18 @@ def anchor_profile_altitude(
     return elevation_profile
 
 
+def _unwrap_loop_route_distances(
+    route_distances: np.ndarray,
+    expected_distances: np.ndarray,
+    lap_distance_m: float,
+) -> np.ndarray:
+    """Map repeated loop coordinates onto the nearest cumulative lap."""
+    lap_offsets = np.rint(
+        (expected_distances - route_distances) / lap_distance_m
+    ) * lap_distance_m
+    return route_distances + lap_offsets
+
+
 def align_riders_to_route(riders: List[Dict], route: RouteData, 
                           max_deviation_m: float = 50,
                           leadin_distance_m: Optional[float] = None,
@@ -1602,14 +1614,13 @@ def align_riders_to_route(riders: List[Dict], route: RouteData,
             
             # Use the global start offset for all riders
             expected = loop_start_offset + raw_traveled_m
-            
-            # For each point, pick the wrap variant closest to expected (vectorized)
-            wrap_k = np.arange(-2, 3, dtype=np.float64)
-            # (N, 5) candidates
-            candidates = route_distances[:, None] + wrap_k[None, :] * route_total
-            diffs = np.abs(candidates - expected[:, None])
-            best_wrap = np.argmin(diffs, axis=1)
-            route_distances = candidates[np.arange(len(route_distances)), best_wrap]
+
+            # Select the nearest repeated lap directly from odometer progress.
+            # This is equivalent to testing wrap variants, without imposing a
+            # fixed lap-count limit on longer circuit races.
+            route_distances = _unwrap_loop_route_distances(
+                route_distances, expected, route_total
+            )
             
             # Rebase with the global offset so all riders share the same reference
             route_distances -= loop_start_offset

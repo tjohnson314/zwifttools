@@ -61,7 +61,7 @@
             margin-bottom: 24px;
         }
         label { font-weight: 600; display: block; margin-bottom: 8px; }
-        input[type="text"] {
+        input[type="text"], textarea {
             background: rgba(255,255,255,0.08);
             border: 2px solid rgba(255,255,255,0.15);
             border-radius: 8px;
@@ -71,7 +71,8 @@
             width: 100%;
             max-width: 600px;
         }
-        input[type="text"]:focus { outline: none; border-color: #f7931e; }
+        textarea { min-height: 74px; resize: vertical; font-family: inherit; }
+        input[type="text"]:focus, textarea:focus { outline: none; border-color: #f7931e; }
         .btn-primary {
             padding: 10px 24px;
             font-size: 1rem;
@@ -161,6 +162,24 @@
             opacity: 0.4;
             transform: scale(0.95);
         }
+        .rider-roster-item { display: flex; align-items: center; gap: 6px; }
+        .rider-offset-control {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            color: #888;
+            font-size: 0.78rem;
+        }
+        .rider-offset-input {
+            width: 72px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.18);
+            border-radius: 5px;
+            color: #fff;
+            padding: 4px 6px;
+            font-size: 0.82rem;
+        }
+        .rider-offset-input:focus { outline: none; border-color: #f7931e; }
 
         .team-drop-zone {
             border: 2px dashed transparent;
@@ -415,6 +434,10 @@
                     <label for="teamTags">Team Tags <span style="color:#888; font-weight:normal;">(optional, comma-separated &mdash; e.g. V, RtB, SZ)</span></label>
                     <input type="text" id="teamTags" placeholder="Auto-detect from rider names">
                 </div>
+                <div style="margin-top: 16px;">
+                    <label for="manualActivities">Missing Rider Activity IDs or URLs <span style="color:#888; font-weight:normal;">(optional, one per line)</span></label>
+                    <textarea id="manualActivities" placeholder="Riders who did not finish"></textarea>
+                </div>
                 <br>
                 <button class="btn-primary" id="fetchBtn" onclick="fetchTTT()">Analyze Race</button>
             </div>
@@ -500,6 +523,13 @@
                 <div id="pullStatsTable" style="display:none; margin-top:8px;"></div>
             </div>
 
+            <div class="chart-container" id="positionDeviationContainer" style="display:none">
+                <h3>Rider Position Relative to Team Leader</h3>
+                <div class="chart-wrapper">
+                    <canvas id="positionDeviationChart"></canvas>
+                </div>
+            </div>
+
             <div class="chart-container">
                 <h3>Average Draft Efficiency (connected riders only)</h3>
                 <div class="bike-info" id="bikeInfo" style="font-size:0.85rem; margin-bottom:8px;"></div>
@@ -537,6 +567,7 @@
                 </p>
                 <div class="team-roster" id="unassignedRoster"></div>
             </div>
+
         </div>
     </div>
 
@@ -603,12 +634,7 @@
             riderCache = {};
             currentSubgroupId = data.cache_key;
             allTeamTags = data.team_tags || [];
-            currentAssignments = {};
-            (data.teams || []).forEach(t => {
-                t.riders.forEach(r => {
-                    if (r.activity_id) currentAssignments[String(r.activity_id)] = t.label;
-                });
-            });
+            syncCurrentRiderState(data);
             initSlider(data);
             renderResults(data);
         } catch (e) {
@@ -630,6 +656,7 @@
     let powerChartInstance = null;
     let draftChartInstance = null;
     let riderChartInstance = null;
+    let positionDeviationChartInstance = null;
     let lastData = null;  // cached response for slider re-render
     let lastRiderData = null;  // cached rider drilldown data for slider re-render
     let riderCache = {};  // activity_id -> rider drilldown data
@@ -662,11 +689,12 @@
     }
 
     function syncChartVisibility() {
-        [speedChartInstance, powerChartInstance, draftChartInstance].forEach(chart => {
+        [speedChartInstance, powerChartInstance, draftChartInstance,
+         positionDeviationChartInstance].forEach(chart => {
             if (!chart) return;
             chart.data.datasets.forEach(ds => {
                 if (ds.yAxisID === 'yAlt') return;  // elevation always visible
-                ds.hidden = hiddenTeams.has(ds.label);
+                ds.hidden = hiddenTeams.has(ds.teamLabel || ds.label);
             });
             chart.update('none');
         });
@@ -726,15 +754,35 @@
     function updateSegmentDisplay() {
         if (lastData) updateSegmentTimes(lastData.teams);
         // Redraw charts to show/hide segment lines
-        [speedChartInstance, powerChartInstance, draftChartInstance, riderChartInstance].forEach(c => {
+        [speedChartInstance, powerChartInstance, draftChartInstance,
+         riderChartInstance, positionDeviationChartInstance].forEach(c => {
             if (c) c.update('none');
         });
     }
 
     // ---- Drag-and-drop state ----
     let currentAssignments = {};  // activity_id (string) -> team tag
+    let currentTimeOffsets = {};  // activity_id -> chart shift in seconds
     let currentSubgroupId = null;
     let allTeamTags = [];         // ordered tag list
+
+    function syncCurrentRiderState(data) {
+        currentAssignments = {};
+        currentTimeOffsets = {};
+        (data.teams || []).forEach(team => {
+            team.riders.forEach(rider => {
+                if (!rider.activity_id) return;
+                const activityId = String(rider.activity_id);
+                currentAssignments[activityId] = team.label;
+                currentTimeOffsets[activityId] = Number(rider.time_offset_sec) || 0;
+            });
+        });
+        (data.unassigned || []).forEach(rider => {
+            if (rider.activity_id) {
+                currentTimeOffsets[String(rider.activity_id)] = Number(rider.time_offset_sec) || 0;
+            }
+        });
+    }
 
     const TEAM_COLORS = [
         { line: '#f7931e', bg: 'rgba(247,147,30,0.15)' },
@@ -763,6 +811,7 @@
         if (!sgId) { setStatus('Please enter an event subgroup ID.', 'error'); return; }
 
         const teamTags = document.getElementById('teamTags').value.trim();
+        const manualActivities = document.getElementById('manualActivities').value.trim();
 
         const btn = document.getElementById('fetchBtn');
         btn.disabled = true;
@@ -772,6 +821,7 @@
         try {
             const body = { subgroup_id: sgId };
             if (teamTags) body.team_tags = teamTags;
+            if (manualActivities) body.manual_activities = manualActivities;
 
             const resp = await fetch('/api/ttt/fetch', {
                 method: 'POST',
@@ -793,13 +843,7 @@
             url.searchParams.set('subgroup', sgId);
             history.replaceState(null, '', url);
             allTeamTags = data.team_tags || [];
-            // Build assignments map from team rosters
-            currentAssignments = {};
-            (data.teams || []).forEach(t => {
-                t.riders.forEach(r => {
-                    if (r.activity_id) currentAssignments[String(r.activity_id)] = t.label;
-                });
-            });
+            syncCurrentRiderState(data);
             initSlider(data);
             renderResults(data);
         } catch (e) {
@@ -1152,7 +1196,8 @@
         if (lastData) updateSegmentTimes(lastData.teams);
 
         // Update chart x-axis bounds
-        [speedChartInstance, powerChartInstance, draftChartInstance].forEach(chart => {
+        [speedChartInstance, powerChartInstance, draftChartInstance,
+         positionDeviationChartInstance].forEach(chart => {
             if (!chart) return;
             chart.options.scales.x.min = lo;
             chart.options.scales.x.max = hi;
@@ -1235,15 +1280,7 @@
                 <div class="team-roster"></div>`;
             const roster = div.querySelector('.team-roster');
             t.riders.forEach(r => {
-                const tag = document.createElement('span');
-                tag.className = 'rider-tag';
-                tag.textContent = `${r.name} (${r.weight_kg.toFixed(0)}kg)`;
-                tag.draggable = true;
-                tag.dataset.activityId = r.activity_id;
-                tag.dataset.name = r.name;
-                tag.dataset.weight = r.weight_kg;
-                setupDrag(tag);
-                roster.appendChild(tag);
+                roster.appendChild(createRiderRosterItem(r));
             });
             setupDropZone(div, t.label);
             rostersEl.appendChild(div);
@@ -1257,15 +1294,7 @@
         if (unassigned.length > 0) {
             unSection.style.display = 'block';
             unassigned.forEach(r => {
-                const tag = document.createElement('span');
-                tag.className = 'rider-tag';
-                tag.textContent = `${r.name} (${r.weight_kg.toFixed(0)}kg)`;
-                tag.draggable = true;
-                tag.dataset.activityId = r.activity_id;
-                tag.dataset.name = r.name;
-                tag.dataset.weight = r.weight_kg;
-                setupDrag(tag);
-                unRoster.appendChild(tag);
+                unRoster.appendChild(createRiderRosterItem(r));
             });
         } else {
             unSection.style.display = 'none';
@@ -1582,13 +1611,146 @@
             }
         });
 
+        renderPositionDeviationChart(teams, ft, lo, hi);
+
         // Populate rider drilldown dropdown
         populateRiderDropdown(data);
 
 
     }
 
+    function renderPositionDeviationChart(teams, focusedTeam, lo, hi) {
+        if (positionDeviationChartInstance) positionDeviationChartInstance.destroy();
+        positionDeviationChartInstance = null;
+
+        const container = document.getElementById('positionDeviationContainer');
+        if (!focusedTeam) {
+            container.style.display = 'none';
+            return;
+        }
+
+        const chartTeams = [focusedTeam];
+        const datasets = [];
+        let colorIndex = 0;
+
+        chartTeams.forEach(team => {
+            const riders = team.position_deviation?.riders || [];
+            riders.forEach(rider => {
+                const color = RIDER_COLORS[colorIndex % RIDER_COLORS.length];
+                colorIndex++;
+                datasets.push({
+                    label: rider.name,
+                    teamLabel: team.label,
+                    data: rider.distance_km.map((distance, index) => ({
+                        x: distance,
+                        y: rider.deviation_m[index],
+                    })),
+                    borderColor: color,
+                    backgroundColor: color,
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    tension: 0.15,
+                    spanGaps: false,
+                });
+            });
+        });
+
+        container.style.display = datasets.length ? '' : 'none';
+        if (!datasets.length) return;
+
+        const ctx = document.getElementById('positionDeviationChart').getContext('2d');
+        positionDeviationChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: { datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                parsing: false,
+                onClick: onChartClick,
+                interaction: { mode: 'nearest', intersect: false },
+                plugins: {
+                    legend: { display: true, labels: { color: '#ccc' } },
+                    decimation: { enabled: true, algorithm: 'min-max', samples: 1200 },
+                    tooltip: {
+                        callbacks: {
+                            title: items => items.length ? `${items[0].parsed.x.toFixed(2)} km` : '',
+                            label: item => {
+                                const value = item.parsed.y;
+                                const sign = value > 0 ? '+' : '';
+                                return `${item.dataset.label}: ${sign}${value.toFixed(1)} m`;
+                            },
+                        },
+                    },
+                },
+                scales: {
+                    x: {
+                        type: 'linear',
+                        min: lo,
+                        max: hi,
+                        title: { display: true, text: 'Leader Distance (km)', color: '#aaa' },
+                        ticks: { color: '#888' },
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                    },
+                    y: {
+                        title: { display: true, text: 'Position Relative to Leader (m)', color: '#aaa' },
+                        ticks: { color: '#888' },
+                        grid: {
+                            color: context => context.tick.value === 0
+                                ? 'rgba(255,255,255,0.35)'
+                                : 'rgba(255,255,255,0.05)',
+                        },
+                    },
+                },
+            },
+        });
+    }
+
     // ---- Drag-and-drop ----
+    function createRiderRosterItem(rider) {
+        const item = document.createElement('div');
+        item.className = 'rider-roster-item';
+
+        const tag = document.createElement('span');
+        tag.className = 'rider-tag';
+        tag.textContent = `${rider.name} (${rider.weight_kg.toFixed(0)}kg)`;
+        tag.draggable = true;
+        tag.dataset.activityId = rider.activity_id;
+        tag.dataset.name = rider.name;
+        tag.dataset.weight = rider.weight_kg;
+        setupDrag(tag);
+        item.appendChild(tag);
+
+        const control = document.createElement('label');
+        control.className = 'rider-offset-control';
+        control.textContent = rider.time_offset_source === 'calculated' ? 'Offset (calc.)' : 'Offset';
+
+        const input = document.createElement('input');
+        input.className = 'rider-offset-input';
+        input.type = 'number';
+        input.min = '-3600';
+        input.max = '3600';
+        input.step = '0.001';
+        input.value = currentTimeOffsets[String(rider.activity_id)] ?? 0;
+        input.title = 'Chart shift in seconds; negative values move telemetry earlier and positive values move it later';
+        input.setAttribute('aria-label', `Time offset for ${rider.name} in seconds`);
+        input.addEventListener('change', () => updateTimeOffset(rider.activity_id, input));
+        control.appendChild(input);
+        control.append('s');
+        item.appendChild(control);
+        return item;
+    }
+
+    function updateTimeOffset(activityId, input) {
+        const offset = Number(input.value);
+        if (!Number.isFinite(offset) || !input.checkValidity()) {
+            input.reportValidity();
+            return;
+        }
+        currentTimeOffsets[String(activityId)] = offset;
+        doReassign('Updating rider offset…');
+    }
+
     function setupDrag(el) {
         el.addEventListener('dragstart', e => {
             e.dataTransfer.setData('text/plain', el.dataset.activityId);
@@ -1623,9 +1785,9 @@
         });
     }
 
-    async function doReassign() {
+    async function doReassign(statusMessage = 'Updating team assignments…') {
         if (!currentSubgroupId) return;
-        setStatus('Updating team assignments…', 'info');
+        setStatus(statusMessage, 'info');
         try {
             const resp = await fetch('/api/ttt/reassign', {
                 method: 'POST',
@@ -1633,6 +1795,7 @@
                 body: JSON.stringify({
                     subgroup_id: currentSubgroupId,
                     assignments: currentAssignments,
+                    time_offsets: currentTimeOffsets,
                 }),
             });
             const data = await resp.json();
@@ -1640,13 +1803,7 @@
             clearStatus();
             lastData = data;
             allTeamTags = data.team_tags || allTeamTags;
-            // Rebuild assignments from fresh response
-            currentAssignments = {};
-            (data.teams || []).forEach(t => {
-                t.riders.forEach(r => {
-                    if (r.activity_id) currentAssignments[String(r.activity_id)] = t.label;
-                });
-            });
+            syncCurrentRiderState(data);
             renderResults(data);
         } catch (e) {
             setStatus('Reassign failed: ' + e.message, 'error');

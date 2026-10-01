@@ -4069,6 +4069,8 @@ TTT_UPGRADE_LEVEL = 5
 # other are treated as the same wave/team.  TTT waves are typically released
 # 30-60 s apart, so a gap larger than this marks a team boundary.
 TTT_WAVE_GAP_SEC = 15.0
+TTT_MAX_MANUAL_ACTIVITIES = 20
+TTT_MAX_TIME_OFFSET_SEC = 3600.0
 
 _ttt_cache = {}  # subgroup_id -> processed rider data for reassignment
 
@@ -4211,6 +4213,137 @@ def _cluster_ttt_teams_by_start(participants, gap_threshold_sec=TTT_WAVE_GAP_SEC
             })
 
     return team_map, team_tags, diagnostics
+
+
+def _parse_ttt_manual_activity_ids(raw_activities):
+    """Return unique activity IDs supplied as IDs, URLs, or a mixture."""
+    if raw_activities is None or raw_activities == '':
+        return []
+
+    if isinstance(raw_activities, str):
+        values = re.split(r'[\s,]+', raw_activities.strip())
+    elif isinstance(raw_activities, (list, tuple)):
+        values = raw_activities
+    else:
+        raise ValueError('manual_activities must be a list or comma-separated text')
+
+    activity_ids = []
+    seen = set()
+    for raw_value in values:
+        value = str(raw_value).strip()
+        if not value:
+            continue
+        match = re.search(r'(?:^|/activity/)(\d+)(?:[/?#]|$)', value)
+        if not match:
+            raise ValueError(f'Invalid Zwift activity ID or URL: {value}')
+        activity_id = match.group(1)
+        if activity_id not in seen:
+            seen.add(activity_id)
+            activity_ids.append(activity_id)
+
+    if len(activity_ids) > TTT_MAX_MANUAL_ACTIVITIES:
+        raise ValueError(
+            f'At most {TTT_MAX_MANUAL_ACTIVITIES} manual activities can be added'
+        )
+    return activity_ids
+
+
+def _ttt_participant_from_activity(activity_id, activity_data):
+    """Build a race participant record from standalone activity metadata."""
+    profile = activity_data.get('profile') or {}
+    name = f"{profile.get('firstName', '')} {profile.get('lastName', '')}".strip()
+    name = name or activity_data.get('playerName') or f'Rider {activity_id}'
+
+    weight_grams = profile.get('weightInGrams') or profile.get('weight')
+    try:
+        weight_kg = float(weight_grams) / 1000.0 if weight_grams else None
+    except (TypeError, ValueError):
+        weight_kg = None
+    weight_is_recorded = bool(
+        weight_kg is not None and np.isfinite(weight_kg) and weight_kg > 0
+    )
+
+    profile_id = profile.get('id') or activity_data.get('profileId') or activity_data.get('playerId')
+    try:
+        player_id = int(profile_id) if profile_id else None
+    except (TypeError, ValueError):
+        player_id = None
+
+    participant = {
+        'rank': None,
+        'name': name,
+        'activity_id': activity_id,
+        'weight_kg': round(weight_kg, 1) if weight_is_recorded else 75.0,
+        'weight_is_event_recorded': weight_is_recorded,
+        'player_id': player_id,
+        'is_manual': True,
+    }
+    height_cm = profile.get('heightInCentimeters')
+    if height_cm:
+        participant['height_cm'] = height_cm
+    return participant
+
+
+def _load_ttt_manual_participants(raw_activities, headers, existing_activity_ids):
+    """Fetch participant metadata for manually supplied, non-result activities."""
+    try:
+        activity_ids = _parse_ttt_manual_activity_ids(raw_activities)
+    except ValueError as error:
+        return None, str(error)
+
+    participants = []
+    existing_ids = {str(activity_id) for activity_id in existing_activity_ids}
+    for activity_id in activity_ids:
+        if activity_id in existing_ids:
+            continue
+        activity_data, error = get_activity_details(activity_id, headers)
+        if error:
+            return None, f'Could not add activity {activity_id}: {error}'
+        participants.append(_ttt_participant_from_activity(activity_id, activity_data))
+        existing_ids.add(activity_id)
+    return participants, None
+
+
+def _apply_ttt_time_offsets(all_processed, raw_offsets):
+    """Shift rider clocks from their immutable base time arrays.
+
+    Positive values move telemetry later on the race clock. Returning to zero
+    always restores the original clock, so repeated adjustments do not stack.
+    """
+    if raw_offsets is None:
+        return None
+    if not isinstance(raw_offsets, dict):
+        return 'time_offsets must be an object keyed by activity ID'
+
+    parsed_offsets = {}
+    for raw_activity_id, raw_offset in raw_offsets.items():
+        activity_id = str(raw_activity_id)
+        rider = all_processed.get(activity_id)
+        if not rider:
+            return f'Activity {activity_id} is not in the TTT cache'
+        try:
+            offset_sec = float(raw_offset)
+        except (TypeError, ValueError):
+            return f'Invalid time offset for activity {activity_id}'
+        if not np.isfinite(offset_sec) or abs(offset_sec) > TTT_MAX_TIME_OFFSET_SEC:
+            return (
+                f'Time offset for activity {activity_id} must be between '
+                f'-{TTT_MAX_TIME_OFFSET_SEC:g} and {TTT_MAX_TIME_OFFSET_SEC:g} seconds'
+            )
+        parsed_offsets[activity_id] = offset_sec
+
+    for activity_id, offset_sec in parsed_offsets.items():
+        rider = all_processed[activity_id]
+        previous_offset = float(
+            rider.get('time_offset_sec', rider.get('manual_time_offset_sec', 0.0))
+        )
+        if 'base_time_sec' not in rider:
+            rider['base_time_sec'] = rider['time_sec'].copy() - previous_offset
+        if not np.isclose(offset_sec, previous_offset):
+            rider['time_offset_source'] = 'manual'
+        rider['time_offset_sec'] = offset_sec
+        rider['time_sec'] = rider['base_time_sec'] + offset_sec
+    return None
 
 
 @app.route('/ttt-analysis')
@@ -4394,6 +4527,9 @@ def api_ttt_fetch_csv():
             'altitude_m': altitude_m,
             'power': power,
             'draft_watts': draft_watts,
+            'time_offset_sec': 0.0,
+            'calculated_time_offset_sec': 0.0,
+            'time_offset_source': 'none',
         }
         rider_latlng[act_id] = (lats, lngs)
 
@@ -4469,6 +4605,7 @@ def api_ttt_fetch_csv():
             rd[key] = np.interp(int_times, t, rd[key])
         if 'route_distance_m' in rd:
             rd['route_distance_m'] = np.interp(int_times, t, rd['route_distance_m'])
+        rd['base_time_sec'] = int_times.copy()
         rd['time_sec'] = int_times
 
     # ---- Team assignment by tags ----
@@ -4516,7 +4653,8 @@ def api_ttt_fetch_csv():
 def api_ttt_fetch():
     """Fetch and analyze a TTT race.
 
-    Accepts JSON with ``subgroup_id`` (the event subgroup ID).
+    Accepts JSON with ``subgroup_id`` (the event subgroup ID) and optional
+    ``manual_activities`` IDs or URLs for riders absent from race results.
 
     Steps:
     1. Fetch race entries and telemetry for every rider.
@@ -4585,6 +4723,15 @@ def api_ttt_fetch():
                                 break
                 except Exception:
                     pass
+
+    manual_participants, manual_error = _load_ttt_manual_participants(
+        data.get('manual_activities'),
+        headers,
+        (participant['activity_id'] for participant in participants),
+    )
+    if manual_error:
+        return jsonify({'error': manual_error}), 400
+    participants.extend(manual_participants)
 
     # ---- Group riders into teams ----
     import re
@@ -4738,6 +4885,10 @@ def api_ttt_fetch():
             'altitude_m': altitude_m,
             'power': power,
             'draft_watts': draft_watts,
+            'is_manual': bool(r.get('is_manual')),
+            'time_offset_sec': 0.0,
+            'calculated_time_offset_sec': 0.0,
+            'time_offset_source': 'none',
         }
 
     # ---- 5b. Route-project riders for accurate distance alignment ----
@@ -4882,9 +5033,13 @@ def api_ttt_fetch():
                 ),
             )
             if offset is not None:
-                rd['time_sec'] = rd['time_sec'] - offset
+                chart_shift_sec = -float(offset)
+                rd['time_offset_sec'] = chart_shift_sec
+                rd['calculated_time_offset_sec'] = chart_shift_sec
+                rd['time_offset_source'] = 'calculated'
+                rd['time_sec'] = rd['time_sec'] + chart_shift_sec
                 offsets_applied += 1
-                logger.info("TTT offset for %s: %.2fs", rd['name'], offset)
+                logger.info("TTT chart shift for %s: %.2fs", rd['name'], chart_shift_sec)
 
         if offsets_applied:
             logger.info("TTT: applied time offsets to %d / %d riders",
@@ -4905,6 +5060,8 @@ def api_ttt_fetch():
                 rd[key] = np.interp(int_times, t, rd[key])
         if 'route_distance_m' in rd:
             rd['route_distance_m'] = np.interp(int_times, t, rd['route_distance_m'])
+        time_offset_sec = float(rd.get('time_offset_sec', 0.0))
+        rd['base_time_sec'] = int_times - time_offset_sec
         rd['time_sec'] = int_times
 
     # ---- 6. Build team assignments and aggregate ----
@@ -4918,7 +5075,7 @@ def api_ttt_fetch():
 
     assigned_ids = set(team_assignments.keys())
     unassigned = [
-        {'name': rd['name'], 'activity_id': act_id, 'weight_kg': rd['weight_kg']}
+        _ttt_rider_summary(rd)
         for act_id, rd in all_processed.items()
         if act_id not in assigned_ids
     ]
@@ -4982,6 +5139,23 @@ def api_ttt_debug_starts():
     })
 
 
+def _ttt_rider_summary(rider):
+    """Return roster metadata, including editable rider clock timing."""
+    return {
+        'name': rider['name'],
+        'weight_kg': rider['weight_kg'],
+        'activity_id': rider['activity_id'],
+        'is_manual': bool(rider.get('is_manual')),
+        'time_offset_sec': round(float(
+            rider.get('time_offset_sec', rider.get('manual_time_offset_sec', 0.0))
+        ), 3),
+        'calculated_time_offset_sec': round(float(
+            rider.get('calculated_time_offset_sec', 0.0)
+        ), 3),
+        'time_offset_source': rider.get('time_offset_source', 'none'),
+    }
+
+
 def _build_ttt_team_results(all_processed, team_assignments, tag_order):
     """Aggregate per-rider processed data into per-team chart arrays.
 
@@ -5005,7 +5179,11 @@ def _build_ttt_team_results(all_processed, team_assignments, tag_order):
         def _get_dist(rd):
             return rd.get('route_distance_m', rd['distance_m'])
 
-        max_dist = max(_get_dist(rd)[-1] for rd in rider_data)
+        max_dist = max(
+            float(np.nanmax(distance_m))
+            for rd in rider_data
+            if len(distance_m := _get_dist(rd)) and np.isfinite(distance_m).any()
+        )
         step = 50
         dist_axis = np.arange(0, max_dist, step)
 
@@ -5017,10 +5195,10 @@ def _build_ttt_team_results(all_processed, team_assignments, tag_order):
         lead_rider_name = [None] * len(dist_axis)
 
         # ---- Leader detection ----
-        # All riders are already resampled to integer-second grids (step
-        # 5d), using the same GPS-projected route_distance_m as the race
-        # replay page.  Concatenate, group by second, leader = max
-        # distance, then bin into 50 m distance buckets and average.
+        # Rider source arrays are sampled once per second, but their editable
+        # clock offsets can be fractional. Interpolate each rider onto a shared
+        # integer-second race clock so sub-second offsets affect the values
+        # compared at each instant instead of being truncated.
 
         all_times = []
         all_dists = []
@@ -5029,26 +5207,82 @@ def _build_ttt_team_results(all_processed, team_assignments, tag_order):
         all_alts = []
         all_drafts = []
         all_names = []
+        position_rows = []
+
+        shared_start = int(np.ceil(min(rd['time_sec'][0] for rd in rider_data)))
+        shared_end = int(np.floor(max(rd['time_sec'][-1] for rd in rider_data)))
+        shared_clock = np.arange(shared_start, shared_end + 1, dtype=float)
 
         for rd in rider_data:
             dist_arr = _get_dist(rd)
-            t = rd['time_sec']
-            n = min(len(t), len(dist_arr))
-            all_times.append(t[:n])
-            all_dists.append(dist_arr[:n])
-            all_powers.append(rd['power'][:n])
-            all_speeds.append(rd['speed_mps'][:n])
-            all_alts.append(rd['altitude_m'][:n])
-            all_drafts.append(rd['draft_watts'][:n])
-            all_names.extend([rd['name']] * n)
+            n = min(
+                len(rd['time_sec']), len(dist_arr), len(rd['power']),
+                len(rd['speed_mps']), len(rd['altitude_m']),
+                len(rd['draft_watts']),
+            )
+            if n < 2:
+                continue
+            source_time = np.asarray(rd['time_sec'][:n], dtype=float)
+            in_range = (
+                (shared_clock >= source_time[0])
+                & (shared_clock <= source_time[-1])
+            )
+            sample_time = shared_clock[in_range]
+            if not len(sample_time):
+                continue
 
-        cat_times = np.concatenate(all_times).astype(int)
+            interpolated_distance = np.interp(
+                sample_time, source_time, dist_arr[:n]
+            )
+            all_times.append(sample_time)
+            all_dists.append(interpolated_distance)
+            all_powers.append(np.interp(sample_time, source_time, rd['power'][:n]))
+            all_speeds.append(np.interp(sample_time, source_time, rd['speed_mps'][:n]))
+            all_alts.append(np.interp(sample_time, source_time, rd['altitude_m'][:n]))
+            all_drafts.append(np.interp(sample_time, source_time, rd['draft_watts'][:n]))
+            all_names.extend([rd['name']] * len(sample_time))
+            position_rows.append((rd, in_range, interpolated_distance))
+
+        if not all_times:
+            continue
+
+        cat_times = np.concatenate(all_times)
         cat_dists = np.concatenate(all_dists)
         cat_powers = np.concatenate(all_powers)
         cat_speeds = np.concatenate(all_speeds)
         cat_alts = np.concatenate(all_alts)
         cat_drafts = np.concatenate(all_drafts)
         cat_names = np.array(all_names, dtype=object)
+
+        position_matrix = np.full(
+            (len(position_rows), len(shared_clock)), np.nan, dtype=float
+        )
+        for row_index, (_, in_range, distances) in enumerate(position_rows):
+            position_matrix[row_index, in_range] = distances
+        active_counts = np.sum(np.isfinite(position_matrix), axis=0)
+        leader_position_m = np.max(
+            np.where(np.isfinite(position_matrix), position_matrix, -np.inf),
+            axis=0,
+        )
+        leader_position_m[active_counts == 0] = np.nan
+        leader_progress_m = np.full(len(shared_clock), np.nan, dtype=float)
+        active_clock = active_counts > 0
+        leader_progress_m[active_clock] = np.maximum.accumulate(
+            leader_position_m[active_clock]
+        )
+        position_deviation_riders = []
+        for row_index, (rd, in_range, _) in enumerate(position_rows):
+            valid = in_range & np.isfinite(leader_position_m)
+            rider_leader_progress = leader_progress_m[valid]
+            deviations = position_matrix[row_index, valid] - leader_position_m[valid]
+            distance_km = np.round(rider_leader_progress / 1000.0, 5)
+            keep = np.r_[np.diff(distance_km) > 0, True]
+            position_deviation_riders.append({
+                'name': rd['name'],
+                'activity_id': rd['activity_id'],
+                'distance_km': distance_km[keep].tolist(),
+                'deviation_m': [round(float(v), 2) for v in deviations[keep]],
+            })
 
         unique_secs = np.unique(cat_times)
 
@@ -5205,7 +5439,7 @@ def _build_ttt_team_results(all_processed, team_assignments, tag_order):
 
         team_results.append({
             'label': tag,
-            'riders': [{'name': rd['name'], 'weight_kg': rd['weight_kg'], 'activity_id': rd['activity_id']} for rd in rider_data],
+            'riders': [_ttt_rider_summary(rd) for rd in rider_data],
             'distance_km': (dist_axis / 1000).tolist(),
             'lead_speed_kph': [None if np.isnan(v) else round(v, 2) for v in lead_speed],
             'avg_draft_efficiency': [None if np.isnan(v) else round(v, 4) for v in avg_draft_efficiency],
@@ -5217,6 +5451,9 @@ def _build_ttt_team_results(all_processed, team_assignments, tag_order):
             'lead_rider_name': lead_rider_name,
             'avg_weight_kg': avg_weight_kg,
             'pull_stats': pull_stats_list,
+            'position_deviation': {
+                'riders': position_deviation_riders,
+            },
         })
 
     return team_results
@@ -5242,7 +5479,8 @@ def api_ttt_reassign():
     """Re-aggregate TTT team charts using updated rider-to-team assignments.
 
     Uses cached processed data from the most recent fetch so no API calls
-    are needed.  Expects JSON: ``{subgroup_id, assignments: {activity_id: tag}}``.
+    are needed. Expects JSON with ``subgroup_id``, ``assignments``, and an
+    optional ``time_offsets`` object mapping activity IDs to chart-shift seconds.
     ``subgroup_id`` can be an integer (API fetch) or a string cache key (CSV).
     """
     data = request.json or {}
@@ -5258,6 +5496,12 @@ def api_ttt_reassign():
 
     cached = _ttt_cache[cache_key]
     all_processed = cached['all_processed']
+    raw_offsets = data.get('time_offsets')
+    if raw_offsets is None:
+        raw_offsets = data.get('manual_offsets')
+    offset_error = _apply_ttt_time_offsets(all_processed, raw_offsets)
+    if offset_error:
+        return jsonify({'error': offset_error}), 400
 
     # Preserve original tag order, then append any new tags
     all_tags_in_use = list(dict.fromkeys(assignments.values()))
@@ -5270,7 +5514,7 @@ def api_ttt_reassign():
 
     assigned_ids = set(assignments.keys())
     unassigned = [
-        {'name': rd['name'], 'activity_id': act_id, 'weight_kg': rd['weight_kg']}
+        _ttt_rider_summary(rd)
         for act_id, rd in all_processed.items()
         if act_id not in assigned_ids
     ]
@@ -5312,13 +5556,7 @@ def api_ttt_rider():
     if not rd:
         return jsonify({'error': 'Rider not found in cache'}), 404
 
-    # Downsample to ~50 m intervals for reasonable chart size
-    # Use route-projected distance when available
-    distance_m = rd.get('route_distance_m', rd['distance_m'])
-    step = 50
-    dist_axis = np.arange(0, distance_m[-1], step)
-    indices = np.searchsorted(distance_m, dist_axis)
-    indices = np.clip(indices, 0, len(distance_m) - 1)
+    dist_axis, indices = _sample_ttt_rider_distance(rd)
 
     return jsonify({
         'name': rd['name'],
@@ -5329,6 +5567,38 @@ def api_ttt_rider():
         'power_watts': [round(float(rd['power'][i]), 0) for i in indices],
         'draft_watts': [round(float(rd['draft_watts'][i]), 0) for i in indices],
     })
+
+
+def _sample_ttt_rider_distance(rider, step_m=50):
+    """Return distance bins and source indices for a complete rider trace.
+
+    Route projection can briefly move backwards or reset after the finish.
+    Convert it to cumulative course progress before using ``searchsorted`` so
+    the drilldown is not truncated to the final, reset distance value.
+    """
+    distance_m = np.asarray(
+        rider.get('route_distance_m', rider['distance_m']), dtype=float
+    )
+    series_length = min(
+        len(distance_m),
+        len(rider['altitude_m']),
+        len(rider['power']),
+        len(rider['draft_watts']),
+    )
+    distance_m = distance_m[:series_length]
+    finite_indices = np.flatnonzero(np.isfinite(distance_m))
+    if not len(finite_indices):
+        return np.array([], dtype=float), np.array([], dtype=int)
+
+    course_progress_m = np.maximum.accumulate(distance_m[finite_indices])
+    max_distance_m = float(course_progress_m[-1])
+    if max_distance_m <= 0:
+        return np.array([], dtype=float), np.array([], dtype=int)
+
+    dist_axis = np.arange(0, max_distance_m, step_m, dtype=float)
+    sample_positions = np.searchsorted(course_progress_m, dist_axis, side='left')
+    sample_positions = np.clip(sample_positions, 0, len(course_progress_m) - 1)
+    return dist_axis, finite_indices[sample_positions]
 
 
 @app.route('/api/ttt/debug_bins', methods=['POST'])
