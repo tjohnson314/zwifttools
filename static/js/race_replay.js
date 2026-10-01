@@ -506,6 +506,7 @@ function initRaceData(data) {
             activity_id: r.activity_id || null,
             weight_kg: r.weight_kg || 75.0,
             is_late_joiner: r.is_late_joiner || false,
+            start_offset_sec: Number(r.start_offset_sec) || 0,
             segment_distance_anomaly: r.segment_distance_anomaly || false,
             alignment_warning: r.alignment_warning || null,
             finish_time_sec: r.finish_time_sec,
@@ -592,6 +593,23 @@ function initRaceData(data) {
     }
     document.getElementById('info-finish').textContent = data.finish_line_km.toFixed(2) + ' km';
     document.getElementById('info-duration').textContent = formatTime(data.max_time - data.min_time);
+
+    // Show official staggered starts for chase/handicap events. Rider clocks
+    // are already shifted by these offsets in the merged API response.
+    const startGroups = data.start_groups || [];
+    const hasStaggeredStarts = startGroups.some(group => group.offset_seconds > 0);
+    const startGroupsEl = document.getElementById('info-start-groups');
+    if (hasStaggeredStarts) {
+        document.getElementById('start-groups-label').textContent = startGroups
+            .map(group => {
+                const offset = Number(group.offset_seconds) || 0;
+                return `${group.label || 'Group'} ${offset > 0 ? '+' : ''}${formatTime(offset)}`;
+            })
+            .join(' · ');
+        startGroupsEl.style.display = '';
+    } else {
+        startGroupsEl.style.display = 'none';
+    }
 
     // Segment distance anomaly summary (Zwift lead-in distance bug)
     const anomalyCount = data.riders.filter(r => r.segment_distance_anomaly).length;
@@ -756,7 +774,7 @@ function getRiderPositions(t) {
 
     for (const r of raceData.riders) {
         const rl = riderLookup[r.rank];
-        if (!rl || t < rl.min_time || t > rl.max_time) continue;
+        if (!rl || t < rl.start_offset_sec || t < rl.min_time || t > rl.max_time) continue;
         const finished = r.finish_time_sec != null && t >= r.finish_time_sec;
         if (hideLateJoiners && rl.is_late_joiner) continue;
 

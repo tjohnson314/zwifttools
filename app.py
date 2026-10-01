@@ -3552,6 +3552,41 @@ def _load_multi_subgroup_race(race_id):
         RiderData,
     )
 
+    # A subgroup's cleaned clock is relative to that subgroup's own gun.
+    # Anchor all subgroup clocks to the earliest official start so chase races
+    # retain their real handicaps in the combined replay.
+    subgroup_timing = {}
+    valid_starts = []
+    for sg_info in manifest['subgroups']:
+        sg_race_id = sg_info['race_id']
+        start_time = None
+        meta_path = Path('race_data') / sg_race_id / 'race_meta.json'
+        if meta_path.exists():
+            try:
+                with open(meta_path) as meta_file:
+                    start_time = json.load(meta_file).get('race_start_time')
+            except (OSError, TypeError, ValueError):
+                pass
+        start_dt = _parse_zwift_datetime(start_time)
+        subgroup_timing[sg_race_id] = {
+            'race_id': sg_race_id,
+            'label': sg_info.get('label'),
+            'subgroup_id': sg_info.get('subgroup_id'),
+            'start_time': start_time,
+            'start_dt': start_dt,
+            'offset_seconds': 0.0,
+        }
+        if start_dt is not None:
+            valid_starts.append(start_dt)
+
+    if valid_starts:
+        event_start_dt = min(valid_starts)
+        for timing in subgroup_timing.values():
+            if timing['start_dt'] is not None:
+                timing['offset_seconds'] = (
+                    timing['start_dt'] - event_start_dt
+                ).total_seconds()
+
     # Clean each subgroup and collect riders with category labels
     all_riders = []
     merged_route_name = None
@@ -3569,6 +3604,7 @@ def _load_multi_subgroup_race(race_id):
         sg_race_id = sg_info['race_id']
         label = sg_info['label']
         sg_path = Path('race_data') / sg_race_id
+        timing = subgroup_timing[sg_race_id]
 
         if not sg_path.exists():
             if blob_storage.race_exists_in_blob(sg_race_id):
@@ -3596,18 +3632,32 @@ def _load_multi_subgroup_race(race_id):
             align_riders_to_elevation_profile(
                 sg_data.riders, merged_elevation
             )
+
+        start_offset = timing['offset_seconds']
+        if start_offset:
+            for rider in sg_data.riders:
+                rider.data = rider.data.copy()
+                rider.data.index = rider.data.index + start_offset
+                if rider.finish_time_sec is not None:
+                    rider.finish_time_sec += start_offset
+            sg_data.min_time += start_offset
+            sg_data.max_time += start_offset
+
         merged_finish = max(merged_finish, sg_data.finish_line_km)
         merged_min_time = min(merged_min_time, sg_data.min_time)
         merged_max_time = max(merged_max_time, sg_data.max_time)
 
         # Re-number ranks globally so they don't collide across categories
         for r in sg_data.riders:
-            all_riders.append((r, label, base_rank + r.rank))
+            all_riders.append((r, label, base_rank + r.rank, timing))
         if sg_data.riders:
             base_rank += max(r.rank for r in sg_data.riders)
 
     if not all_riders:
         return jsonify({'error': 'No rider data found across subgroups'}), 404
+
+    if valid_starts:
+        merged_min_time = max(0.0, merged_min_time)
 
     # Resolve source_activity_id from subgroup metadata
     merged_source_activity_id = None
@@ -3622,7 +3672,7 @@ def _load_multi_subgroup_race(race_id):
 
     # Build a merged CleanedRaceData and cache it
     merged_riders = []
-    for r, label, new_rank in all_riders:
+    for r, label, new_rank, timing in all_riders:
         merged_riders.append(RiderData(
             rank=new_rank,
             activity_id=r.activity_id,
@@ -3657,8 +3707,21 @@ def _load_multi_subgroup_race(race_id):
 
     # Also store the category mapping for use in api_race_data
     _race_data_cache[race_id + '_categories'] = {
-        new_rank: label for _, label, new_rank in all_riders
+        new_rank: label for _, label, new_rank, _ in all_riders
     }
+    _race_data_cache[race_id + '_subgroup_timing'] = {
+        new_rank: {
+            key: value for key, value in timing.items() if key != 'start_dt'
+        }
+        for _, _, new_rank, timing in all_riders
+    }
+    _race_data_cache[race_id + '_start_groups'] = [
+        {
+            key: value for key, value in timing.items() if key != 'start_dt'
+        }
+        for timing in subgroup_timing.values()
+        if timing['start_dt'] is not None
+    ]
 
     return jsonify({
         'success': True,
@@ -3735,8 +3798,24 @@ def _build_race_data_response(race_id):
     race_start_time = None
     event_id = None
     event_subgroup_id = None
-    meta_path = Path('race_data') / race_id / 'race_meta.json'
-    if meta_path.exists():
+    start_groups = _race_data_cache.get(race_id + '_start_groups', [])
+    subgroup_timing = _race_data_cache.get(race_id + '_subgroup_timing', {})
+    race_path = Path('race_data') / race_id
+    meta_path = race_path / 'race_meta.json'
+    manifest_path = race_path / 'event_manifest.json'
+    if race_id.startswith('race_event_') and manifest_path.exists():
+        try:
+            with open(manifest_path) as f:
+                manifest = json.load(f)
+            event_id = manifest.get('event_id')
+            if start_groups:
+                first_group = min(
+                    start_groups, key=lambda group: group['offset_seconds']
+                )
+                race_start_time = first_group.get('start_time')
+        except Exception:
+            pass
+    elif meta_path.exists():
         try:
             with open(meta_path) as f:
                 meta = json.load(f)
@@ -3756,14 +3835,7 @@ def _build_race_data_response(race_id):
     # the official race start time.  A grace period absorbs riders who simply
     # began recording / crossed the start banner shortly after the gun.
     from race_replay.data_cleaner import LATE_JOINER_GRACE_SEC
-    race_start_dt = None
-    if race_start_time:
-        try:
-            # Parse the ISO 8601 race start time
-            ts = race_start_time.replace('+0000', '+00:00').replace('Z', '+00:00')
-            race_start_dt = datetime.fromisoformat(ts)
-        except Exception:
-            pass
+    race_start_dt = _parse_zwift_datetime(race_start_time)
 
     # Category mapping (populated by multi-subgroup load)
     cat_map = _race_data_cache.get(race_id + '_categories', {})
@@ -3803,17 +3875,18 @@ def _build_race_data_response(race_id):
 
     for i, r in enumerate(race_data.riders):
         df = r.data.reset_index()  # time_sec is the index
+        rider_timing = subgroup_timing.get(int(r.rank), {})
+        rider_race_start_dt = _parse_zwift_datetime(
+            rider_timing.get('start_time')
+        ) or race_start_dt
 
         # Late joiner: activity started more than the grace period after the gun
         is_late_joiner = False
-        if race_start_dt and r.activity_start_time:
-            try:
-                ts = r.activity_start_time.replace('+0000', '+00:00').replace('Z', '+00:00')
-                rider_start_dt = datetime.fromisoformat(ts)
-                delay_sec = (rider_start_dt - race_start_dt).total_seconds()
+        if rider_race_start_dt and r.activity_start_time:
+            rider_start_dt = _parse_zwift_datetime(r.activity_start_time)
+            if rider_start_dt is not None:
+                delay_sec = (rider_start_dt - rider_race_start_dt).total_seconds()
                 is_late_joiner = delay_sec > LATE_JOINER_GRACE_SEC
-            except Exception:
-                pass
         rider_json = {
             'rank': int(r.rank),
             'name': r.name,
@@ -3824,6 +3897,7 @@ def _build_race_data_response(race_id):
             'weight_kg': float(r.weight_kg),
             'height_cm': float(r.height_cm) if r.height_cm is not None else None,
             'is_late_joiner': is_late_joiner,
+            'start_offset_sec': round(float(rider_timing.get('offset_seconds', 0.0)), 1),
             'finish_time_sec': float(r.finish_time_sec) if r.finish_time_sec is not None else None,
             'ttt_time_offset': round(float(r.ttt_time_offset), 1) if r.ttt_time_offset is not None else None,
             'segment_distance_anomaly': bool(r.segment_distance_anomaly),
@@ -3880,6 +3954,9 @@ def _build_race_data_response(race_id):
         'course_id': course_id,
         'source_activity_id': str(race_data.source_activity_id) if race_data.source_activity_id else None,
         'race_start_time': race_start_time,
+        'start_groups': sorted(
+            start_groups, key=lambda group: group['offset_seconds']
+        ),
         'event_id': event_id,
         'event_subgroup_id': event_subgroup_id,
         'finish_line_km': float(race_data.finish_line_km),
