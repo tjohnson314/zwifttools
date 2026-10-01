@@ -4075,6 +4075,15 @@ TTT_MAX_TIME_OFFSET_SEC = 3600.0
 _ttt_cache = {}  # subgroup_id -> processed rider data for reassignment
 
 
+def _ttt_theoretical_max_draft_watts(speed_mps, cda):
+    """Return 50% of aerodynamic drag power at each raw rider speed."""
+    from bike_comparison.physics import AIR_DENSITY, DRIVETRAIN_LOSS
+
+    speed = np.asarray(speed_mps, dtype=float)
+    aero_power = 0.5 * AIR_DENSITY * cda * speed ** 3 / (1 - DRIVETRAIN_LOSS)
+    return 0.5 * aero_power
+
+
 def _ttt_rider_start_epoch(participant):
     """Absolute start time (UTC epoch seconds) for a TTT rider.
 
@@ -4254,14 +4263,8 @@ def _ttt_participant_from_activity(activity_id, activity_data):
     name = f"{profile.get('firstName', '')} {profile.get('lastName', '')}".strip()
     name = name or activity_data.get('playerName') or f'Rider {activity_id}'
 
-    weight_grams = profile.get('weightInGrams') or profile.get('weight')
-    try:
-        weight_kg = float(weight_grams) / 1000.0 if weight_grams else None
-    except (TypeError, ValueError):
-        weight_kg = None
-    weight_is_recorded = bool(
-        weight_kg is not None and np.isfinite(weight_kg) and weight_kg > 0
-    )
+    weight_kg, height_cm = _ttt_profile_measurements(profile)
+    weight_is_recorded = weight_kg is not None
 
     profile_id = profile.get('id') or activity_data.get('profileId') or activity_data.get('playerId')
     try:
@@ -4278,10 +4281,34 @@ def _ttt_participant_from_activity(activity_id, activity_data):
         'player_id': player_id,
         'is_manual': True,
     }
-    height_cm = profile.get('heightInCentimeters')
     if height_cm:
         participant['height_cm'] = height_cm
     return participant
+
+
+def _ttt_profile_measurements(profile):
+    """Return valid ``(weight_kg, height_cm)`` from a Zwift profile payload."""
+    weight_grams = profile.get('weightInGrams') or profile.get('weight')
+    try:
+        weight_kg = float(weight_grams) / 1000.0 if weight_grams else None
+    except (TypeError, ValueError):
+        weight_kg = None
+    if weight_kg is None or not np.isfinite(weight_kg) or weight_kg <= 0:
+        weight_kg = None
+
+    height_cm = profile.get('heightInCentimeters')
+    if not height_cm and profile.get('height'):
+        try:
+            height_cm = float(profile['height']) / 10.0
+        except (TypeError, ValueError):
+            height_cm = None
+    try:
+        height_cm = float(height_cm) if height_cm else None
+    except (TypeError, ValueError):
+        height_cm = None
+    if height_cm is not None and (not np.isfinite(height_cm) or height_cm <= 0):
+        height_cm = None
+    return weight_kg, height_cm
 
 
 def _load_ttt_manual_participants(raw_activities, headers, existing_activity_ids):
@@ -4299,7 +4326,27 @@ def _load_ttt_manual_participants(raw_activities, headers, existing_activity_ids
         activity_data, error = get_activity_details(activity_id, headers)
         if error:
             return None, f'Could not add activity {activity_id}: {error}'
-        participants.append(_ttt_participant_from_activity(activity_id, activity_data))
+        participant = _ttt_participant_from_activity(activity_id, activity_data)
+        needs_weight = not participant['weight_is_event_recorded']
+        needs_height = not participant.get('height_cm')
+        if participant['player_id'] and (needs_weight or needs_height):
+            try:
+                response = _request_with_retry(
+                    'GET', f"{BASE_URL}/profiles/{participant['player_id']}",
+                    headers=headers, timeout=10,
+                )
+                if response.status_code == 200:
+                    weight_kg, height_cm = _ttt_profile_measurements(response.json())
+                    if needs_weight and weight_kg is not None:
+                        participant['weight_kg'] = round(weight_kg, 1)
+                    if needs_height and height_cm is not None:
+                        participant['height_cm'] = height_cm
+            except Exception:
+                logger.warning(
+                    "Could not hydrate profile %s for manual TTT activity %s",
+                    participant['player_id'], activity_id,
+                )
+        participants.append(participant)
         existing_ids.add(activity_id)
     return participants, None
 
@@ -4447,7 +4494,7 @@ def api_ttt_fetch_csv():
     if not athletes_raw:
         return jsonify({'error': 'No athlete data found in CSV.'}), 400
 
-    # ---- Resolve athlete names + weights from Zwift profiles ----
+    # ---- Resolve athlete names, weights, and heights from Zwift profiles ----
     # athlete_id in the Sauce CSV is the Zwift profile (player) ID.
     profile_lookup = {}  # athlete_id str -> {'name': ..., 'weight_kg': ...}
 
@@ -4461,6 +4508,7 @@ def api_ttt_fetch_csv():
                     profile_lookup[pid] = {
                         'name': p['name'],
                         'weight_kg': p.get('weight_kg', 75.0),
+                        'height_cm': p.get('height_cm', 175.0),
                     }
 
     # For any athletes not matched via race entries, fetch profiles directly
@@ -4476,9 +4524,13 @@ def api_ttt_fetch_csv():
                     p = resp.json()
                     name = f"{p.get('firstName', '')} {p.get('lastName', '')}".strip()
                     wt_g = p.get('weightInGrams', 0) or p.get('weight', 0)
+                    height_cm = p.get('heightInCentimeters')
+                    if not height_cm and p.get('height'):
+                        height_cm = float(p['height']) / 10.0
                     profile_lookup[aid] = {
                         'name': name or f'Athlete {aid}',
                         'weight_kg': round(wt_g / 1000, 1) if wt_g else 75.0,
+                        'height_cm': height_cm or 175.0,
                     }
             except Exception:
                 pass
@@ -4489,6 +4541,10 @@ def api_ttt_fetch_csv():
     global_t0 = min(float(r['world_time']) for r in rows)
 
     # ---- Build processed rider dicts (same structure as api_ttt_fetch) ----
+    ttt_setup = get_bike_stats(TTT_FRAME_ID, TTT_WHEEL_ID, TTT_UPGRADE_LEVEL)
+    if not ttt_setup:
+        return jsonify({'error': 'Could not load TTT bike data'}), 500
+
     all_processed = {}
     rider_latlng = {}  # act_id -> (lats, lngs) for route alignment
     for athlete_id, arows in athletes_raw.items():
@@ -4517,16 +4573,23 @@ def api_ttt_fetch_csv():
 
         act_id = str(athlete_id)
         prof = profile_lookup.get(act_id, {})
+        weight_kg = prof.get('weight_kg', 75.0)
+        height_cm = prof.get('height_cm', 175.0)
+        cda = rider_cda(height_cm / 100.0, weight_kg) + ttt_setup.cda_bias
         all_processed[act_id] = {
             'name': prof.get('name', f'Athlete {athlete_id}'),
             'activity_id': act_id,
-            'weight_kg': prof.get('weight_kg', 75.0),
+            'weight_kg': weight_kg,
+            'height_cm': height_cm,
             'time_sec': time_sec,
             'speed_mps': speed_mps,
             'distance_m': distance_m,
             'altitude_m': altitude_m,
             'power': power,
             'draft_watts': draft_watts,
+            'theoretical_max_draft_watts': _ttt_theoretical_max_draft_watts(
+                speed_mps, cda
+            ),
             'time_offset_sec': 0.0,
             'calculated_time_offset_sec': 0.0,
             'time_offset_source': 'none',
@@ -4601,7 +4664,10 @@ def api_ttt_fetch_csv():
         if int_end <= int_start:
             continue
         int_times = np.arange(int_start, int_end + 1, dtype=float)
-        for key in ('speed_mps', 'distance_m', 'altitude_m', 'power', 'draft_watts'):
+        for key in (
+            'speed_mps', 'distance_m', 'altitude_m', 'power', 'draft_watts',
+            'theoretical_max_draft_watts',
+        ):
             rd[key] = np.interp(int_times, t, rd[key])
         if 'route_distance_m' in rd:
             rd['route_distance_m'] = np.interp(int_times, t, rd['route_distance_m'])
@@ -4630,7 +4696,7 @@ def api_ttt_fetch_csv():
 
     _ttt_cache[cache_key] = {
         'event_name': event_name,
-        'ttt_bike': 'N/A (Sauce CSV — actual draft data)',
+        'ttt_bike': str(ttt_setup),
         'all_processed': all_processed,
         'team_tags': team_tags,
         'participants': [],
@@ -4641,7 +4707,7 @@ def api_ttt_fetch_csv():
     return jsonify({
         'event_name': event_name,
         'teams': team_results,
-        'ttt_bike': 'N/A (Sauce CSV — actual draft data)',
+        'ttt_bike': str(ttt_setup),
         'race_distance_km': race_distance_km,
         'unassigned': [],
         'team_tags': team_tags,
@@ -4855,6 +4921,9 @@ def api_ttt_fetch():
         crr = 0.004
         f_rolling = crr * total_mass * 9.8067
         f_aero = 0.5 * AIR_DENSITY * cda * speed_mps ** 2
+        theoretical_max_draft_watts = _ttt_theoretical_max_draft_watts(
+            speed_mps, cda
+        )
         safe_speed = np.maximum(speed_mps, 0.5)
         resistance_power_solo = (f_rolling + f_aero) * safe_speed / (1 - DRIVETRAIN_LOSS)
 
@@ -4885,6 +4954,7 @@ def api_ttt_fetch():
             'altitude_m': altitude_m,
             'power': power,
             'draft_watts': draft_watts,
+            'theoretical_max_draft_watts': theoretical_max_draft_watts,
             'is_manual': bool(r.get('is_manual')),
             'time_offset_sec': 0.0,
             'calculated_time_offset_sec': 0.0,
@@ -5055,7 +5125,10 @@ def api_ttt_fetch():
         if int_end <= int_start:
             continue
         int_times = np.arange(int_start, int_end + 1, dtype=float)
-        for key in ('speed_mps', 'distance_m', 'altitude_m', 'power', 'draft_watts'):
+        for key in (
+            'speed_mps', 'distance_m', 'altitude_m', 'power', 'draft_watts',
+            'theoretical_max_draft_watts',
+        ):
             if key in rd:
                 rd[key] = np.interp(int_times, t, rd[key])
         if 'route_distance_m' in rd:
@@ -5557,6 +5630,7 @@ def api_ttt_rider():
         return jsonify({'error': 'Rider not found in cache'}), 404
 
     dist_axis, indices = _sample_ttt_rider_distance(rd)
+    theoretical_max = rd.get('theoretical_max_draft_watts')
 
     return jsonify({
         'name': rd['name'],
@@ -5566,6 +5640,10 @@ def api_ttt_rider():
         'altitude_m': [round(float(rd['altitude_m'][i]), 1) for i in indices],
         'power_watts': [round(float(rd['power'][i]), 0) for i in indices],
         'draft_watts': [round(float(rd['draft_watts'][i]), 0) for i in indices],
+        'theoretical_max_draft_watts': (
+            [round(float(theoretical_max[i]), 0) for i in indices]
+            if theoretical_max is not None else None
+        ),
     })
 
 
@@ -5585,6 +5663,10 @@ def _sample_ttt_rider_distance(rider, step_m=50):
         len(rider['power']),
         len(rider['draft_watts']),
     )
+    if 'theoretical_max_draft_watts' in rider:
+        series_length = min(
+            series_length, len(rider['theoretical_max_draft_watts'])
+        )
     distance_m = distance_m[:series_length]
     finite_indices = np.flatnonzero(np.isfinite(distance_m))
     if not len(finite_indices):

@@ -1,6 +1,9 @@
+import io
+
 import numpy as np
 
 import app as app_module
+from bike_comparison.physics import AIR_DENSITY, DRIVETRAIN_LOSS
 from race_replay.data_cleaner import _unwrap_loop_route_distances
 
 
@@ -16,7 +19,52 @@ def _rider_with_distance(distance_m):
         "altitude_m": np.arange(sample_count, dtype=float),
         "power": np.full(sample_count, 250.0),
         "draft_watts": np.full(sample_count, 25.0),
+        "theoretical_max_draft_watts": np.full(sample_count, 100.0),
     }
+
+
+def test_theoretical_max_draft_is_half_of_aero_power():
+    speed_mps = np.array([0.0, 10.0])
+    cda = 0.3
+
+    result = app_module._ttt_theoretical_max_draft_watts(speed_mps, cda)
+
+    expected_at_ten = 0.25 * AIR_DENSITY * cda * 10.0 ** 3 / (1 - DRIVETRAIN_LOSS)
+    np.testing.assert_allclose(result, [0.0, expected_at_ten])
+
+
+def test_sauce_csv_uses_level_five_ttt_setup_for_max_draft():
+    header = (
+        "athlete_id,world_time,power,speed,altitude,distance,draft,lat,lng\n"
+    )
+    rows = [
+        f"42,{second * 1000},250,36,10,{second * 10},30,0.1,0.2"
+        for second in range(10)
+    ]
+    csv_data = header + "\n".join(rows)
+
+    response = app_module.app.test_client().post(
+        "/api/ttt/fetch_csv",
+        data={"csv_file": (io.BytesIO(csv_data.encode()), "telemetry.csv")},
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 200
+    result = response.get_json()
+    rider = app_module._ttt_cache[result["cache_key"]]["all_processed"]["42"]
+    setup = app_module.get_bike_stats(
+        app_module.TTT_FRAME_ID,
+        app_module.TTT_WHEEL_ID,
+        app_module.TTT_UPGRADE_LEVEL,
+    )
+    cda = app_module.rider_cda(1.75, 75.0) + setup.cda_bias
+    expected = app_module._ttt_theoretical_max_draft_watts(
+        np.full(10, 10.0), cda
+    )
+
+    assert app_module.TTT_UPGRADE_LEVEL == 5
+    assert result["ttt_bike"] == str(setup)
+    np.testing.assert_allclose(rider["theoretical_max_draft_watts"], expected)
 
 
 def test_rider_distance_sampling_keeps_full_trace_after_projection_reset():
@@ -63,6 +111,7 @@ def test_rider_endpoint_returns_full_trace_after_projection_reset(monkeypatch):
     data = response.get_json()
     assert data["distance_km"] == [0.0, 0.05, 0.1, 0.15, 0.2, 0.25]
     assert data["power_watts"] == [250.0] * 6
+    assert data["theoretical_max_draft_watts"] == [100.0] * 6
 
 
 def test_team_chart_reaches_finisher_maximum_when_manual_rider_drops_out():

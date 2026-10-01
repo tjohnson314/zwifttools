@@ -672,6 +672,11 @@
         '#b39ddb', '#90caf9', '#a5d6a7', '#ffe082', '#bcaaa4',
     ];
 
+    function formatWeightKg(weightKg) {
+        const rounded = Math.round(Number(weightKg) * 10) / 10;
+        return Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1);
+    }
+
     function onFocusTeamChange() {
         focusTeam = document.getElementById('focusTeamSelect').value;
         if (lastData) renderResults(lastData);
@@ -1713,7 +1718,7 @@
 
         const tag = document.createElement('span');
         tag.className = 'rider-tag';
-        tag.textContent = `${rider.name} (${rider.weight_kg.toFixed(0)}kg)`;
+        tag.textContent = `${rider.name} (${formatWeightKg(rider.weight_kg)}kg)`;
         tag.draggable = true;
         tag.dataset.activityId = rider.activity_id;
         tag.dataset.name = rider.name;
@@ -1821,7 +1826,7 @@
             t.riders.forEach(r => {
                 const opt = document.createElement('option');
                 opt.value = r.activity_id;
-                opt.textContent = `${r.name} (${r.weight_kg.toFixed(0)}kg)`;
+                opt.textContent = `${r.name} (${formatWeightKg(r.weight_kg)}kg)`;
                 grp.appendChild(opt);
             });
             sel.appendChild(grp);
@@ -1832,7 +1837,7 @@
             data.unassigned.forEach(r => {
                 const opt = document.createElement('option');
                 opt.value = r.activity_id;
-                opt.textContent = `${r.name} (${r.weight_kg.toFixed(0)}kg)`;
+                opt.textContent = `${r.name} (${formatWeightKg(r.weight_kg)}kg)`;
                 grp.appendChild(opt);
             });
             sel.appendChild(grp);
@@ -1871,7 +1876,7 @@
 
     function renderRiderChart(rd) {
         document.getElementById('riderChartContainer').style.display = 'block';
-        document.getElementById('riderChartTitle').textContent = `${rd.name} (${rd.weight_kg.toFixed(0)}kg)`;
+        document.getElementById('riderChartTitle').textContent = `${rd.name} (${formatWeightKg(rd.weight_kg)}kg)`;
 
         if (riderChartInstance) riderChartInstance.destroy();
 
@@ -1883,6 +1888,7 @@
         const alt = rd.altitude_m;
         const pow = rd.power_watts;
         const draft = rd.draft_watts;
+        const theoreticalMaxDraft = rd.theoretical_max_draft_watts;
 
         // Compute averages over the visible range for annotation lines
         let powSum = 0, draftSum = 0, cnt = 0;
@@ -1896,69 +1902,84 @@
         const avgPow = cnt > 0 ? powSum / cnt : 0;
         const avgDraft = cnt > 0 ? draftSum / cnt : 0;
 
+        const datasets = [
+            {
+                label: 'Elevation (m)',
+                data: dist.map((d, i) => ({ x: d, y: alt[i] })),
+                borderColor: 'rgba(180,180,180,0.3)',
+                backgroundColor: 'rgba(180,180,180,0.08)',
+                borderWidth: 1,
+                pointRadius: 0,
+                tension: 0.3,
+                fill: true,
+                yAxisID: 'yAlt',
+                order: 3,
+            },
+            {
+                label: 'Power (W)',
+                data: dist.map((d, i) => ({ x: d, y: pow[i] })),
+                borderColor: '#f7931e',
+                backgroundColor: 'rgba(247,147,30,0.1)',
+                borderWidth: 1.5,
+                pointRadius: 0,
+                tension: 0.3,
+                yAxisID: 'y',
+                order: 2,
+            },
+            {
+                label: `Avg Power (${avgPow.toFixed(0)} W)`,
+                data: [{x: lo, y: avgPow}, {x: hi, y: avgPow}],
+                borderColor: 'rgba(247,147,30,0.5)',
+                borderWidth: 1.5,
+                borderDash: [6, 4],
+                pointRadius: 0,
+                tension: 0,
+                yAxisID: 'y',
+                order: 2,
+            },
+            {
+                label: 'Draft Estimate (W)',
+                data: dist.map((d, i) => ({ x: d, y: draft[i] })),
+                borderColor: '#4fc3f7',
+                backgroundColor: 'rgba(79,195,247,0.1)',
+                borderWidth: 1.5,
+                pointRadius: 0,
+                tension: 0.3,
+                yAxisID: 'y',
+                order: 1,
+            },
+            {
+                label: `Avg Draft (${avgDraft.toFixed(0)} W)`,
+                data: [{x: lo, y: avgDraft}, {x: hi, y: avgDraft}],
+                borderColor: 'rgba(79,195,247,0.5)',
+                borderWidth: 1.5,
+                borderDash: [6, 4],
+                pointRadius: 0,
+                tension: 0,
+                yAxisID: 'y',
+                order: 1,
+            },
+        ];
+        if (Array.isArray(theoreticalMaxDraft)
+                && theoreticalMaxDraft.length === dist.length) {
+            datasets.push({
+                label: 'Theoretical Max Draft (50% Aero)',
+                data: dist.map((d, i) => ({ x: d, y: theoreticalMaxDraft[i] })),
+                borderColor: '#ce93d8',
+                backgroundColor: 'transparent',
+                borderWidth: 1.5,
+                borderDash: [5, 4],
+                pointRadius: 0,
+                tension: 0.3,
+                yAxisID: 'y',
+                order: 1,
+            });
+        }
+
         const ctx = document.getElementById('riderChart').getContext('2d');
         riderChartInstance = new Chart(ctx, {
             type: 'line',
-            data: {
-                datasets: [
-                    {
-                        label: 'Elevation (m)',
-                        data: dist.map((d, i) => ({ x: d, y: alt[i] })),
-                        borderColor: 'rgba(180,180,180,0.3)',
-                        backgroundColor: 'rgba(180,180,180,0.08)',
-                        borderWidth: 1,
-                        pointRadius: 0,
-                        tension: 0.3,
-                        fill: true,
-                        yAxisID: 'yAlt',
-                        order: 3,
-                    },
-                    {
-                        label: 'Power (W)',
-                        data: dist.map((d, i) => ({ x: d, y: pow[i] })),
-                        borderColor: '#f7931e',
-                        backgroundColor: 'rgba(247,147,30,0.1)',
-                        borderWidth: 1.5,
-                        pointRadius: 0,
-                        tension: 0.3,
-                        yAxisID: 'y',
-                        order: 2,
-                    },
-                    {
-                        label: `Avg Power (${avgPow.toFixed(0)} W)`,
-                        data: [{x: lo, y: avgPow}, {x: hi, y: avgPow}],
-                        borderColor: 'rgba(247,147,30,0.5)',
-                        borderWidth: 1.5,
-                        borderDash: [6, 4],
-                        pointRadius: 0,
-                        tension: 0,
-                        yAxisID: 'y',
-                        order: 2,
-                    },
-                    {
-                        label: 'Draft Estimate (W)',
-                        data: dist.map((d, i) => ({ x: d, y: draft[i] })),
-                        borderColor: '#4fc3f7',
-                        backgroundColor: 'rgba(79,195,247,0.1)',
-                        borderWidth: 1.5,
-                        pointRadius: 0,
-                        tension: 0.3,
-                        yAxisID: 'y',
-                        order: 1,
-                    },
-                    {
-                        label: `Avg Draft (${avgDraft.toFixed(0)} W)`,
-                        data: [{x: lo, y: avgDraft}, {x: hi, y: avgDraft}],
-                        borderColor: 'rgba(79,195,247,0.5)',
-                        borderWidth: 1.5,
-                        borderDash: [6, 4],
-                        pointRadius: 0,
-                        tension: 0,
-                        yAxisID: 'y',
-                        order: 1,
-                    },
-                ],
-            },
+            data: { datasets },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,

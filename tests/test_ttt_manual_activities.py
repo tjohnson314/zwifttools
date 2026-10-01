@@ -68,6 +68,45 @@ def test_load_ttt_manual_participants_reports_activity_error(monkeypatch):
     assert error == "Could not add activity 999: Error fetching activity: 404"
 
 
+def test_load_ttt_manual_participant_fetches_missing_profile_measurements(monkeypatch):
+    monkeypatch.setattr(
+        app_module,
+        "get_activity_details",
+        lambda activity_id, headers: ({
+            "profile": {"id": 42, "firstName": "Tim", "lastName": "Johnson"}
+        }, None),
+    )
+
+    class ProfileResponse:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {"weight": 70123, "height": 1800}
+
+    requested = []
+
+    def fake_request(method, url, **kwargs):
+        requested.append((method, url, kwargs))
+        return ProfileResponse()
+
+    monkeypatch.setattr(app_module, "_request_with_retry", fake_request)
+
+    participants, error = app_module._load_ttt_manual_participants(
+        "222", {"Authorization": "Bearer test"}, []
+    )
+
+    assert error is None
+    assert participants[0]["weight_kg"] == 70.1
+    assert participants[0]["height_cm"] == 180.0
+    assert participants[0]["weight_is_event_recorded"] is False
+    assert requested == [(
+        "GET",
+        f"{app_module.BASE_URL}/profiles/42",
+        {"headers": {"Authorization": "Bearer test"}, "timeout": 10},
+    )]
+
+
 def test_apply_ttt_time_offset_uses_base_clock_without_stacking():
     rider = {
         "activity_id": "222",
