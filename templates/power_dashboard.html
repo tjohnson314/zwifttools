@@ -39,6 +39,10 @@
                             <button type="button" class="active" data-power-unit="W" aria-pressed="true">W</button>
                             <button type="button" data-power-unit="W/kg" aria-pressed="false">W/kg</button>
                         </div>
+                        <div class="critical-power-toggle">
+                            <input id="criticalPowerToggle" type="checkbox" aria-label="Show critical power overlay">
+                            <a href="/critical-power">Critical power</a>
+                        </div>
                         <span id="pinState" class="pin-state">Hover to inspect</span>
                     </div>
                 </div>
@@ -88,6 +92,7 @@
                 <div class="activity-list-tools">
                     <span id="dividerHint" class="divider-hint">Use the &ldquo;+ divider&rdquo; buttons between rows to split activities into power-curve groups.</span>
                     <button id="clearDividersBtn" class="range-btn" type="button" style="display:none;">Clear dividers</button>
+                    <button id="clearPowerCurveCacheBtn" class="range-btn" type="button">Clear cache</button>
                 </div>
             </div>
             <div class="activity-table-wrap">

@@ -14,6 +14,8 @@
 'use strict';
 
 const POWER_CURVE_X_TICKS = [1, 2, 5, 10, 30, 60, 120, 300, 600, 1200, 3600, 7200];
+const CRITICAL_POWER_PR_DURATIONS = [300, 600, 1200];
+const POWER_CURVE_CACHE_PREFIX = 'powerDashboardCurveV1:';
 
 // Distinct colours for the partition curves (cycled if there are more groups).
 const PARTITION_COLORS = [
@@ -32,6 +34,7 @@ let powerCurveChart = null;
 let weeklyBarChart = null;
 let weeklyDurationSec = 1200;
 let powerUnit = 'W';
+let showCriticalPower = false;
 
 let selectedIndex = 0;
 let pinnedIndex = null;
@@ -256,7 +259,7 @@ function partitionLabel(startIdx, endIdx) {
 
 // ── Chart rendering ───────────────────────────────────────────────────────────
 function buildChartDatasets() {
-    return partitionBounds().map(([startIdx, endIdx], idx) => {
+    const datasets = partitionBounds().map(([startIdx, endIdx], idx) => {
         const color = partitionColor(idx);
         const curve = partitionCurve(startIdx, endIdx);
         return {
@@ -272,6 +275,64 @@ function buildChartDatasets() {
             tension: 0.08,
         };
     });
+
+    const criticalPowerDataset = buildCriticalPowerDataset();
+    if (criticalPowerDataset) {
+        datasets.push(criticalPowerDataset);
+    }
+    return datasets;
+}
+
+function buildCriticalPowerDataset() {
+    if (!showCriticalPower || activities.length === 0) {
+        return null;
+    }
+
+    const visibleCurves = partitionBounds()
+        .filter(([startIdx]) => !isPartitionHidden(startIdx))
+        .map(([startIdx, endIdx]) => partitionCurve(startIdx, endIdx));
+    const points = CRITICAL_POWER_PR_DURATIONS.map((duration) => {
+        const index = durationsSec.indexOf(duration);
+        let power = null;
+        if (index >= 0) {
+            for (const curve of visibleCurves) {
+                const candidate = curve[index];
+                if (candidate !== null && candidate !== undefined && (power === null || candidate > power)) {
+                    power = candidate;
+                }
+            }
+        }
+        return power === null || power === undefined
+            ? null
+            : { duration, work: power * duration };
+    });
+    if (points.some((point) => point === null)) {
+        return null;
+    }
+
+    const meanDuration = points.reduce((sum, point) => sum + point.duration, 0) / points.length;
+    const meanWork = points.reduce((sum, point) => sum + point.work, 0) / points.length;
+    const denominator = points.reduce((sum, point) => sum + (point.duration - meanDuration) ** 2, 0);
+    const criticalPower = points.reduce(
+        (sum, point) => sum + (point.duration - meanDuration) * (point.work - meanWork),
+        0,
+    ) / denominator;
+    const wPrime = meanWork - criticalPower * meanDuration;
+
+    return {
+        label: 'Critical power fit (5/10/20 min PRs)',
+        data: durationsSec
+            .filter((duration) => duration >= 60 && duration <= 3600)
+            .map((duration) => ({ x: duration, y: criticalPower + (wPrime / duration) })),
+        borderColor: '#ff7f95',
+        backgroundColor: 'transparent',
+        borderWidth: 2,
+        borderDash: [8, 5],
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        spanGaps: true,
+        tension: 0,
+    };
 }
 
 function renderPowerCurveChart() {
@@ -609,6 +670,13 @@ function statusCellHtml(activity) {
                 return '<span class="status-badge warning"><span aria-hidden="true">&#9888;</span> Weight unavailable</span>';
             }
             return '<span class="status-badge ok">&#10003; Loaded</span>';
+        case 'cached':
+            if (powerUnit === 'W/kg' && activityWeightKg(activity) === null) {
+                return '<span class="status-badge warning">Cached &middot; Weight unavailable</span>';
+            }
+            return '<span class="status-badge ok">&#10003; Cached</span>';
+        case 'cached-nodata':
+            return '<span class="status-badge muted">Cached &middot; No power data</span>';
         case 'loading':
             return '<span class="status-badge loading"><span class="mini-spinner"></span> Loading…</span>';
         case 'nodata':
@@ -781,6 +849,87 @@ async function fetchActivityCurve(activity) {
     return resp.json();
 }
 
+function powerCurveCacheKey(activityId) {
+    return `${POWER_CURVE_CACHE_PREFIX}${encodeURIComponent(activityId)}`;
+}
+
+function readCachedActivityCurve(activityId) {
+    try {
+        const cached = JSON.parse(localStorage.getItem(powerCurveCacheKey(activityId)) || 'null');
+        if (!cached || !Array.isArray(cached.durations_sec) || !cached.data ||
+            !Array.isArray(cached.data.peak_watts) ||
+            cached.durations_sec.length !== durationsSec.length ||
+            cached.data.peak_watts.length !== durationsSec.length ||
+            !cached.durations_sec.every((duration, index) => duration === durationsSec[index])) {
+            return null;
+        }
+        return cached.data;
+    } catch (err) {
+        return null;
+    }
+}
+
+function cacheActivityCurve(activityId, data) {
+    try {
+        localStorage.setItem(powerCurveCacheKey(activityId), JSON.stringify({
+            durations_sec: durationsSec,
+            data,
+        }));
+    } catch (err) {
+        // Storage may be unavailable or full; dashboard loading should continue.
+    }
+}
+
+function prunePowerCurveCache() {
+    const activeKeys = new Set(activities.map((activity) => powerCurveCacheKey(activity.activity_id)));
+    try {
+        for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+            const key = localStorage.key(index);
+            if (key && key.startsWith(POWER_CURVE_CACHE_PREFIX) && !activeKeys.has(key)) {
+                localStorage.removeItem(key);
+            }
+        }
+    } catch (err) {
+        // Storage may be unavailable; dashboard loading should continue.
+    }
+}
+
+function applyActivityCurveData(activity, data, fromCache = false) {
+    if (data.has_power && Array.isArray(data.peak_watts)) {
+        activity.peak_watts = data.peak_watts;
+        activity.weight_kg = data.weight_kg ?? null;
+        activity.avg_power = data.avg_power ?? null;
+        activity.avg_hr = data.avg_hr ?? null;
+        activity.is_race = Boolean(data.is_race);
+        activity.event_id = data.event_id || null;
+        activity.status = fromCache ? 'cached' : 'loaded';
+    } else {
+        activity.status = fromCache ? 'cached-nodata' : 'nodata';
+    }
+}
+
+function clearPowerCurveCache() {
+    try {
+        for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+            const key = localStorage.key(index);
+            if (key && key.startsWith(POWER_CURVE_CACHE_PREFIX)) {
+                localStorage.removeItem(key);
+            }
+        }
+    } catch (err) {
+        return;
+    }
+
+    activities.forEach((activity) => {
+        if (activity.status === 'cached') {
+            activity.status = 'loaded';
+        } else if (activity.status === 'cached-nodata') {
+            activity.status = 'nodata';
+        }
+    });
+    renderActivityList();
+}
+
 async function loadAllActivities() {
     let loaded = 0;
     for (let i = 0; i < activities.length; i++) {
@@ -789,18 +938,13 @@ async function loadAllActivities() {
         updateActivityRow(i);
 
         try {
-            const data = await fetchActivityCurve(activity);
-            if (data.has_power && Array.isArray(data.peak_watts)) {
-                activity.peak_watts = data.peak_watts;
-                activity.weight_kg = data.weight_kg ?? null;
-                activity.avg_power = data.avg_power ?? null;
-                activity.avg_hr = data.avg_hr ?? null;
-                activity.is_race = Boolean(data.is_race);
-                activity.event_id = data.event_id || null;
-                activity.status = 'loaded';
-            } else {
-                activity.status = 'nodata';
+            let data = readCachedActivityCurve(activity.activity_id);
+            const fromCache = Boolean(data);
+            if (!data) {
+                data = await fetchActivityCurve(activity);
+                cacheActivityCurve(activity.activity_id, data);
             }
+            applyActivityCurveData(activity, data, fromCache);
         } catch (err) {
             if (err && err.message === 'Not authenticated') {
                 return;
@@ -817,6 +961,14 @@ async function loadAllActivities() {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 function bindControls() {
+    const criticalPowerToggle = document.getElementById('criticalPowerToggle');
+    if (criticalPowerToggle) {
+        criticalPowerToggle.addEventListener('change', () => {
+            showCriticalPower = criticalPowerToggle.checked;
+            refreshChart();
+        });
+    }
+
     document.querySelectorAll('[data-power-unit]').forEach((button) => {
         button.addEventListener('click', () => {
             powerUnit = button.dataset.powerUnit;
@@ -847,6 +999,11 @@ function bindControls() {
     const clearBtn = document.getElementById('clearDividersBtn');
     if (clearBtn) {
         clearBtn.addEventListener('click', clearDividers);
+    }
+
+    const clearCacheBtn = document.getElementById('clearPowerCurveCacheBtn');
+    if (clearCacheBtn) {
+        clearCacheBtn.addEventListener('click', clearPowerCurveCache);
     }
 }
 
@@ -887,6 +1044,7 @@ async function init() {
             event_id: null,
             status: 'pending',
         }));
+        prunePowerCurveCache();
 
         loading.style.display = 'none';
 

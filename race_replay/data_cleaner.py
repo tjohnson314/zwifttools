@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # Bump this version when data cleaning logic changes in a way that invalidates
 # previously cached results.  The cache loader will discard stale caches.
-CLEANING_VERSION = 36
+CLEANING_VERSION = 37
 
 # Grace period after the official race start before a rider is treated as a
 # "late joiner".  Riders routinely begin recording / cross the start banner a
@@ -896,7 +896,18 @@ def align_riders_to_game_route(
         initial_offset = 0.0
         if len(on_route_indices) > 0:
             sample = on_route_indices[:min(30, len(on_route_indices))]
-            offsets = full_distance[nearest[sample]] - raw_traveled_m[sample]
+            initial_distance = full_distance[nearest[sample]]
+            if not is_late:
+                sample_gps_m = kd_distances[sample] * 111_320
+                spatially_equivalent = sample_gps_m <= (
+                    sample_gps_m[:, :1] + max(10.0, route.horizontal_p95_m)
+                )
+                initial_distance = np.min(np.where(
+                    spatially_equivalent,
+                    full_distance[kd_indices[sample]],
+                    np.inf,
+                ), axis=1)
+            offsets = initial_distance - raw_traveled_m[sample]
             if route.is_loop and len(offsets) > 1:
                 offsets = offsets + np.round(
                     (offsets[0] - offsets) / route.lap_distance_m

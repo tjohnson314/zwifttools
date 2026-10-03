@@ -191,6 +191,29 @@ body {
     color: #fff;
 }
 
+.critical-power-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.84rem;
+    white-space: nowrap;
+}
+
+.critical-power-toggle input {
+    accent-color: #ff7f95;
+    margin: 0;
+}
+
+.critical-power-toggle a {
+    color: var(--muted);
+    text-decoration: none;
+}
+
+.critical-power-toggle a:hover {
+    color: var(--text);
+    text-decoration: underline;
+}
+
 .chart-legend {
     display: flex;
     gap: 14px;
