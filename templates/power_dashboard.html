@@ -39,9 +39,9 @@
                             <button type="button" class="active" data-power-unit="W" aria-pressed="true">W</button>
                             <button type="button" data-power-unit="W/kg" aria-pressed="false">W/kg</button>
                         </div>
-                        <div class="critical-power-toggle">
-                            <input id="criticalPowerToggle" type="checkbox" aria-label="Show critical power overlay">
-                            <a href="/critical-power">Critical power</a>
+                        <div class="critical-power-toggle" title="Morton's three-parameter model estimates fresh maximal power by duration using critical power, work capacity above critical power (W'), and peak power. Peak power is fixed to your best visible 1-second power; CP and W' are fitted to 5/10/20-minute PRs. Predictions outside those durations are extrapolations, not fatigue estimates.">
+                            <input id="criticalPowerToggle" type="checkbox" aria-label="Show Morton model overlay">
+                            <label for="criticalPowerToggle">Morton model</label>
                         </div>
                         <span id="pinState" class="pin-state">Hover to inspect</span>
                     </div>

@@ -14,7 +14,7 @@
 'use strict';
 
 const POWER_CURVE_X_TICKS = [1, 2, 5, 10, 30, 60, 120, 300, 600, 1200, 3600, 7200];
-const CRITICAL_POWER_PR_DURATIONS = [300, 600, 1200];
+const MORTON_PR_DURATIONS = [300, 600, 1200];
 const POWER_CURVE_CACHE_PREFIX = 'powerDashboardCurveV1:';
 
 // Distinct colours for the partition curves (cycled if there are more groups).
@@ -34,7 +34,7 @@ let powerCurveChart = null;
 let weeklyBarChart = null;
 let weeklyDurationSec = 1200;
 let powerUnit = 'W';
-let showCriticalPower = false;
+let showMortonModel = false;
 
 let selectedIndex = 0;
 let pinnedIndex = null;
@@ -276,54 +276,104 @@ function buildChartDatasets() {
         };
     });
 
-    const criticalPowerDataset = buildCriticalPowerDataset();
-    if (criticalPowerDataset) {
-        datasets.push(criticalPowerDataset);
+    const mortonDataset = buildMortonDataset();
+    if (mortonDataset) {
+        datasets.push(mortonDataset);
     }
     return datasets;
 }
 
-function buildCriticalPowerDataset() {
-    if (!showCriticalPower || activities.length === 0) {
+function fitMortonModel(points, peakPower) {
+    if (!Number.isFinite(peakPower) || peakPower <= 0 || points.length < 2 ||
+        points.some(({ duration, power }) => !Number.isFinite(duration) || duration <= 0 ||
+            !Number.isFinite(power) || power >= peakPower)) {
+        return null;
+    }
+
+    function fitAtTimeConstant(timeConstant) {
+        let numerator = 0;
+        let denominator = 0;
+        for (const { duration, power } of points) {
+            const fraction = duration / (duration + timeConstant);
+            numerator += fraction * (power - peakPower * (1 - fraction));
+            denominator += fraction * fraction;
+        }
+        const cp = numerator / denominator;
+        const error = points.reduce((sum, { duration, power }) => {
+            const prediction = cp + (peakPower - cp) * timeConstant / (duration + timeConstant);
+            return sum + (power - prediction) ** 2;
+        }, 0);
+        return { cp, timeConstant, error };
+    }
+
+    let upper = 1;
+    let previous = fitAtTimeConstant(0);
+    let candidate = fitAtTimeConstant(upper);
+    for (let iteration = 0; candidate.error < previous.error; iteration += 1) {
+        if (iteration >= 60) {
+            return null;
+        }
+        previous = candidate;
+        upper *= 2;
+        candidate = fitAtTimeConstant(upper);
+    }
+
+    const ratio = (Math.sqrt(5) - 1) / 2;
+    let lower = 0;
+    let left = fitAtTimeConstant(upper - ratio * (upper - lower));
+    let right = fitAtTimeConstant(lower + ratio * (upper - lower));
+    for (let iteration = 0; iteration < 80; iteration += 1) {
+        if (left.error < right.error) {
+            upper = right.timeConstant;
+            right = left;
+            left = fitAtTimeConstant(upper - ratio * (upper - lower));
+        } else {
+            lower = left.timeConstant;
+            left = right;
+            right = fitAtTimeConstant(lower + ratio * (upper - lower));
+        }
+    }
+    const fit = [fitAtTimeConstant(0), left, right].sort((first, second) => first.error - second.error)[0];
+    const wPrime = (peakPower - fit.cp) * fit.timeConstant;
+    return Number.isFinite(fit.cp) && Number.isFinite(wPrime)
+        ? { cp: fit.cp, wPrime, timeConstant: fit.timeConstant, peakPower }
+        : null;
+}
+
+function buildMortonDataset() {
+    if (!showMortonModel || activities.length === 0) {
         return null;
     }
 
     const visibleCurves = partitionBounds()
         .filter(([startIdx]) => !isPartitionHidden(startIdx))
         .map(([startIdx, endIdx]) => partitionCurve(startIdx, endIdx));
-    const points = CRITICAL_POWER_PR_DURATIONS.map((duration) => {
+    function bestPowerAt(duration) {
         const index = durationsSec.indexOf(duration);
         let power = null;
         if (index >= 0) {
             for (const curve of visibleCurves) {
                 const candidate = curve[index];
-                if (candidate !== null && candidate !== undefined && (power === null || candidate > power)) {
+                if (Number.isFinite(candidate) && (power === null || candidate > power)) {
                     power = candidate;
                 }
             }
         }
-        return power === null || power === undefined
-            ? null
-            : { duration, work: power * duration };
-    });
-    if (points.some((point) => point === null)) {
+        return power;
+    }
+    const peakPower = bestPowerAt(1);
+    const points = MORTON_PR_DURATIONS.map((duration) => ({ duration, power: bestPowerAt(duration) }));
+    const fit = fitMortonModel(points, peakPower);
+    if (!fit) {
         return null;
     }
 
-    const meanDuration = points.reduce((sum, point) => sum + point.duration, 0) / points.length;
-    const meanWork = points.reduce((sum, point) => sum + point.work, 0) / points.length;
-    const denominator = points.reduce((sum, point) => sum + (point.duration - meanDuration) ** 2, 0);
-    const criticalPower = points.reduce(
-        (sum, point) => sum + (point.duration - meanDuration) * (point.work - meanWork),
-        0,
-    ) / denominator;
-    const wPrime = meanWork - criticalPower * meanDuration;
-
     return {
-        label: 'Critical power fit (5/10/20 min PRs)',
-        data: durationsSec
-            .filter((duration) => duration >= 60 && duration <= 3600)
-            .map((duration) => ({ x: duration, y: criticalPower + (wPrime / duration) })),
+        label: 'Morton model (1s peak; 5/10/20 min fit)',
+        data: durationsSec.map((duration) => ({
+            x: duration,
+            y: duration >= 1 && duration <= 3600 ? fit.cp + fit.wPrime / (duration + fit.timeConstant) : null,
+        })),
         borderColor: '#ff7f95',
         backgroundColor: 'transparent',
         borderWidth: 2,
@@ -964,7 +1014,7 @@ function bindControls() {
     const criticalPowerToggle = document.getElementById('criticalPowerToggle');
     if (criticalPowerToggle) {
         criticalPowerToggle.addEventListener('change', () => {
-            showCriticalPower = criticalPowerToggle.checked;
+            showMortonModel = criticalPowerToggle.checked;
             refreshChart();
         });
     }
