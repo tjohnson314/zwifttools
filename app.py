@@ -41,6 +41,11 @@ from bike_comparison.pacing_planner import (
     plan_tt_pacing,
     truncate_route_profile,
 )
+from bike_comparison.ttt_planner import (
+    MAX_TEAM_SIZE as TTT_MAX_TEAM_SIZE,
+    TTTRider,
+    plan_ttt_pacing,
+)
 from shared.utils import calculate_normalized_power
 from shared.data_fetcher import (
     fetch_rider_telemetry, convert_telemetry_to_dataframe,
@@ -2818,6 +2823,267 @@ def api_tt_pacing_plan():
             'gradient_pct': result.gradient_pct,
         },
         'sections': result.sections,
+    })
+
+
+# ---------------------------------------------------------------------------
+# TTT Pacing Planner — rotation, pulls and drops for a WTRL team
+# ---------------------------------------------------------------------------
+
+TTT_DEFAULT_W_PRIME_KJ = 20.0
+
+
+@app.route('/ttt-pacing')
+def ttt_pacing():
+    """Team time trial pacing planner."""
+    return render_template('ttt_pacing.html')
+
+
+@app.route('/api/ttt_pacing/riders', methods=['POST'])
+def api_ttt_pacing_riders():
+    """Look up name, height, weight and zFTP for a list of Zwift IDs."""
+    headers = get_headers()
+    if not headers:
+        return jsonify({'error': 'Log in with Zwift to look up riders.'}), 401
+
+    body = request.get_json(force=True, silent=True) or {}
+    raw_ids = body.get('zwift_ids')
+    if not isinstance(raw_ids, list):
+        return jsonify({'error': 'zwift_ids must be a list'}), 400
+    ids = []
+    for raw in raw_ids:
+        zid = str(raw).strip()
+        if not zid.isdigit():
+            return jsonify({'error': f'Invalid Zwift ID: {zid!r}'}), 400
+        if zid not in ids:
+            ids.append(zid)
+    if not 1 <= len(ids) <= TTT_MAX_TEAM_SIZE:
+        return jsonify({'error': f'Enter between 1 and {TTT_MAX_TEAM_SIZE} Zwift IDs.'}), 400
+
+    riders = []
+    for zid in ids:
+        rider = {
+            'zwift_id': zid,
+            'name': f'Rider {zid}',
+            'height_cm': None,
+            'weight_kg': None,
+            'ftp_w': None,
+            'w_prime_kj': TTT_DEFAULT_W_PRIME_KJ,
+        }
+        try:
+            resp = requests.get(f'https://us-or-rly101.zwift.com/api/profiles/{zid}',
+                                headers=headers, timeout=10)
+            if resp.status_code == 200 and resp.text.strip():
+                p = resp.json()
+                name = f"{p.get('firstName', '')} {p.get('lastName', '')}".strip()
+                rider['name'] = name or rider['name']
+                if p.get('height'):
+                    rider['height_cm'] = round(p['height'] / 10, 1)
+                if p.get('weight'):
+                    rider['weight_kg'] = round(p['weight'] / 1000, 1)
+                if p.get('ftp'):
+                    rider['ftp_w'] = int(p['ftp'])
+            else:
+                rider['error'] = f'Profile lookup failed ({resp.status_code})'
+        except (requests.RequestException, ValueError):
+            logger.warning("TTT rider lookup failed for %s", zid, exc_info=True)
+            rider['error'] = 'Profile lookup failed'
+        riders.append(rider)
+    return jsonify({'riders': riders})
+
+
+@app.route('/api/ttt_pacing_plan', methods=['POST'])
+def api_ttt_pacing_plan():
+    """
+    Compute an optimal WTRL team time trial plan.
+
+    Expected JSON body:
+        riders          (list)  — 4-8 riders in rotation order, each with
+                        name, height_cm, weight_kg, cp_w, w_prime_kj
+        route_id, route_name, world, include_leadin, laps, custom_distance_km
+                        — as for /api/tt_pacing_plan
+        frame_id, wheel_id, upgrade_level — one bike for the whole team
+        reserve_pct     (float, optional) — W' kept in hand until the last 2 km
+        max_power_pct   (float, optional) — power cap as a percentage of CP
+        draft_second_pct, draft_rest_pct (float, optional) — aero drag reductions
+        allow_drops     (bool, optional) — let non-scoring riders be dropped
+        stream          (bool, optional) — stream iteration updates and plans
+    """
+    body = request.get_json(force=True, silent=True) or {}
+
+    try:
+        route_name = str(body['route_name'])
+        frame_id = str(body['frame_id'])
+        wheel_id = body.get('wheel_id') or None
+        level = int(body.get('upgrade_level', 0))
+        rider_rows = body['riders']
+        laps = int(body.get('laps', 1) or 1)
+        reserve_pct = float(body.get('reserve_pct', 10.0))
+        max_power_pct = float(body.get('max_power_pct', 150.0))
+        draft_second_pct = float(body.get('draft_second_pct', 25.0))
+        draft_rest_pct = float(body.get('draft_rest_pct', 40.0))
+        custom_distance_km = body.get('custom_distance_km')
+        if custom_distance_km is not None:
+            custom_distance_km = float(custom_distance_km)
+    except (KeyError, TypeError, ValueError) as exc:
+        return jsonify({'error': f'Invalid request: {exc}'}), 400
+    if not isinstance(rider_rows, list):
+        return jsonify({'error': 'riders must be a list'}), 400
+    if not 4 <= len(rider_rows) <= TTT_MAX_TEAM_SIZE:
+        return jsonify({'error': f'WTRL teams have 4-{TTT_MAX_TEAM_SIZE} riders'}), 400
+    if laps < 1:
+        return jsonify({'error': 'laps must be >= 1'}), 400
+    if not 0.0 <= reserve_pct <= 50.0:
+        return jsonify({'error': 'reserve_pct must be between 0 and 50'}), 400
+    if not 105.0 <= max_power_pct <= 400.0:
+        return jsonify({'error': 'max_power_pct must be between 105 and 400'}), 400
+    for field, value in (('draft_second_pct', draft_second_pct),
+                         ('draft_rest_pct', draft_rest_pct)):
+        if not 0.0 <= value < 100.0:
+            return jsonify({'error': f'{field} must be >= 0 and < 100'}), 400
+    if custom_distance_km is not None and custom_distance_km <= 0:
+        return jsonify({'error': 'custom_distance_km must be positive'}), 400
+
+    db = get_db()
+    bike_setup = db.get_bike_stats(frame_id, wheel_id, level)
+    if bike_setup is None:
+        return jsonify({'error': f'Unknown frame/wheel combination: {frame_id}/{wheel_id}'}), 400
+
+    riders = []
+    used_names = set()
+    try:
+        for i, row in enumerate(rider_rows, start=1):
+            try:
+                height_m = float(row['height_cm']) / 100.0
+                weight_kg = float(row['weight_kg'])
+                cp_w = float(row['cp_w'])
+                w_prime_j = float(row['w_prime_kj']) * 1000.0
+            except (KeyError, TypeError, ValueError):
+                raise ValueError(f"Rider {i}: height, weight, CP and W' must be numbers.")
+            name = str(row.get('name') or '').strip()[:60] or f'Rider {i}'
+            if name in used_names:
+                name = f'{name} ({i})'
+            used_names.add(name)
+            riders.append(TTTRider(
+                name=name, weight_kg=weight_kg, height_m=height_m, cp_w=cp_w,
+                w_prime_j=w_prime_j, bike_weight_kg=bike_setup.weight_kg,
+                cda=rider_cda(height_m, weight_kg) + bike_setup.cda_bias,
+            ))
+
+        route = load_route_profile(
+            body.get('route_id', ''), route_name, world=body.get('world'),
+            include_leadin=bool(body.get('include_leadin', True)),
+            laps=laps,
+        )
+        if custom_distance_km is not None:
+            route = truncate_route_profile(route, custom_distance_km * 1000.0)
+        options = {
+            'reserve_fraction': reserve_pct / 100.0,
+            'max_power_cp_mult': max_power_pct / 100.0,
+            'draft_second_pct': draft_second_pct,
+            'draft_rest_pct': draft_rest_pct,
+            'allow_drops': bool(body.get('allow_drops', True)),
+        }
+        if body.get('stream') is True:
+            return _stream_ttt_pacing_plan(route, riders, options)
+        result = plan_ttt_pacing(route, riders, **options)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception as exc:
+        logger.exception("TTT pacing plan error")
+        return jsonify({'error': str(exc)}), 500
+
+    return jsonify(_ttt_plan_payload(result))
+
+
+def _ttt_plan_payload(result):
+    return {
+        'route_name': result.route_name,
+        'team_size': result.team_size,
+        'scoring_rider_count': result.scoring_rider_count,
+        'feasible': result.feasible,
+        'total_time_seconds': round(result.total_time_seconds),
+        'total_time_formatted': result.total_time_formatted,
+        'total_distance_km': round(result.total_distance_km, 2),
+        'total_ascent_m': round(result.total_ascent_m),
+        'avg_speed_kph': result.avg_speed_kph,
+        'riders': result.riders,
+        'phases': result.phases,
+        'flat_rotation': result.flat_rotation,
+        'profile': {
+            'distance_km': result.distance_km,
+            'altitude_m': result.altitude_m,
+            'gradient_pct': result.gradient_pct,
+            'speed_kph': result.speed_kph,
+            'leader': result.leader,
+            'power_w': result.power_w,
+            'wbal_j': result.wbal_j,
+            'entry_speed_kph': result.entry_speed_kph,
+            'exit_speed_kph': result.exit_speed_kph,
+            'peak_power_w': result.peak_power_w,
+            'braking_w': result.braking_w,
+        },
+    }
+
+
+def _stream_ttt_pacing_plan(route, riders, options):
+    messages = queue.Queue(maxsize=2)
+    cancelled = threading.Event()
+    started = time.monotonic()
+
+    class PlanningCancelled(Exception):
+        pass
+
+    def publish(message):
+        while not cancelled.is_set():
+            try:
+                messages.put(message, timeout=1.0)
+                return
+            except queue.Full:
+                continue
+        raise PlanningCancelled()
+
+    def progress(update):
+        publish({
+            **update,
+            'type': 'progress',
+            'elapsed_s': round(time.monotonic() - started, 1),
+            'plan': _ttt_plan_payload(update['plan']) if update['plan'] is not None else None,
+        })
+
+    def optimize():
+        try:
+            result = plan_ttt_pacing(route, riders, progress_callback=progress, **options)
+            publish({'type': 'complete', 'plan': _ttt_plan_payload(result),
+                     'elapsed_s': round(time.monotonic() - started, 1)})
+        except PlanningCancelled:
+            pass
+        except Exception as exc:
+            logger.exception("TTT pacing stream error")
+            try:
+                publish({'type': 'error', 'error': str(exc)})
+            except PlanningCancelled:
+                pass
+
+    def events():
+        try:
+            threading.Thread(target=optimize, daemon=True).start()
+            yield f"data: {json.dumps({'type': 'started'})}\n\n"
+            while True:
+                try:
+                    message = messages.get(timeout=15.0)
+                except queue.Empty:
+                    yield ': heartbeat\n\n'
+                    continue
+                yield f"data: {json.dumps(message)}\n\n"
+                if message['type'] in ('complete', 'error'):
+                    break
+        finally:
+            cancelled.set()
+
+    return Response(events(), mimetype='text/event-stream', headers={
+        'Cache-Control': 'no-cache, no-transform',
+        'X-Accel-Buffering': 'no',
     })
 
 

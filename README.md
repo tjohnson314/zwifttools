@@ -53,6 +53,23 @@ A web app for analyzing Zwift racing. Includes **Bike Comparison**, **Race Repla
 - Distance range slider to focus analysis on any section of the course
 - Focus on a single team to see per-rider breakdowns instead of team aggregates
 
+### TTT Pacing Planner
+
+- Plan a WTRL team time trial at `/ttt-pacing` for 4-8 riders in a fixed rotation order
+- Edit each rider's CP and W' and choose a route, bike, reserve and maximum power
+- Pull durations default to a maximum of 60 seconds
+- Set aerodynamic draft reductions for the second rider and third-and-later riders;
+   defaults are 25% and 40%, and 0% disables the corresponding draft benefit
+- Power drives a forward momentum simulation: speed carries through sections and
+   rotation changes instead of being reset to independent chunk targets
+- Receive live iteration updates while optimization continues; the tables and charts
+   show the best feasible plan so far, marked as provisional until completion
+- Provisional plans keep W' positive throughout the course and respect each rider's power cap
+- W' validation conservatively uses peak power in small integration steps; chart power
+   is time-averaged. Tooltips include entry/exit speed, peak power and follower speed-matching
+   dissipation, which is separate from pedaling power
+- `POST /api/ttt_pacing_plan` accepts `stream: true` for SSE updates; omitting it returns JSON
+
 ### Sauce4Zwift Mods
 
 Standalone browser overlays for [Sauce4Zwift](https://www.sauce.llc/), installed by dropping the mod folder into Sauce's mods directory.

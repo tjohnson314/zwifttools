@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
+    <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
+    <title>TTT Pacing Planner - Zwift Tools</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="/static/css/tt_pacing.css">
+    <link rel="stylesheet" href="/static/css/ttt_pacing.css">
+</head>
+<body>
+<div class="container">
+
+    <div class="header-bar">
+        <div>
+            <a href="/" class="back-link">← Back to Tools</a>
+            <h1><span class="logo-emoji">🚴</span> TTT Pacing Planner</h1>
+            <p class="subtitle">Group speed, pull lengths and rider drops for a WTRL team time trial</p>
+        </div>
+        <div class="auth-section">
+            <span id="authStatusText" class="auth-status">Checking login…</span>
+            <button id="authBtn" class="btn-auth" type="button" onclick="handleAuth()">Log in with Zwift</button>
+        </div>
+    </div>
+
+    <div class="panels">
+
+        <!-- Route -->
+        <div class="panel">
+            <h2>🗺 Route</h2>
+            <div class="form-group">
+                <label for="worldFilter">World</label>
+                <select id="worldFilter" onchange="filterRoutes()">
+                    <option value="">All Worlds</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="routeSelect">Route</label>
+                <select id="routeSelect" onchange="onRouteChange()">
+                    <option value="">Loading routes…</option>
+                </select>
+            </div>
+            <div class="form-group form-check">
+                <input type="checkbox" id="includeLeadin" checked>
+                <label for="includeLeadin">Include lead-in</label>
+            </div>
+            <div class="form-group">
+                <label for="customDistance">Custom distance (km)</label>
+                <input type="number" id="customDistance" min="0.1" step="0.1" placeholder="Full route">
+                <p class="field-hint">Leave blank for the full route; custom distance must be shorter.</p>
+            </div>
+            <div class="form-group lap-group" id="lapGroup" style="display:none;">
+                <label>Laps</label>
+                <div class="lap-counter">
+                    <button type="button" class="lap-btn" id="lapMinus" onclick="changeLaps(-1)" aria-label="Fewer laps">−</button>
+                    <span class="lap-count" id="lapCount">1</span>
+                    <button type="button" class="lap-btn" id="lapPlus" onclick="changeLaps(1)" aria-label="More laps">+</button>
+                </div>
+            </div>
+            <div class="route-stats" id="routeStats" style="display:none;">
+                <div class="stat-pill"><span class="stat-label">Distance</span><span class="stat-value" id="statDist">—</span></div>
+                <div class="stat-pill"><span class="stat-label">Ascent</span><span class="stat-value" id="statAscent">—</span></div>
+            </div>
+        </div>
+
+        <!-- Team -->
+        <div class="panel">
+            <h2>👥 Team</h2>
+            <div class="form-group">
+                <label for="zwiftIds">Zwift IDs (rotation order)</label>
+                <textarea id="zwiftIds" rows="4" placeholder="One per line, or separated by commas"></textarea>
+                <p class="field-hint">Looks up height, weight and zFTP (requires being logged in). zFTP is used as critical power.</p>
+            </div>
+            <div class="team-buttons">
+                <button type="button" class="btn-secondary" id="fetchRidersBtn" onclick="fetchRiders()">Fetch riders</button>
+                <button type="button" class="btn-secondary" onclick="addRider()">+ Add rider manually</button>
+            </div>
+            <div class="form-group">
+                <label for="reservePct">W′ reserve (%)</label>
+                <input type="number" id="reservePct" value="10" min="0" max="50" step="1">
+                <p class="field-hint">Kept in hand as a safety margin until the final 2 km.</p>
+            </div>
+            <div class="form-group">
+                <label for="maxPowerPct">Max power (% of CP)</label>
+                <input type="number" id="maxPowerPct" value="150" min="105" max="400" step="5">
+                <p class="field-hint">No rider is asked to exceed this, including when the group accelerates.</p>
+            </div>
+            <div class="form-group">
+                <label for="draftSecondPct">2nd rider draft reduction (%)</label>
+                <input type="number" id="draftSecondPct" value="25" min="0" max="99.9" step="0.1" required>
+            </div>
+            <div class="form-group">
+                <label for="draftRestPct">3rd+ riders draft reduction (%)</label>
+                <input type="number" id="draftRestPct" value="40" min="0" max="99.9" step="0.1" required>
+            </div>
+            <div class="form-group form-check">
+                <input type="checkbox" id="allowDrops" checked>
+                <label for="allowDrops">Allow dropping non-scoring riders</label>
+            </div>
+        </div>
+
+        <!-- Bike -->
+        <div class="panel">
+            <h2>🚲 Bike (whole team)</h2>
+            <div class="form-group">
+                <label for="frameSelect">Frame</label>
+                <select id="frameSelect"><option value="">Loading…</option></select>
+            </div>
+            <div class="form-group">
+                <label for="wheelSelect">Wheels</label>
+                <select id="wheelSelect"><option value="">Loading…</option></select>
+            </div>
+            <div class="form-group">
+                <label for="upgradeLevel">Upgrade Level</label>
+                <select id="upgradeLevel"><option value="0">Level 0 (Stock)</option></select>
+            </div>
+            <div class="bike-summary" id="bikeStats">
+                <div class="bike-summary-row">
+                    <span class="bike-summary-label">Total weight</span>
+                    <span class="bike-summary-value weight" id="bikeWeightStat">—</span>
+                </div>
+                <div class="bike-summary-row">
+                    <span class="bike-summary-label">Total CdA bias</span>
+                    <span class="bike-summary-value cda" id="bikeCda">—</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rider table -->
+    <div class="panel rider-panel">
+        <h2>🧍 Riders <span class="rider-count" id="riderCount"></span></h2>
+        <p class="field-hint">WTRL teams have 4–8 riders. Scoring is on the 3rd finisher for teams of 4, the 4th for 5–8. Row order is the rotation order.</p>
+        <div class="table-wrap">
+            <table class="pacing-table rider-table" id="riderTable">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Name</th>
+                        <th>Height (cm)</th>
+                        <th>Weight (kg)</th>
+                        <th>CP / FTP (W)</th>
+                        <th>W′ (kJ)</th>
+                        <th>W/kg</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="simulate-bar">
+        <button class="btn-simulate" id="planBtn" onclick="runPlan()" disabled>▶ Build TTT Plan</button>
+        <span class="simulate-hint" id="planHint">Select a route, a bike and 4–8 riders</span>
+    </div>
+
+    <!-- Results -->
+    <div class="results-section" id="resultsSection" style="display:none;">
+        <div class="results-header">
+            <h2>Plan — <span id="resultsRouteName"></span></h2>
+        </div>
+        <div class="infeasible-warning" id="infeasibleWarning" style="display:none;">
+            No plan kept every rider above their W′ reserve, even at reduced speed. Try a lower reserve, a higher power cap, or more accurate CP and W′ values.
+        </div>
+
+        <div class="summary-cards">
+            <div class="summary-card highlight">
+                <div class="card-icon">⏱</div>
+                <div class="card-value" id="totalTime">—</div>
+                <div class="card-label">Team Time</div>
+            </div>
+            <div class="summary-card">
+                <div class="card-icon">📏</div>
+                <div class="card-value" id="totalDist">—</div>
+                <div class="card-label">Distance</div>
+            </div>
+            <div class="summary-card">
+                <div class="card-icon">⛰</div>
+                <div class="card-value" id="totalAscent">—</div>
+                <div class="card-label">Ascent</div>
+            </div>
+            <div class="summary-card">
+                <div class="card-icon">💨</div>
+                <div class="card-value" id="avgSpeed">—</div>
+                <div class="card-label">Avg Speed</div>
+            </div>
+            <div class="summary-card">
+                <div class="card-icon">🏁</div>
+                <div class="card-value" id="scoringRider">—</div>
+                <div class="card-label">Scoring Finisher</div>
+            </div>
+            <div class="summary-card">
+                <div class="card-icon">🔄</div>
+                <div class="card-value" id="flatSpeed">—</div>
+                <div class="card-label">Sustainable Flat Speed</div>
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <h3>Riders</h3>
+            <table class="pacing-table" id="riderResultTable">
+                <thead>
+                    <tr>
+                        <th>Rider</th>
+                        <th>CP</th>
+                        <th>Outcome</th>
+                        <th>Time on front</th>
+                        <th>Avg lead power</th>
+                        <th>Avg power</th>
+                        <th>Lowest W′</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <div class="table-wrap">
+            <h3>Rotation phases</h3>
+            <table class="pacing-table" id="phaseTable">
+                <thead>
+                    <tr>
+                        <th>Section</th>
+                        <th>Riders in group</th>
+                        <th>Pull durations</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <h3 class="chart-title">Group speed &amp; elevation</h3>
+        <div class="chart-container">
+            <canvas id="speedChart"></canvas>
+        </div>
+
+        <h3 class="chart-title">W′ balance</h3>
+        <div class="chart-container">
+            <canvas id="wbalChart"></canvas>
+        </div>
+
+        <h3 class="chart-title">Rider power</h3>
+        <div class="chart-container">
+            <canvas id="powerChart"></canvas>
+        </div>
+    </div>
+
+    <div class="error-toast" id="errorToast" style="display:none;"></div>
+</div>
+
+<script src="/static/js/bike_selector.js"></script>
+<script src="/static/js/ttt_pacing.js"></script>
+</body>
+</html>
