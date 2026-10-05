@@ -26,6 +26,14 @@ def test_ttt_page_renders():
     assert b'id="maxPowerPct" value="150"' in response.data
     assert b'id="draftSecondPct" value="25"' in response.data
     assert b'id="draftRestPct" value="40"' in response.data
+    assert b'id="powerUnitWkg"' in response.data
+    assert b'id="pullTable"' in response.data
+    assert b'id="exportPullsBtn"' in response.data
+    assert b'title="WTRL scoring uses the starting team size:' in response.data
+    assert b'4-rider teams are timed on the 3rd finisher; teams of 5-8 on the 4th.' in response.data
+    assert b'Uncheck to require every rider to finish.' in response.data
+    assert b'aria-describedby="dropRules"' in response.data
+    assert b'id="dropRules" hidden' in response.data
 
 
 def test_rider_lookup_requires_login(monkeypatch):
@@ -134,7 +142,31 @@ def stream_plan():
     return TTTPlanResult(
         route_name="Flat", team_size=4, scoring_rider_count=3, feasible=True,
         total_time_seconds=360.0, total_distance_km=4.0, total_ascent_m=0.0,
-        avg_speed_kph=40.0)
+        avg_speed_kph=40.0,
+        pulls=[{"rider": f"R{index % 4}", "start_time_s": 60.0 * index,
+                "duration_s": 60.0, "power_w": 300.0, "power_wkg": 4.0,
+                "start_km": 4.0 * index / 6, "end_km": 4.0 * (index + 1) / 6}
+               for index in range(6)])
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_plan_returns_pull_schedule_in_json_and_stream(monkeypatch, stream):
+    payload = stream_request(monkeypatch)
+    payload["stream"] = stream
+    result = stream_plan()
+    monkeypatch.setattr(app_module, "plan_ttt_pacing", lambda *args, **kwargs: result)
+
+    response = app_module.app.test_client().post(
+        "/api/ttt_pacing_plan", json=payload, buffered=True)
+
+    assert response.status_code == 200
+    if stream:
+        events = [json.loads(block[6:]) for block in response.get_data(as_text=True).split("\n\n")
+                  if block.startswith("data: ")]
+        data = events[-1]["plan"]
+    else:
+        data = response.get_json()
+    assert data["pulls"] == result.pulls
 
 
 def test_plan_stream_outputs_progress_before_completion(monkeypatch):
@@ -246,6 +278,10 @@ def test_plan_stream_runs_real_optimizer(monkeypatch):
     assert plans
     for plan in plans + [events[-1]["plan"]]:
         assert plan["feasible"]
+        assert plan["pulls"]
+        assert sum(pull["duration_s"] for pull in plan["pulls"]) == pytest.approx(
+            plan["total_time_seconds"], abs=0.5)
+        assert all(0.0 < pull["duration_s"] <= 20.0 + 1e-7 for pull in plan["pulls"])
         assert all(row["min_wbal_j"] >= 0 for row in plan["riders"])
         assert all(value <= 450.5 for series in plan["profile"]["power_w"].values()
                    for value in series if value is not None)

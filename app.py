@@ -3009,6 +3009,7 @@ def _ttt_plan_payload(result):
         'avg_speed_kph': result.avg_speed_kph,
         'riders': result.riders,
         'phases': result.phases,
+        'pulls': result.pulls,
         'flat_rotation': result.flat_rotation,
         'profile': {
             'distance_km': result.distance_km,

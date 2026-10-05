@@ -58,10 +58,15 @@ A web app for analyzing Zwift racing. Includes **Bike Comparison**, **Race Repla
 - Plan a WTRL team time trial at `/ttt-pacing` for 4-8 riders in a fixed rotation order
 - Edit each rider's CP and W' and choose a route, bike, reserve and maximum power
 - Pull durations default to a maximum of 60 seconds
+- The leader holds constant power for each pull, including across terrain changes
+- Reconsider non-pulling finishers with short pulls from the start, halfway or
+   three-quarters through the course, retaining only faster feasible plans
 - Set aerodynamic draft reductions for the second rider and third-and-later riders;
    defaults are 25% and 40%, and 0% disables the corresponding draft benefit
 - Power drives a forward momentum simulation: speed carries through sections and
    rotation changes instead of being reset to independent chunk targets
+- Switch the rider power graph between W and W/kg; export the actual pull schedule
+   with durations and both power units as CSV
 - Receive live iteration updates while optimization continues; the tables and charts
    show the best feasible plan so far, marked as provisional until completion
 - Provisional plans keep W' positive throughout the course and respect each rider's power cap

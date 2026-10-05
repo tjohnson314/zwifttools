@@ -8,6 +8,7 @@ from bike_comparison.ttt_planner import (
     _CoursePlanner,
     _Plan,
     _Team,
+    _build_result,
     _flat_feasible,
     _line_factors,
     plan_ttt_pacing,
@@ -125,7 +126,7 @@ def test_course_feasibility_requires_positive_wbal_margin(monkeypatch, margin, e
     simulated = type("Sim", (), {"peak_power": np.zeros((1, 4)), "motion_feasible": True})()
     planner.team = type("Team", (), {"cp": np.full(4, 300.0)})()
     planner.max_power_cp_mult = 1.5
-    monkeypatch.setattr(planner, "simulate", lambda *args: simulated)
+    monkeypatch.setattr(planner, "simulate", lambda *args, **kwargs: simulated)
     monkeypatch.setattr(planner, "slack", lambda *args: np.array([margin]))
 
     sim, slack, feasible = planner._check([], [], [])
@@ -136,7 +137,7 @@ def test_course_feasibility_requires_positive_wbal_margin(monkeypatch, margin, e
 
 
 @pytest.mark.parametrize("pulls", [[30.0, 0.0, 0.0, 0.0], [30.0, 30.0, 30.0, 30.0]])
-def test_simulation_caps_power_including_acceleration_and_second_position(monkeypatch, pulls):
+def test_course_rejects_constant_pulls_over_follower_power_caps(monkeypatch, pulls):
     riders = [rider("A", 600), rider("B", 150), rider("C", 180), rider("D", 200)]
     team = _Team(riders, 0.004)
     planner = _CoursePlanner(
@@ -147,11 +148,129 @@ def test_simulation_caps_power_including_acceleration_and_second_position(monkey
     monkeypatch.setattr(planner, "pulls_for", lambda *args: np.array(pulls))
     efforts = np.linspace(0.5, 2.0, planner.C)
 
-    sim = planner.simulate(efforts, np.full(team.n, planner.C), np.ones(team.n))
+    sim, _, feasible = planner._check(efforts, np.full(team.n, planner.C), np.ones(team.n))
 
-    assert np.all(sim.power <= 1.5 * team.cp[None, :] + 1e-6)
-    assert np.all(sim.peak_power <= 1.5 * team.cp[None, :] + 1e-6)
+    assert not feasible
+    assert np.any(sim.peak_power > 1.5 * team.cp[None, :] + 1e-6)
+    assert sim.pulls[0]["power_w"] == 300.0
     np.testing.assert_array_equal(sim.enter_speeds[1:], sim.exit_speeds[:-1])
+
+
+def test_constant_pull_crosses_chunks_and_records_actual_duration_and_energy(monkeypatch):
+    team = _Team([rider(name, 300) for name in ("A", "B", "C", "D")], 0.004)
+    planner = _CoursePlanner(
+        flat_route(800.0), team, crr=0.004, max_chunk_m=100.0,
+        reserve_fraction=0.1, reserve_release_m=2000.0, max_power_cp_mult=1.5,
+        min_pull_s=60.0, max_pull_s=60.0, pull_step_s=10.0, speed_step_mps=0.1)
+    monkeypatch.setattr(planner, "cp_eff", lambda *args: tuple(team.cp))
+    monkeypatch.setattr(planner, "pulls_for", lambda *args: np.array([60.0, 0.0, 0.0, 0.0]))
+    efforts = np.linspace(0.8, 1.4, planner.C)
+
+    sim = planner.simulate(efforts, np.full(4, planner.C), np.ones(4))
+
+    assert len(sim.pulls) >= 2
+    assert sim.pulls[0]["power_w"] == 240.0
+    assert sim.pulls[0]["power_wkg"] == 240.0 / 75.0
+    assert sim.pulls[0]["duration_s"] == pytest.approx(60.0, abs=1e-7)
+    assert 0.0 < sim.pulls[-1]["duration_s"] < 60.0
+    ends = np.cumsum(sim.chunk_time)
+    np.testing.assert_allclose(sim.power[ends < 60.0, 0], 240.0)
+    assert sum(pull["duration_s"] for pull in sim.pulls) == pytest.approx(sim.total_time)
+    assert sum(pull["duration_s"] * pull["power_w"] for pull in sim.pulls) == pytest.approx(
+        sim.lead_energy[0])
+    assert sim.pulls[0]["start_km"] == 0.0
+    assert sim.pulls[-1]["end_km"] == pytest.approx(0.8)
+    for previous, current in zip(sim.pulls, sim.pulls[1:]):
+        assert current["start_time_s"] == pytest.approx(
+            previous["start_time_s"] + previous["duration_s"])
+        assert current["start_km"] == pytest.approx(previous["end_km"])
+
+
+def test_non_puller_can_rejoin_rotation_later_without_changing_early_pacing(monkeypatch):
+    team = _Team([rider(name, 300) for name in ("A", "B", "C", "D")], 0.004)
+    planner = _CoursePlanner(
+        flat_route(2400.0), team, crr=0.004, max_chunk_m=100.0,
+        reserve_fraction=0.1, reserve_release_m=2000.0, max_power_cp_mult=1.5,
+        min_pull_s=20.0, max_pull_s=60.0, pull_step_s=10.0, speed_step_mps=0.1)
+    monkeypatch.setattr(planner, "cp_eff", lambda *args: tuple(team.cp))
+    monkeypatch.setattr(planner, "pulls_for", lambda *args: np.array([20.0, 20.0, 20.0, 0.0]))
+    drops = np.full(4, planner.C)
+    efforts = np.ones(planner.C)
+    baseline = planner.simulate(efforts, drops, np.ones(4))
+    start = planner.C // 2
+
+    sim = planner.simulate(efforts, drops, np.ones(4), pull_overrides=((3, start, 20.0),))
+
+    assert not np.any(baseline.front[:, 3])
+    assert not np.any(sim.front[:start, 3])
+    assert np.any(sim.front[start:, 3])
+    np.testing.assert_array_equal(sim.speeds[:start], baseline.speeds[:start])
+    assert np.all(sim.pulls_start[:start, 3] == 0.0)
+    assert np.all(sim.pulls_start[start:, 3] == 20.0)
+    assert np.all(sim.peak_power <= 1.5 * team.cp[None, :] + 1e-6)
+    assert np.min(planner.slack(sim, drops)) > 0.0
+    result = _build_result(flat_route(2400.0), planner,
+                           _Plan(efforts, sim, True, 0.1, planner.lam), drops, np.ones(4), 3, 400)
+    assert len(result.phases) == 2
+    assert result.phases[0]["pulls_s"]["D"] == 0.0
+    assert result.phases[1]["pulls_s"]["D"] == 20.0
+    assert any(pull["rider"] == "D" for pull in result.pulls)
+
+
+@pytest.mark.parametrize("trial_time", [95.0, 105.0])
+def test_non_puller_search_checks_late_starts_and_keeps_only_faster_feasible_plans(monkeypatch, trial_time):
+    team = _Team([rider(name, 300) for name in ("A", "B", "C", "D")], 0.004)
+    planner = _CoursePlanner(
+        flat_route(400.0), team, crr=0.004, max_chunk_m=100.0,
+        reserve_fraction=0.1, reserve_release_m=2000.0, max_power_cp_mult=1.5,
+        min_pull_s=20.0, max_pull_s=60.0, pull_step_s=10.0, speed_step_mps=0.1)
+    front = np.ones((planner.C, 4))
+    front[:, 3] = 0.0
+    baseline_sim = type("Sim", (), {"total_time": 100.0, "front": front,
+                                    "wbal": np.full((planner.C, 4), 15000.0)})()
+    baseline = _Plan(np.ones(planner.C), baseline_sim, True, 0.1, planner.lam)
+    checked = []
+
+    def solve(drops, mult, iterations, pull_overrides=()):
+        checked.append(pull_overrides)
+        start = pull_overrides[-1][1]
+        feasible = start != 0
+        duration = 90.0 if start == 0 else trial_time if start == planner.C // 2 else 110.0
+        sim = type("Sim", (), {"total_time": duration})()
+        return _Plan(baseline.efforts, sim, feasible, 0.1, planner.lam, pull_overrides)
+
+    monkeypatch.setattr(planner, "solve", solve)
+    monkeypatch.setattr(planner, "finish_effort", lambda plan, *args: plan)
+
+    result = planner.reconsider_non_pullers(baseline, np.full(4, planner.C), np.ones(4), 2)
+
+    assert checked == [((3, start, 20.0),) for start in (0, 2, 3)]
+    if trial_time < baseline.sim.total_time:
+        assert result.sim.total_time == trial_time
+        assert result.pull_overrides == ((3, 2, 20.0),)
+    else:
+        assert result is baseline
+
+
+def test_reconsidering_an_idle_rider_improves_a_real_feasible_plan(monkeypatch):
+    team = _Team([rider(name, 300) for name in ("A", "B", "C", "D")], 0.004)
+    planner = _CoursePlanner(
+        flat_route(4000.0), team, crr=0.004, max_chunk_m=100.0,
+        reserve_fraction=0.1, reserve_release_m=2000.0, max_power_cp_mult=1.5,
+        min_pull_s=20.0, max_pull_s=60.0, pull_step_s=10.0, speed_step_mps=0.1)
+    monkeypatch.setattr(planner, "pulls_for", lambda *args: np.array([20.0, 20.0, 20.0, 0.0]))
+    drops = np.full(4, planner.C)
+    mult = np.ones(4)
+    baseline = planner.finish_effort(planner.solve(drops, mult, 2), drops, mult)
+
+    result = planner.reconsider_non_pullers(baseline, drops, mult, 2)
+
+    assert baseline.feasible and result.feasible
+    assert not np.any(baseline.sim.front[:, 3])
+    assert np.sum(result.sim.front[:, 3]) > 0.0
+    assert result.sim.total_time < baseline.sim.total_time - 0.5
+    assert np.min(planner.slack(result.sim, drops)) > 0.0
+    assert np.all(result.sim.peak_power <= 1.5 * team.cp[None, :] + 1e-6)
 
 
 def test_flat_rotation_is_sustainable_and_strongest_rider_pulls_longest():

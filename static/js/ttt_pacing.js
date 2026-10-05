@@ -17,6 +17,10 @@ let riders = [];   // [{ name, height_cm, weight_kg, cp_w, w_prime_kj, zwift_id?
 const charts = {};
 let isAuthenticated = false;
 let isPlanning = false;
+let powerUnit = 'W';
+let planRiderWeights = [];
+let powerChartData = null;
+let pullSchedule = [];
 
 // ── Login ────────────────────────────────────────────────────────────────────
 async function checkAuth() {
@@ -58,6 +62,7 @@ function saveSettings() {
         maxPowerPct: document.getElementById('maxPowerPct').value,
         draftSecondPct: document.getElementById('draftSecondPct').value,
         draftRestPct: document.getElementById('draftRestPct').value,
+        powerUnit,
         allowDrops: document.getElementById('allowDrops').checked,
         frameId: bike.frameId,
         wheelId: bike.wheelId,
@@ -71,6 +76,11 @@ function saveSettings() {
 document.addEventListener('DOMContentLoaded', () => {
     checkAuth();
     const settings = loadSettings();
+    powerUnit = settings.powerUnit === 'W/kg' ? 'W/kg' : 'W';
+    document.querySelectorAll('input[name="powerUnit"]').forEach(input => {
+        input.checked = input.value === powerUnit;
+        input.addEventListener('change', () => setPowerUnit(input.value));
+    });
     if (settings.zwiftIds) document.getElementById('zwiftIds').value = settings.zwiftIds;
     if (settings.reservePct != null) document.getElementById('reservePct').value = settings.reservePct;
     if (settings.maxPowerPct != null) document.getElementById('maxPowerPct').value = settings.maxPowerPct;
@@ -436,6 +446,10 @@ async function runPlan() {
     const customKm = getCustomDistanceKm();
     if (customKm != null) body.custom_distance_km = customKm;
 
+    planRiderWeights = body.riders.map(r => r.weight_kg);
+    powerChartData = null;
+    pullSchedule = [];
+    document.getElementById('exportPullsBtn').disabled = true;
     isPlanning = true;
     btn.disabled = true;
     btn.classList.add('loading');
@@ -471,12 +485,12 @@ async function runPlan() {
                         hasPlan = true;
                     }
                 } else if (update.type === 'complete') {
-                    displayResults(update.plan, { scroll: !hasPlan });
+                    displayResults(update.plan, { scroll: !hasPlan, provisional: false });
                     hasPlan = true;
                 }
             });
         } else {
-            displayResults(await resp.json());
+            displayResults(await resp.json(), { provisional: false });
             hasPlan = true;
         }
         finalStatus = `Finished in ${Math.round((Date.now() - started) / 1000)} s`;
@@ -592,8 +606,52 @@ function displayResults(data, { scroll = true, provisional = false } = {}) {
         phaseBody.appendChild(tr);
     });
 
-    renderCharts(data.profile);
+    const weights = Object.fromEntries(data.riders.map((r, i) => [r.name, planRiderWeights[i]]));
+    renderCharts(data.profile, weights);
+    renderPullSchedule(data.pulls || []);
     if (scroll) document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+}
+
+function renderPullSchedule(pulls) {
+    pullSchedule = pulls;
+    const tbody = document.querySelector('#pullTable tbody');
+    tbody.innerHTML = '';
+    pulls.forEach((pull, i) => {
+        const tr = document.createElement('tr');
+        tr.appendChild(cell(i + 1));
+        tr.appendChild(cell(pull.rider));
+        tr.appendChild(cell(formatTime(pull.start_time_s)));
+        tr.appendChild(cell(`${pull.duration_s.toFixed(1)} s`));
+        tr.appendChild(cell(Math.round(pull.power_w)));
+        tr.appendChild(cell(pull.power_wkg.toFixed(2)));
+        tbody.appendChild(tr);
+    });
+    document.getElementById('exportPullsBtn').disabled = pulls.length === 0;
+}
+
+function buildPullsCsv(pulls) {
+    const rows = [['Pull', 'Rider', 'Start (s)', 'Duration (s)', 'Power (W)', 'Power (W/kg)',
+        'Start (km)', 'End (km)']];
+    pulls.forEach((pull, i) => rows.push([i + 1, pull.rider, pull.start_time_s, pull.duration_s,
+        pull.power_w, pull.power_wkg, pull.start_km, pull.end_km]));
+    return rows.map(row => row.map(value => {
+        let text = String(value);
+        if (typeof value === 'string' && /^[=+\-@\t\r\n]/.test(text)) text = "'" + text;
+        return '"' + text.replaceAll('"', '""') + '"';
+    }).join(',')).join('\r\n') + '\r\n';
+}
+
+function exportPullsCsv() {
+    if (!pullSchedule.length) return;
+    const blob = new Blob(['\uFEFF', buildPullsCsv(pullSchedule)], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'ttt-pulls.csv';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function baseChartOptions(yTitle) {
@@ -634,7 +692,7 @@ function riderDatasets(series, scale = 1) {
     }));
 }
 
-function renderCharts(p) {
+function renderCharts(p, weights) {
     const speedOpts = baseChartOptions('Speed (km/h)');
     speedOpts.scales.yElev = {
         position: 'right',
@@ -675,26 +733,57 @@ function renderCharts(p) {
         options: baseChartOptions('W′ balance (kJ)'),
     });
 
-    const powerOpts = baseChartOptions('Power (W)');
+    powerChartData = { profile: p, weights };
+    drawChart('powerChart', buildPowerChartConfig(p, weights));
+}
+
+function buildPowerChartConfig(p, weights) {
+    const unit = powerUnit;
+    const perKg = unit === 'W/kg';
+    const convert = (name, value) => {
+        if (value == null) return null;
+        return perKg ? (weights[name] > 0 ? value / weights[name] : null) : Math.round(value);
+    };
+    const format = value => value == null ? 'Unavailable' :
+        `${perKg ? value.toFixed(2) : Math.round(value)} ${unit}`;
+    const series = Object.fromEntries(Object.entries(p.power_w).map(([name, values]) =>
+        [name, values.map(value => convert(name, value))]));
+    const powerOpts = baseChartOptions(`Power (${unit})`);
     powerOpts.plugins.tooltip = {
         callbacks: {
+            label: context => `${context.dataset.label}: ${format(context.parsed.y)}`,
             afterLabel: context => {
                 const name = context.dataset.label;
                 const i = context.dataIndex;
                 const lines = [];
-                const peak = p.peak_power_w?.[name]?.[i];
-                const braking = p.braking_w?.[name]?.[i];
-                if (peak != null) lines.push(`Peak: ${peak} W`);
-                if (braking > 0) lines.push(`Speed-matching dissipation: ${braking} W`);
+                const peak = convert(name, p.peak_power_w?.[name]?.[i]);
+                const braking = convert(name, p.braking_w?.[name]?.[i]);
+                if (peak != null) lines.push(`Peak: ${format(peak)}`);
+                if (braking != null && p.braking_w?.[name]?.[i] > 0) {
+                    lines.push(`Speed-matching dissipation: ${format(braking)}`);
+                }
                 return lines;
             },
         },
     };
-    drawChart('powerChart', {
+    return {
         type: 'line',
-        data: { labels: p.distance_km, datasets: riderDatasets(p.power_w) },
+        data: { labels: p.distance_km, datasets: riderDatasets(series) },
         options: powerOpts,
-    });
+    };
+}
+
+function setPowerUnit(unit) {
+    powerUnit = unit === 'W/kg' ? 'W/kg' : 'W';
+    if (powerChartData && charts.powerChart) {
+        const config = buildPowerChartConfig(powerChartData.profile, powerChartData.weights);
+        charts.powerChart.data.datasets.forEach((dataset, i) => {
+            dataset.data = config.data.datasets[i].data;
+        });
+        charts.powerChart.options = config.options;
+        charts.powerChart.update('none');
+    }
+    saveSettings();
 }
 
 function showError(msg) {

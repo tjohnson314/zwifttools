@@ -125,6 +125,7 @@ class TTTPlanResult:
     exit_speed_kph: list = field(default_factory=list)
     peak_power_w: dict = field(default_factory=dict)
     braking_w: dict = field(default_factory=dict)
+    pulls: list = field(default_factory=list)
 
     @property
     def total_time_formatted(self) -> str:
@@ -316,6 +317,7 @@ class _Sim:
     braking_power: np.ndarray
     efforts: np.ndarray
     motion_feasible: bool = True
+    pulls: list = field(default_factory=list)
 
 
 @dataclass
@@ -325,6 +327,7 @@ class _Plan:
     feasible: bool
     worst_slack: float
     lam: np.ndarray
+    pull_overrides: tuple = ()
 
     @property
     def objective(self) -> float:
@@ -396,7 +399,7 @@ class _CoursePlanner:
             self._mask_cache[key] = (active, reserve)
         return self._mask_cache[key]
 
-    def advance(self, chunk, speed, effort, leader, factors, mask, distance):
+    def advance(self, chunk, speed, effort, leader, factors, mask, distance, *, enforce_caps=True):
         team = self.team
         ratio = team.mass / team.mass[leader]
         aero = team.aero_k * factors
@@ -412,33 +415,36 @@ class _CoursePlanner:
                               ratio * drive + delta * exit_speed ** 3)
             return exit_speed, duration, peak
 
-        coast_speed, _, _ = traverse(0.0)
-        requested_speed, _, _ = traverse(requested)
-        minimum_speed = min(speed, coast_speed)
-        maximum_speed = max(speed, requested_speed)
-        worst_delta = np.maximum(delta * minimum_speed ** 3, delta * maximum_speed ** 3)
-        drive_limit = float(np.min(((cap - worst_delta) / ratio)[mask]))
-        drive = min(requested, max(drive_limit, 0.0))
+        drive = requested
         exit_speed, duration, peak = traverse(drive)
-        if np.any(peak[mask] > cap[mask] + 1e-7):
-            lo, hi = 0.0, drive
-            for _ in range(16):
-                mid = 0.5 * (lo + hi)
-                trial_speed, trial_time, trial_peak = traverse(mid)
-                if np.any(trial_peak[mask] > cap[mask]):
-                    hi = mid
-                else:
-                    lo = mid
-            drive = lo
+        if enforce_caps:
+            coast_speed, _, _ = traverse(0.0)
+            minimum_speed = min(speed, coast_speed)
+            maximum_speed = max(speed, exit_speed)
+            worst_delta = np.maximum(delta * minimum_speed ** 3, delta * maximum_speed ** 3)
+            drive_limit = float(np.min(((cap - worst_delta) / ratio)[mask]))
+            drive = min(requested, max(drive_limit, 0.0))
             exit_speed, duration, peak = traverse(drive)
+            if np.any(peak[mask] > cap[mask] + 1e-7):
+                lo, hi = 0.0, drive
+                for _ in range(16):
+                    mid = 0.5 * (lo + hi)
+                    trial_speed, trial_time, trial_peak = traverse(mid)
+                    if np.any(trial_peak[mask] > cap[mask]):
+                        hi = mid
+                    else:
+                        lo = mid
+                drive = lo
+                exit_speed, duration, peak = traverse(drive)
         mean_speed = 0.5 * (speed + exit_speed)
         required = ratio * drive + delta * mean_speed ** 3
         power = np.where(mask, np.maximum(required, 0.0), 0.0)
         braking = np.where(mask, np.maximum(-required, 0.0), 0.0)
         return exit_speed, duration, power, braking, np.where(mask, np.maximum(peak, 0.0), 0.0)
 
-    def simulate(self, efforts, drop_chunk, mult, initial_speed_mps=V_FLOOR) -> _Sim:
-        """Traverse the course at lead-power/CP efforts, carrying momentum between steps."""
+    def simulate(self, efforts, drop_chunk, mult, initial_speed_mps=V_FLOOR,
+                 pull_overrides=()) -> _Sim:
+        """Hold the lead-power/CP effort from each pull's start, carrying momentum."""
         team, C, n = self.team, self.C, self.team.n
         cp, wp, rec = team.cp, team.wp, team.rec
         B = wp.copy()
@@ -457,18 +463,27 @@ class _CoursePlanner:
         braking_power = np.zeros(shape)
         cp_eff = self.cp_eff(drop_chunk)
         active = None
+        previous_overrides = None
         pulls = None
         leader = n - 1
         remaining = 0.0
+        pull_effort = None
+        pull_log = []
+        total_elapsed = 0.0
         factor_cache: dict = {}
         speed = max(float(initial_speed_mps), V_FLOOR)
         motion_feasible = True
         for c in range(C):
             act = tuple(bool(c < drop_chunk[i]) for i in range(n))
-            if act != active:
+            overrides = tuple((i, duration) for i, start, duration in pull_overrides
+                              if c >= start and act[i])
+            if act != active or overrides != previous_overrides:
                 was_leading = active is not None and act[leader]
                 active = act
-                pulls = self.pulls_for(active, mult, cp_eff)
+                previous_overrides = overrides
+                pulls = self.pulls_for(active, mult, cp_eff).copy()
+                for i, duration in overrides:
+                    pulls[i] = duration
                 mask = np.array(active)
                 factor_cache = {}
                 if was_leading and pulls[leader] > 0.0:
@@ -476,6 +491,7 @@ class _CoursePlanner:
                 else:
                     leader = _next_puller(active, pulls, leader)
                     remaining = pulls[leader]
+                    pull_effort = None
             length = float(self.length[c])
             enter_speeds[c] = speed
             pulls_start[c] = pulls
@@ -483,9 +499,20 @@ class _CoursePlanner:
             distance_left = length
             elapsed = 0.0
             while distance_left > 1e-8:
+                if pull_effort is None:
+                    pull_effort = min(max(float(efforts[c]), 0.0), self.max_power_cp_mult)
+                    pull_log.append({
+                        "rider": team.names[leader],
+                        "start_time_s": total_elapsed,
+                        "duration_s": 0.0,
+                        "start_km": float(self.end[c] - distance_left) / 1000.0,
+                        "end_km": float(self.end[c] - distance_left) / 1000.0,
+                        "power_w": pull_effort * cp[leader],
+                        "power_wkg": pull_effort * cp[leader] / team.riders[leader].weight_kg,
+                    })
                 if leader not in factor_cache:
                     factor_cache[leader] = _line_factors(active, pulls, leader, team.draft_factors)
-                requested = min(max(float(efforts[c]), 0.0), self.max_power_cp_mult) * cp[leader]
+                requested = pull_effort * cp[leader]
                 acceleration = (requested / speed - self.f_static[c, leader] -
                                 team.aero_k[leader] * speed ** 2) / team.mass[leader]
                 distance = min(self.max_step_m, distance_left, speed * remaining)
@@ -494,7 +521,8 @@ class _CoursePlanner:
                     distance = min(distance, 0.05 * speed ** 2 / abs(acceleration))
                 for _ in range(8):
                     exit_speed, dt, P, braking, peak = self.advance(
-                        c, speed, efforts[c], leader, factor_cache[leader], mask, distance)
+                        c, speed, pull_effort, leader, factor_cache[leader], mask, distance,
+                        enforce_caps=False)
                     if dt <= remaining + 1e-9:
                         break
                     distance *= remaining / dt * (1.0 - 1e-9)
@@ -509,6 +537,9 @@ class _CoursePlanner:
                 peak_power[c] = np.maximum(peak_power[c], peak)
                 front[c, leader] += dt
                 lead_energy[leader] += P[leader] * dt
+                pull_log[-1]["duration_s"] += dt
+                pull_log[-1]["end_km"] = float(self.end[c] - distance_left + distance) / 1000.0
+                total_elapsed += dt
                 remaining -= dt
                 elapsed += dt
                 distance_left -= distance
@@ -516,6 +547,7 @@ class _CoursePlanner:
                 if remaining <= 1e-8:
                     leader = _next_puller(active, pulls, leader)
                     remaining = pulls[leader]
+                    pull_effort = None
             chunk_time[c] = elapsed
             actual[c] = length / elapsed
             exit_speeds[c] = speed
@@ -525,7 +557,7 @@ class _CoursePlanner:
             wbal[c, mask] = B[mask]
         return _Sim(float(np.sum(chunk_time)), actual, chunk_time, power, min_b, wbal, front,
                     lead_energy, pulls_start, enter_speeds, exit_speeds, peak_power,
-                    braking_power, np.asarray(efforts).copy(), motion_feasible)
+                    braking_power, np.asarray(efforts).copy(), motion_feasible, pull_log)
 
     def slack(self, sim: _Sim, drop_chunk) -> np.ndarray:
         active, reserve = self.masks(drop_chunk)
@@ -594,8 +626,8 @@ class _CoursePlanner:
         idx = np.argmin(cost, axis=1)
         return self.effort_grid[idx]
 
-    def _check(self, efforts, drop_chunk, mult):
-        sim = self.simulate(efforts, drop_chunk, mult)
+    def _check(self, efforts, drop_chunk, mult, pull_overrides=()):
+        sim = self.simulate(efforts, drop_chunk, mult, pull_overrides=pull_overrides)
         slack = self.slack(sim, drop_chunk)
         capped = np.all(sim.peak_power <= self.max_power_cp_mult * self.team.cp[None, :] + 1e-6)
         return sim, slack, bool(np.min(slack) > 0.0 and capped and sim.motion_feasible)
@@ -604,8 +636,8 @@ class _CoursePlanner:
         if self.progress_callback is not None:
             self.progress_callback(plan, drop_chunk, mult, iteration, iterations, step)
 
-    def solve(self, drop_chunk, mult, iterations: int) -> _Plan:
-        key = (tuple(int(c) for c in drop_chunk), tuple(np.round(mult, 4)))
+    def solve(self, drop_chunk, mult, iterations: int, pull_overrides=()) -> _Plan:
+        key = (tuple(int(c) for c in drop_chunk), tuple(np.round(mult, 4)), pull_overrides)
         if key in self._plan_cache:
             return self._plan_cache[key]
         lam = self.lam.copy()
@@ -613,16 +645,16 @@ class _CoursePlanner:
             efforts = self.warm_efforts.copy()
         else:
             efforts = np.ones(self.C)
-        sim = self.simulate(efforts, drop_chunk, mult)
+        sim = self.simulate(efforts, drop_chunk, mult, pull_overrides=pull_overrides)
         best: Optional[_Plan] = None
         near: Optional[_Plan] = None
         fallback: Optional[_Plan] = None
         step = 1.0
         for iteration in range(1, iterations + 1):
             efforts = 0.5 * efforts + 0.5 * self.price_efforts(lam, sim, drop_chunk)
-            sim, slack, feasible = self._check(efforts, drop_chunk, mult)
+            sim, slack, feasible = self._check(efforts, drop_chunk, mult, pull_overrides)
             worst = float(np.min(slack))
-            plan = _Plan(efforts, sim, feasible, worst, lam.copy())
+            plan = _Plan(efforts, sim, feasible, worst, lam.copy(), pull_overrides)
             if feasible and (best is None or sim.total_time < best.sim.total_time):
                 best = plan
             if worst > -0.1 and (near is None or sim.total_time < near.sim.total_time):
@@ -650,22 +682,22 @@ class _CoursePlanner:
     def _tighten(self, plan: _Plan, drop_chunk, mult) -> Optional[_Plan]:
         """Scale power efforts uniformly to sit on the W' feasibility boundary."""
         lo, hi = (1.0, 1.06) if plan.feasible else (0.3, 1.0)
-        sim, slack, feasible = self._check(plan.efforts * lo, drop_chunk, mult)
+        sim, slack, feasible = self._check(plan.efforts * lo, drop_chunk, mult, plan.pull_overrides)
         if not feasible:
             return None
-        best = _Plan(plan.efforts * lo, sim, True, float(np.min(slack)), plan.lam)
+        best = _Plan(plan.efforts * lo, sim, True, float(np.min(slack)), plan.lam, plan.pull_overrides)
         iterations = 8 if plan.feasible else 12
         self._publish(best, drop_chunk, mult, 0, iterations, "reserve check")
         for iteration in range(1, iterations + 1):
             mid = 0.5 * (lo + hi)
             efforts = plan.efforts * mid
-            sim, slack, feasible = self._check(efforts, drop_chunk, mult)
+            sim, slack, feasible = self._check(efforts, drop_chunk, mult, plan.pull_overrides)
             if feasible:
                 lo = mid
-                best = _Plan(efforts, sim, True, float(np.min(slack)), plan.lam)
+                best = _Plan(efforts, sim, True, float(np.min(slack)), plan.lam, plan.pull_overrides)
             else:
                 hi = mid
-            candidate = _Plan(efforts, sim, feasible, float(np.min(slack)), plan.lam)
+            candidate = _Plan(efforts, sim, feasible, float(np.min(slack)), plan.lam, plan.pull_overrides)
             self._publish(candidate, drop_chunk, mult, iteration, iterations, "reserve check")
         return best
 
@@ -686,8 +718,9 @@ class _CoursePlanner:
                 efforts = base.copy()
                 efforts[start:] += fraction_used * np.maximum(
                     self.max_power_cp_mult - efforts[start:], 0.0)
-                sim, slack, feasible = self._check(efforts, drop_chunk, mult)
-                candidate = _Plan(efforts, sim, feasible, float(np.min(slack)), best.lam)
+                sim, slack, feasible = self._check(efforts, drop_chunk, mult, best.pull_overrides)
+                candidate = _Plan(efforts, sim, feasible, float(np.min(slack)), best.lam,
+                                  best.pull_overrides)
                 if feasible:
                     lo = fraction_used
                     if sim.total_time < best.sim.total_time:
@@ -697,6 +730,32 @@ class _CoursePlanner:
                 self._publish(candidate, drop_chunk, mult, iteration, iterations, step)
                 if iteration == 1 and feasible:
                     break
+        return best
+
+
+    def reconsider_non_pullers(self, plan, drop_chunk, mult, iterations):
+        if not plan.feasible:
+            return plan
+        best = plan
+        candidates = [rider_index for rider_index in range(self.team.n)
+                      if drop_chunk[rider_index] == self.C and
+                      not np.any(plan.sim.front[:, rider_index] > 0.0)]
+        candidates.sort(key=lambda rider_index: float(
+            plan.sim.wbal[-1, rider_index] / self.team.wp[rider_index]), reverse=True)
+        starts = [0]
+        starts.extend(int(np.searchsorted(self.end, fraction * self.end[-1], side="right"))
+                      for fraction in (0.5, 0.75))
+        for rider_index in candidates:
+            for start in sorted(set(starts)):
+                overrides = tuple(entry for entry in best.pull_overrides if entry[0] != rider_index)
+                overrides += ((rider_index, start, self.min_pull_s),)
+                start_km = (self.end[start] - self.length[start]) / 1000.0
+                self.progress_stage = f"Reconsider pulls: {self.team.names[rider_index]} from {start_km:.1f} km"
+                trial = self.solve(drop_chunk, mult, iterations, pull_overrides=overrides)
+                if trial.feasible and trial.sim.total_time < best.sim.total_time:
+                    trial = self.finish_effort(trial, drop_chunk, mult)
+                    if trial.sim.total_time < best.sim.total_time:
+                        best = trial
         return best
 
 
@@ -891,6 +950,10 @@ def plan_ttt_pacing(
             not plan.feasible or incumbent[0].sim.total_time < plan.sim.total_time):
         plan, best_dc, mult = incumbent
     plan = planner.finish_effort(plan, best_dc, mult)
+    if refine_pulls:
+        plan = planner.reconsider_non_pullers(plan, best_dc, mult, max(2, search_iterations // 2))
+    if incumbent is not None and incumbent[0].sim.total_time < plan.sim.total_time:
+        plan, best_dc, mult = incumbent
     return _build_result(route, planner, plan, best_dc, mult, scoring, downsample_points)
 
 
@@ -927,9 +990,10 @@ def _build_result(route, planner: _CoursePlanner, plan: _Plan, drop_chunk, mult,
     start = 0
     cp_eff = planner.cp_eff(drop_chunk)
     for c in range(1, C + 1):
-        if c == C or not np.array_equal(active[c], active[start]):
+        if c == C or not np.array_equal(active[c], active[start]) or not np.array_equal(
+                sim.pulls_start[c], sim.pulls_start[start]):
             act = tuple(bool(a) for a in active[start])
-            pulls = planner.pulls_for(act, mult, cp_eff)
+            pulls = sim.pulls_start[start]
             phases.append({
                 "start_km": round(float(planner.end[start] - planner.length[start]) / 1000.0, 2),
                 "end_km": round(float(planner.end[c - 1]) / 1000.0, 2),
@@ -970,6 +1034,7 @@ def _build_result(route, planner: _CoursePlanner, plan: _Plan, drop_chunk, mult,
         avg_speed_kph=round(dist_km / (total_time / 3600.0), 1) if total_time > 0 else 0.0,
         riders=rider_rows,
         phases=phases,
+        pulls=sim.pulls,
         flat_rotation=flat_summary,
         distance_km=[round(float(planner.mid[c]) / 1000.0, 3) for c in idx],
         altitude_m=[round(float(altitude[c]), 1) for c in idx],
