@@ -790,6 +790,7 @@ function renderActivityList() {
 
         const tr = document.createElement('tr');
         tr.className = 'activity-row';
+        tr.id = `power-activity-${i}`;
         tr.style.borderLeft = `4px solid ${color}`;
 
         const groupTd = document.createElement('td');
@@ -845,8 +846,20 @@ function renderActivityList() {
 
 // Update just one activity row's status/race cells without a full re-render.
 function updateActivityRow(index) {
-    // A full re-render keeps partition colouring consistent and is cheap here.
-    renderActivityList();
+    const row = document.getElementById(`power-activity-${index}`);
+    const activity = activities[index];
+    if (!row || !activity) {
+        return;
+    }
+    const cells = row.cells;
+    cells[2].textContent = displayName(activity.name);
+    if (activity.is_race) {
+        cells[2].insertAdjacentHTML('beforeend', '<span class="badge-race">Race</span>');
+    }
+    cells[5].textContent = activityPowerText(activity, activity.avg_power);
+    cells[6].textContent = metricCellText(activity, activity.avg_hr, ' bpm');
+    cells[7].innerHTML = statusCellHtml(activity);
+    cells[8].innerHTML = actionsCellHtml(activity);
 }
 
 function toggleDivider(position) {
@@ -982,15 +995,18 @@ function clearPowerCurveCache() {
 
 async function loadAllActivities() {
     let loaded = 0;
+    let batchCount = 0;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    let batchStarted = performance.now();
     for (let i = 0; i < activities.length; i++) {
         const activity = activities[i];
-        activity.status = 'loading';
-        updateActivityRow(i);
 
         try {
             let data = readCachedActivityCurve(activity.activity_id);
             const fromCache = Boolean(data);
             if (!data) {
+                activity.status = 'loading';
+                updateActivityRow(i);
                 data = await fetchActivityCurve(activity);
                 cacheActivityCurve(activity.activity_id, data);
             }
@@ -1004,8 +1020,16 @@ async function loadAllActivities() {
 
         loaded += 1;
         updateActivityRow(i);
-        updateLoadSummary(loaded);
-        queueChartRefresh();
+        batchCount += 1;
+        if (batchCount >= 50 || performance.now() - batchStarted >= 12 || loaded === activities.length) {
+            updateLoadSummary(loaded);
+            queueChartRefresh();
+            if (loaded < activities.length) {
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                batchStarted = performance.now();
+                batchCount = 0;
+            }
+        }
     }
 }
 
