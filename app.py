@@ -1564,6 +1564,8 @@ _ERIC_FRAME_DEFAULTS = {
 }
 # The exact wheels Eric includes: (brand, model) -> display label (chart order).
 _ERIC_WHEELS = {
+    ('BlackInc', 'BlackIncThreeZero2026'): 'Black Inc Three Zero',
+    ('Cadex', 'Cadex4SpokeDisc65'): 'CADEX 4-Spoke/Disc 65',
     ('Cadex', 'CadexMax50'): 'CADEX Max 50',
     ('DTSwiss', 'ARC1100DICUT65'): 'DT Swiss ARC 1100 DICUT 65',
     ('DTSwiss', 'ARC1100DICUT85DISC'): 'DT Swiss ARC 1100 DICUT 85/Disc',
@@ -1576,6 +1578,7 @@ _ERIC_WHEELS = {
     ('PrincetonCarbonWorks', 'MachTSV2Blur'): 'Princeton CarbonWorks Mach TSV2/Blur Disc',
     ('PrincetonCarbonWorks', 'Wake6560'): 'Princeton CarbonWorks Wake 6560',
     ('Reserve', 'Reserve34'): 'Reserve 34/37',
+    ('Reserve', 'ReserveInfinityDisc2026'): 'Reserve Infinity Disc',
     ('Roval', 'RovalAlpinistCLX'): 'Roval Alpinist CLX',
     ('Shimano', 'ShimanoDuraAceC992026'): 'Shimano Dura-Ace C99 Disc',
     ('SwissSide', 'SwissSideHADRONUltimate650'): 'Swiss Side HADRON Ultimate 650',
@@ -1585,8 +1588,11 @@ _ERIC_WHEELS = {
 }
 # Wheels checked by default in Eric's chart.
 _ERIC_WHEEL_DEFAULTS = {
+    ('BlackInc', 'BlackIncThreeZero2026'), ('Cadex', 'Cadex4SpokeDisc65'),
     ('DTSwiss', 'ARC1100DICUT65'), ('DTSwiss', 'ARC1100DICUT85DISC'),
+    ('PrincetonCarbonWorks', 'MachTSV2Blur'),
     ('PrincetonCarbonWorks', 'Wake6560'), ('SwissSide', 'SwissSideHADRONUltimate650'),
+    ('Reserve', 'ReserveInfinityDisc2026'), ('Shimano', 'ShimanoDuraAceC992026'),
 }
 
 # --- TT variant (ZwiftInsider "TT Top Performers" chart) ---------------------
@@ -1599,6 +1605,7 @@ _ERIC_TT_FRAMES = {
     'CerveloP5': 'Cervelo P5',
     'CerveloP5x': 'Cervelo PX-Series',
     'CubeAerium2019': 'Cube Aerium',
+    'FactorHanzo2026': 'Factor Hanzo',
     'FeltIA2019': 'Felt IA 2.0',
     'PinarelloBolideTT2018': 'Pinarello Bolide TT',
     'PinarelloEspada': 'Pinarello Espada',
@@ -1613,12 +1620,15 @@ _ERIC_TT_FRAMES = {
 # TT frames checked by default in his chart.
 _ERIC_TT_FRAME_DEFAULTS = {
     'CadexTri2022', 'CanyonSpeedmaxCRSLXDisc2021', 'CanyonSpeedmaxCFR2026',
-    'FeltIA2019', 'ScottPlasma2022',
+    'FactorHanzo2026', 'FeltIA2019', 'ScottPlasma2022',
 }
 # TT wheels checked by default (same wheel set as the road chart).
 _ERIC_TT_WHEEL_DEFAULTS = {
+    ('BlackInc', 'BlackIncThreeZero2026'), ('Cadex', 'Cadex4SpokeDisc65'),
     ('DTSwiss', 'ARC1100DICUT85DISC'), ('PrincetonCarbonWorks', 'Alta3532'),
+    ('PrincetonCarbonWorks', 'MachTSV2Blur'),
     ('PrincetonCarbonWorks', 'Wake6560'), ('SwissSide', 'SwissSideHADRONUltimate650'),
+    ('Reserve', 'ReserveInfinityDisc2026'), ('Shimano', 'ShimanoDuraAceC992026'),
 }
 
 _top_performers_cache = {}
