@@ -1441,13 +1441,14 @@ function updateStreamLinks() {
         return;
     }
 
+    const elapsed = currentTime - raceData.min_time;
     let html = '<span class="stream-label">📺 Streams:</span>';
 
     for (const s of streamLinks) {
         const rider = raceData.riders.find(r =>
             r.player_id != null && String(r.player_id) === String(s.zwift_player_id));
         const activityOffset = rider?.ttt_time_offset ?? 0;
-        const streamSec = s.offset_seconds + currentTime + activityOffset;
+        const streamSec = s.offset_seconds + elapsed - activityOffset;
         const t = Math.max(0, Math.round(streamSec));
         const url = `${s.youtube_url}&t=${t}s`;
         // Format as h:mm:ss for streams (can be long)
