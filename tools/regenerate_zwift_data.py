@@ -1,4 +1,4 @@
-"""Check the installed Zwift client version and regenerate routes/frames/wheels
+"""Check the installed Zwift client version and regenerate routes/roads/frames/wheels
 data if it's newer than the version last extracted.
 
 Compares the client's ``sversion`` (see ``extract_zwift_bikes.read_zwift_version``)
@@ -6,14 +6,16 @@ against the ``zwift_version`` stamped in ``zwiftdata/game_frames.json``. If they
 differ (or ``--force`` is passed), reruns the full pipeline in order:
 
     1. extract_zwift_routes.py   (zwift_routes/)
-    2. extract_zwift_bikes.py    (game_frames.json / game_wheels.json, pass 1)
-    3. zi_stage_solve.py         (frame_upgrade_measurements.json)
-    4. extract_zwift_bikes.py    (pass 2, bakes in the fresh measurements)
+    2. extract_zwift_surfaces.py (zwift_surfaces/ road-network geometry)
+    3. extract_zwift_bikes.py    (game_frames.json / game_wheels.json, pass 1)
+    4. zi_stage_solve.py         (frame_upgrade_measurements.json)
+    5. extract_zwift_bikes.py    (pass 2, bakes in the fresh measurements)
 
 Usage:
     python tools/regenerate_zwift_data.py \
         [--zwift-dir "C:\\Program Files (x86)\\Zwift"] \
-        [--out-routes zwift_routes] [--out-data zwiftdata] [--force]
+        [--out-routes zwift_routes] [--out-surfaces zwift_surfaces] \
+        [--out-data zwiftdata] [--force]
 """
 from __future__ import annotations
 
@@ -52,6 +54,8 @@ def main() -> int:
                     help="Zwift install directory (contains assets/).")
     ap.add_argument("--out-routes", default="zwift_routes",
                     help="Output directory for route profiles.")
+    ap.add_argument("--out-surfaces", default="zwift_surfaces",
+                    help="Output directory for road-network geometry.")
     ap.add_argument("--out-data", default="zwiftdata",
                     help="Output directory for frame/wheel datasets.")
     ap.add_argument("--force", action="store_true",
@@ -76,6 +80,8 @@ def main() -> int:
     py = sys.executable
     run([py, os.path.join(tools_dir, "extract_zwift_routes.py"),
          "--zwift-dir", args.zwift_dir, "--out", args.out_routes])
+    run([py, os.path.join(tools_dir, "extract_zwift_surfaces.py"),
+         "--zwift-dir", args.zwift_dir, "--out", args.out_surfaces])
     run([py, os.path.join(tools_dir, "extract_zwift_bikes.py"),
          "--zwift-dir", args.zwift_dir, "--out", args.out_data])
     run([py, os.path.join(tools_dir, "zi_stage_solve.py")])
