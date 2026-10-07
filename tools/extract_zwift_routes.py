@@ -418,7 +418,7 @@ def parse_segment_definitions(data: bytes) -> list[dict]:
         if attributes.get("type") != "ENTITY_TYPE_TIMINGARCH":
             continue
         try:
-            road_id = int(attributes["m_roadId"])
+            road_id = int(attributes.get("m_roadId", "0"))
             finish_time = float(attributes["m_roadTime"])
         except (KeyError, TypeError, ValueError):
             continue

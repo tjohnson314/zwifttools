@@ -92,6 +92,96 @@ class CleanedRaceData:
     route_latlng: Optional[np.ndarray] = None
 
 
+def build_replay_route_segments(race_data, world):
+    """Place known route segment occurrences on the replay distance axis."""
+    from shared.route_lookup import load_route_cache
+    from shared.surface_map import get_route, route_is_loop
+    from shared.world_config import MAP_TO_WORLD_ID, MAPID_TO_CONFIG, WORLD_ID_TO_MAP
+
+    map_id = MAP_TO_WORLD_ID.get(world)
+    if map_id is None:
+        map_id = next((
+            map_id for map_id, config_name in MAPID_TO_CONFIG.items()
+            if config_name == world
+        ), None)
+    if map_id is None or not race_data.route_name:
+        return []
+    route_world = WORLD_ID_TO_MAP.get(map_id)
+    route_id = next((
+        route_id for route_id, info in (load_route_cache() or {}).items()
+        if info['map'] == route_world
+        and info['name'].strip().casefold() == race_data.route_name.strip().casefold()
+    ), None)
+    if route_id is None:
+        return []
+    route = get_route(map_id, int(route_id))
+    if not route or not route['segments'] or not route['route']:
+        return []
+
+    main_distance = route['route']['d']
+    lap_km = (main_distance[-1] - main_distance[0]) / 1000.0
+    leadin_km = (
+        route['leadin']['d'][-1] if route['leadin']
+        else route['leadin_distance_m']
+    ) / 1000.0
+    lap_count = 1
+    if lap_km > 0 and route_is_loop(map_id, int(route_id)):
+        lap_count = max(1, int(np.ceil((race_data.finish_line_km - leadin_km) / lap_km)))
+
+    reference = None
+    for rider in sorted(race_data.riders, key=lambda rider: len(rider.data), reverse=True):
+        if rider.alignment_warning or not {'lat', 'lng', 'distance_km'}.issubset(rider.data.columns):
+            continue
+        samples = rider.data[['distance_km', 'lat', 'lng']].dropna().to_numpy(dtype=float)
+        if len(samples) >= 2:
+            reference = samples
+            break
+
+    def replay_distance(point, nominal_km):
+        if point is None or reference is None:
+            return nominal_km
+        lat_scale = np.cos(np.radians(point[0]))
+        target = np.array([point[0], point[1] * lat_scale])
+        points = reference[:, 1:] * [1.0, lat_scale]
+        vectors = points[1:] - points[:-1]
+        lengths = np.sum(vectors * vectors, axis=1)
+        fractions = np.divide(
+            np.sum((target - points[:-1]) * vectors, axis=1), lengths,
+            out=np.zeros_like(lengths), where=lengths > 0,
+        ).clip(0, 1)
+        nearest = points[:-1] + fractions[:, None] * vectors
+        errors = np.linalg.norm(nearest - target, axis=1) * 111_320
+        distances = reference[:-1, 0] + fractions * np.diff(reference[:, 0])
+        errors[np.abs(distances - nominal_km) > 1.0] = np.inf
+        index = int(np.argmin(errors))
+        return float(distances[index]) if errors[index] <= 100 else nominal_km
+
+    result = []
+    for lap in range(lap_count):
+        for segment in route['segments']:
+            if segment['start_distance_m'] is None or segment['end_distance_m'] is None:
+                continue
+            nominal_start = segment['start_distance_m'] / 1000.0
+            nominal_end = segment['end_distance_m'] / 1000.0
+            if lap and nominal_start < leadin_km:
+                continue
+            path = segment.get('latlng')
+            start = replay_distance(path[0] if path else None, nominal_start + lap * lap_km)
+            end = replay_distance(path[-1] if path else None, nominal_end + lap * lap_km)
+            if end <= start or end < 0 or start > race_data.finish_line_km:
+                continue
+            result.append({
+                'name': segment['name'],
+                'type': segment['type'],
+                'pass': segment['pass'],
+                'lap': lap + 1,
+                'start_distance_km': start,
+                'end_distance_km': end,
+                'latlng': path,
+            })
+    return sorted(result, key=lambda segment: segment['start_distance_km'])
+
+
 def haversine(lat1, lng1, lat2, lng2):
     """Calculate distance in meters between two lat/lng points (scalar or array)."""
     R = 6371000  # Earth radius in meters

@@ -4212,6 +4212,13 @@ def _build_race_data_response(race_id):
     from shared.route_lookup import MAP_TO_WORLD_ID
     course_id = MAP_TO_WORLD_ID.get(world) if world else None
 
+    route_segments = []
+    try:
+        from race_replay.data_cleaner import build_replay_route_segments
+        route_segments = build_replay_route_segments(race_data, world)
+    except (OSError, ValueError, KeyError, TypeError):
+        logger.warning("Could not load route segments for %s", race_id, exc_info=True)
+
     return jsonify({
         'race_id': race_id,
         'route_name': race_data.route_name,
@@ -4234,6 +4241,7 @@ def _build_race_data_response(race_id):
         'riders': riders,
         'map_config': map_config,
         'route_latlng': route_latlng,
+        'route_segments': route_segments,
         'dev_warnings': dev_warnings,
     })
 

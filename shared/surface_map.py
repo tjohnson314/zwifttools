@@ -293,9 +293,14 @@ def _route_segment_markers(map_id: int, route: dict, leadin: dict | None, main: 
             "hash": segment_hash,
             "pass": pass_numbers[segment_hash],
             "name": name,
-            "type": "kom" if "KOM" in name else "sprint" if "Sprint" in name else "segment",
+            "type": "kom" if "kom" in name.casefold() else "sprint" if "sprint" in name.casefold() else "segment",
             "start_distance_m": segment.get("start_distance_m"),
             "end_distance_m": segment.get("end_distance_m"),
+            "latlng": local_to_latlng(
+                map_id,
+                [point[0] for point in local_path],
+                [point[1] for point in local_path],
+            ),
             "path": [
                 {"x": round(float(px), 1), "y": round(float(py), 1)}
                 for px, py in zip(x, y)

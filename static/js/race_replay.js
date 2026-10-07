@@ -43,6 +43,16 @@ let viewWidth = 25;           // Current zoom level in km
 let followRider = true;       // Auto-follow selected rider
 let showWkg = localStorage.getItem('powerUnit') === 'wkg';  // Toggle: false=watts, true=W/kg
 let chartMode = 'riders';  // 'riders' or 'peloton'
+let showRouteSegments = false;
+let routeSegmentTraces = [];
+
+const SEGMENT_COLORS = { sprint: '#4dd0e1', kom: '#ffb74d', segment: '#aed581' };
+
+function routeSegmentLabel(segment) {
+    const pass = segment.pass > 1 ? ` (pass ${segment.pass})` : '';
+    const lap = raceData.route_segments.some(item => item.lap > 1) ? ` - lap ${segment.lap}` : '';
+    return segment.name + pass + lap;
+}
 
 // Guards against overlapping fetch/load cycles (double-click or URL auto-load
 // racing with a manual click), which would otherwise load the race twice.
@@ -162,6 +172,13 @@ function bindEvents() {
             updateViewRange();
         }
         updateFrame();
+    });
+    document.getElementById('show-route-segments').addEventListener('change', e => {
+        showRouteSegments = e.target.checked;
+        updateFrame();
+    });
+    window.addEventListener('resize', () => {
+        if (raceData) requestAnimationFrame(updateFrame);
     });
 
     // Sortable table headers
@@ -453,6 +470,12 @@ async function loadRaceById(raceId, internal = false) {
 // ---------------------------------------------------------------------------
 function initRaceData(data) {
     raceData = data;
+    data.route_segments = data.route_segments || [];
+    const segmentsCheckbox = document.getElementById('show-route-segments');
+    segmentsCheckbox.disabled = data.route_segments.length === 0;
+    segmentsCheckbox.checked = showRouteSegments && !segmentsCheckbox.disabled;
+    document.getElementById('route-segments-label').textContent = segmentsCheckbox.disabled
+        ? 'Route segments unavailable' : 'Show route segments';
     currentTime = data.min_time;
     isPlaying = false;
     selectedRank = null;
@@ -680,6 +703,7 @@ function initRaceData(data) {
         hoverlabel: { bgcolor: '#1e2a3a', bordercolor: '#444', font: { color: '#fff', size: 12 } },
         name: 'Elevation',
     };
+    routeSegmentTraces = buildRouteSegmentTraces();
 
     // Update URL with activity ID so the link is shareable
     if (data.source_activity_id) {
@@ -1133,6 +1157,67 @@ function updateRiderTable(positions) {
 // ---------------------------------------------------------------------------
 // Charts — Elevation Profile
 // ---------------------------------------------------------------------------
+function buildRouteSegmentTraces() {
+    const profile = raceData.elevation_profile;
+    return raceData.route_segments.map(segment => {
+        const start = Math.max(segment.start_distance_km, profile.distance_km[0]);
+        const end = Math.min(segment.end_distance_km, raceData.finish_line_km,
+            profile.distance_km[profile.distance_km.length - 1]);
+        if (end <= start) return null;
+        const distances = [start, ...profile.distance_km.filter(distance => distance > start && distance < end), end];
+        const color = SEGMENT_COLORS[segment.type] || SEGMENT_COLORS.segment;
+        const label = routeSegmentLabel(segment).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return {
+            x: distances,
+            y: distances.map(distance => interpElevation(profile, distance)),
+            type: 'scatter',
+            mode: 'lines',
+            line: { color, width: 4 },
+            name: label,
+            hovertemplate: `${label}<br>${segment.start_distance_km.toFixed(3)} - ${segment.end_distance_km.toFixed(3)} km<extra></extra>`,
+            hoverlabel: { bgcolor: '#1e2a3a', bordercolor: color, font: { color: '#fff', size: 12 } },
+            showlegend: false,
+        };
+    }).filter(Boolean);
+}
+
+function routeSegmentLayout() {
+    const shapes = [];
+    const annotations = [];
+    if (showRouteSegments) {
+        const plotWidth = Math.max(1, document.getElementById('elevation-chart').clientWidth - 70);
+        const laneEnds = [-Infinity, -Infinity];
+        for (const segment of raceData.route_segments) {
+            if (segment.end_distance_km < viewXMin || segment.start_distance_km > viewXMax) continue;
+            const color = SEGMENT_COLORS[segment.type] || SEGMENT_COLORS.segment;
+            shapes.push({
+                type: 'rect', xref: 'x', yref: 'paper',
+                x0: segment.start_distance_km, x1: segment.end_distance_km,
+                y0: 0, y1: 1, fillcolor: color, opacity: 0.08,
+                line: { width: 0 }, layer: 'below',
+            });
+            const label = routeSegmentLabel(segment);
+            const width = Math.min(plotWidth, label.length * 6);
+            const center = ((segment.start_distance_km + segment.end_distance_km) / 2 - viewXMin)
+                / (viewXMax - viewXMin) * plotWidth;
+            const left = Math.max(0, Math.min(plotWidth - width, center - width / 2));
+            const lane = laneEnds.findIndex(end => left >= end + 12);
+            if (lane < 0) continue;
+            laneEnds[lane] = left + width;
+            annotations.push({
+                xref: 'paper', yref: 'paper', x: (left + width / 2) / plotWidth,
+                y: 1.04 + lane * 0.09, xanchor: 'center', yanchor: 'bottom',
+                text: label.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
+                showarrow: false, font: { color, size: 10 },
+            });
+        }
+    }
+    return {
+        shapes, annotations,
+        margin: { ...PLOTLY_LAYOUT_BASE.margin, t: annotations.length ? 55 : 10 },
+    };
+}
+
 function initCharts() {
     Plotly.newPlot('elevation-chart', [elevationTrace], {
         ...PLOTLY_LAYOUT_BASE,
@@ -1192,8 +1277,9 @@ function updateElevationChart(positions) {
         });
     }
 
-    Plotly.react('elevation-chart', [elevationTrace, ...riderTraces], {
+    Plotly.react('elevation-chart', [elevationTrace, ...(showRouteSegments ? routeSegmentTraces : []), ...riderTraces], {
         ...PLOTLY_LAYOUT_BASE,
+        ...routeSegmentLayout(),
         hovermode: 'closest',
         xaxis: { ...PLOTLY_LAYOUT_BASE.xaxis, title: 'Distance (km)', range: [viewXMin, viewXMax] },
         yaxis: { ...PLOTLY_LAYOUT_BASE.yaxis, title: 'Altitude (m)' },
@@ -1259,8 +1345,9 @@ function updatePelotonChart(positions, pelotons) {
         }
     }
 
-    Plotly.react('elevation-chart', [elevationTrace, ...pelotonTraces], {
+    Plotly.react('elevation-chart', [elevationTrace, ...(showRouteSegments ? routeSegmentTraces : []), ...pelotonTraces], {
         ...PLOTLY_LAYOUT_BASE,
+        ...routeSegmentLayout(),
         hovermode: 'closest',
         xaxis: { ...PLOTLY_LAYOUT_BASE.xaxis, title: 'Distance (km)', range: [viewXMin, viewXMax] },
         yaxis: { ...PLOTLY_LAYOUT_BASE.yaxis, title: 'Altitude (m)' },
@@ -1858,6 +1945,48 @@ function drawMap(positions) {
             }
         }
         ctx.stroke();
+    }
+
+    if (showRouteSegments && raceData) {
+        const drawn = new Set();
+        const labels = [];
+        for (const segment of raceData.route_segments) {
+            const path = segment.latlng;
+            if (!path || path.length < 2) continue;
+            const key = `${segment.name}:${path[0]}:${path[path.length - 1]}`;
+            if (drawn.has(key)) continue;
+            drawn.add(key);
+            const color = SEGMENT_COLORS[segment.type] || SEGMENT_COLORS.segment;
+            const points = path.map(point => gpsToCanvas(point[0], point[1]));
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 4 * dpr;
+            ctx.moveTo(points[0].x, points[0].y);
+            for (const point of points.slice(1)) ctx.lineTo(point.x, point.y);
+            ctx.stroke();
+            for (const point of [points[0], points[points.length - 1]]) {
+                ctx.beginPath();
+                ctx.arc(point.x, point.y, 3 * dpr, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.fill();
+            }
+            const end = points[points.length - 1];
+            ctx.font = `${11 * dpr}px sans-serif`;
+            const width = ctx.measureText(segment.name).width + 8 * dpr;
+            const height = 18 * dpr;
+            if (width > canvas.width - 8 * dpr || end.x < 0 || end.x > canvas.width || end.y < 0 || end.y > canvas.height) continue;
+            const left = Math.max(4 * dpr, Math.min(canvas.width - width - 4 * dpr, end.x - width / 2));
+            const top = Math.max(4 * dpr, Math.min(canvas.height - height - 4 * dpr, end.y - 24 * dpr));
+            if (labels.some(label => left < label.left + label.width && left + width > label.left
+                && top < label.top + height && top + height > label.top)) continue;
+            labels.push({ left, top, width });
+            ctx.fillStyle = 'rgba(0,0,0,0.8)';
+            ctx.fillRect(left, top, width, height);
+            ctx.fillStyle = color;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(segment.name, left + 4 * dpr, top + height / 2);
+        }
     }
 
     // Draw rider dots

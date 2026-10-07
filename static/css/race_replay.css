@@ -599,6 +599,7 @@ h1 .header-icon {
 /* Zoom controls */
 .zoom-bar {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 20px;
     padding: 8px 16px;
@@ -609,6 +610,8 @@ h1 .header-icon {
 }
 .zoom-item {
     display: flex;
+    min-width: 0;
+    max-width: 100%;
     align-items: center;
     gap: 8px;
     color: #aaa;
@@ -616,7 +619,11 @@ h1 .header-icon {
 }
 .zoom-slider {
     width: 200px;
+    min-width: 40px;
     accent-color: #29b6f6;
+}
+#zoom-label {
+    white-space: nowrap;
 }
 #follow-rider-select {
     background: #1a1a2e;
@@ -625,6 +632,7 @@ h1 .header-icon {
     padding: 4px 8px;
     color: #fff;
     font-size: 0.85rem;
+    min-width: 0;
     max-width: 200px;
 }
 #follow-rider-select option {
