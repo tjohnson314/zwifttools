@@ -56,6 +56,7 @@ from bike_comparison.physics import (
     DRIVETRAIN_LOSS,
 )
 from shared import surface_map
+from shared.surface_lookup import surface_types_to_crr
 from shared.world_config import MAP_TO_NAME, MAP_TO_WORLD_ID
 from shared.route_lookup import load_route_cache
 from race_replay.data_cleaner import fetch_route_from_zwiftmap, ROUTE_STRAVA_SEGMENTS
@@ -599,6 +600,8 @@ class PacingPlanResult:
     # Bucketing: the largest useful bucket count and the chosen divider distances.
     max_buckets: int = 0
     dividers_km: list = field(default_factory=list)
+    surface_type: list = field(default_factory=list)
+    crr: list = field(default_factory=list)
 
     @property
     def total_time_formatted(self) -> str:
@@ -758,6 +761,7 @@ def plan_tt_pacing(
     bisection_iterations: int = 50,
     bucket_edges_m: list | None = None,
     num_buckets: int | None = None,
+    bike_type: str = "road_bike",
 ) -> PacingPlanResult:
     """Compute the optimal pacing plan for a route.
 
@@ -770,7 +774,8 @@ def plan_tt_pacing(
         cda: Absolute CdA (m²) for this rider + bike.
         power_target_w: Target *normalized* power (NP, W) — the effort budget the
             plan is optimised against (30 s rolling, 4th-power weighted).
-        crr: Rolling-resistance coefficient.
+        crr: Fallback rolling-resistance coefficient when surfaces are unavailable.
+        bike_type: Surface rolling-resistance category for the selected bike.
         max_chunk_m: Maximum chunk length (m).
         max_power_mult: Cap on each chunk's power as a multiple of the target,
             so the rider pushes hard on climbs but not beyond a realistic
@@ -792,12 +797,20 @@ def plan_tt_pacing(
     if n < 2:
         raise ValueError("Route is too short to plan.")
 
+    if route.surfaces is not None:
+        surface_idx = np.searchsorted(route.distance_m, mid_dist, side="right") - 1
+        surfaces = np.asarray(route.surfaces, dtype=object)[surface_idx]
+        chunk_crr = surface_types_to_crr(surfaces, bike_type)
+    else:
+        surfaces = np.full(n, "Unknown", dtype=object)
+        chunk_crr = np.full(n, crr)
+
     total_mass = rider_weight_kg + bike_weight_kg
     inv_mass = 1.0 / total_mass
     aero_k = 0.5 * AIR_DENSITY * cda
     cos_slope = np.cos(np.arctan(grad))
     f_grav = total_mass * GRAVITY * grad
-    f_roll = crr * total_mass * GRAVITY * cos_slope
+    f_roll = chunk_crr * total_mass * GRAVITY * cos_slope
 
     one_minus_eta = 1.0 - DRIVETRAIN_LOSS
     p_max = max_power_mult * power_target_w
@@ -851,7 +864,7 @@ def plan_tt_pacing(
     def forward_sim(pw):
         """Momentum forward pass for power profile ``pw``; fills v_enter/time_arr."""
         v = max(speed_from_power(float(pw[0]), float(grad[0]),
-                                 rider_weight_kg, bike_weight_kg, cda, crr), V_FLOOR)
+                                 rider_weight_kg, bike_weight_kg, cda, float(chunk_crr[0])), V_FLOOR)
         for c in range(n):
             v_enter[c] = v
             v, dt = step(c, v, float(pw[c]))
@@ -1003,6 +1016,8 @@ def plan_tt_pacing(
         idx = np.unique(np.round(np.linspace(0, n - 1, downsample_points)).astype(int))
     else:
         idx = np.arange(n)
+    transitions = np.flatnonzero(surfaces[1:] != surfaces[:-1]) + 1
+    idx = np.unique(np.r_[idx, transitions - 1, transitions])
 
     result = PacingPlanResult(
         route_name=route.name,
@@ -1016,6 +1031,8 @@ def plan_tt_pacing(
         min_power_w=round(float(np.min(power)), 1),
         distance_km=[round(float(mid_dist[i]) / 1000.0, 3) for i in idx],
         altitude_m=[round(float(altitude[i]), 1) for i in idx],
+        surface_type=[str(surfaces[i]) for i in idx],
+        crr=[float(chunk_crr[i]) for i in idx],
         power_w=[round(float(power[i])) for i in idx],
         speed_kph=[round(float(speed_mps[i]) * 3.6, 1) for i in idx],
         gradient_pct=[round(float(grad[i]) * 100.0, 1) for i in idx],

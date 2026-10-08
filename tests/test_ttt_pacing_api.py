@@ -75,6 +75,27 @@ def test_rider_lookup_rejects_non_numeric_ids(monkeypatch):
     assert response.status_code == 400
 
 
+@pytest.mark.parametrize("ftp, expected", [("290.0", 290), ("unavailable", None)])
+def test_rider_lookup_keeps_measurements_with_missing_name_or_invalid_ftp(monkeypatch, ftp, expected):
+    monkeypatch.setattr(app_module, "get_headers", lambda: {"Authorization": "Bearer x"})
+    monkeypatch.setattr(app_module.requests, "get", lambda *args, **kwargs:
+                        FakeResponse(200, {"heightInCentimeters": "175", "weightInGrams": "68000",
+                                           "ftp": ftp}))
+
+    response = app_module.app.test_client().post(
+        "/api/ttt_pacing/riders", json={"zwift_ids": ["111"]})
+
+    row = response.get_json()["riders"][0]
+    assert row["height_cm"] == 175.0
+    assert row["weight_kg"] == 68.0
+    assert row["ftp_w"] == expected
+    assert row["name"] == "Rider 111"
+    assert "error" not in row
+    assert "Name unavailable" in row["warning"]
+    if expected is None:
+        assert "CP / FTP unavailable" in row["warning"]
+
+
 @pytest.mark.parametrize("max_power_pct", [None, 125.0])
 def test_plan_endpoint_returns_team_plan(monkeypatch, max_power_pct):
     route = RouteProfile(name="Flat", distance_m=np.array([0.0, 4000.0]),
@@ -154,6 +175,8 @@ def test_plan_returns_pull_schedule_in_json_and_stream(monkeypatch, stream):
     payload = stream_request(monkeypatch)
     payload["stream"] = stream
     result = stream_plan()
+    result.surface_type = ["Tarmac", "Dirt"]
+    result.crr = [0.004, 0.016]
     monkeypatch.setattr(app_module, "plan_ttt_pacing", lambda *args, **kwargs: result)
 
     response = app_module.app.test_client().post(
@@ -167,6 +190,8 @@ def test_plan_returns_pull_schedule_in_json_and_stream(monkeypatch, stream):
     else:
         data = response.get_json()
     assert data["pulls"] == result.pulls
+    assert data["profile"]["surface_type"] == result.surface_type
+    assert data["profile"]["crr"] == result.crr
 
 
 def test_plan_stream_outputs_progress_before_completion(monkeypatch):

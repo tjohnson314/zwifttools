@@ -119,6 +119,31 @@
     font-size: 0.75rem;
 }
 
+.lookup-warning {
+    color: #ffb74d;
+    font-size: 0.75rem;
+}
+
+.surface-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    color: #ccc;
+    font-size: 0.8rem;
+    margin-bottom: 10px;
+}
+
+.surface-legend > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.surface-swatch {
+    width: 14px;
+    height: 3px;
+}
+
 .outcome-finish { color: #81c784; font-weight: 600; }
 .outcome-drop { color: #ffb74d; font-weight: 600; }
 

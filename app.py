@@ -2794,6 +2794,7 @@ def api_tt_pacing_plan():
         )
         if custom_distance_km is not None:
             route = truncate_route_profile(route, custom_distance_km * 1000.0)
+        from shared.surface_lookup import get_bike_type_for_frame
         result = plan_tt_pacing(
             route=route,
             rider_weight_kg=weight_kg,
@@ -2803,6 +2804,7 @@ def api_tt_pacing_plan():
             power_target_w=avg_power_w,
             bucket_edges_m=bucket_edges_m,
             num_buckets=num_buckets,
+            bike_type=get_bike_type_for_frame(bike_setup.frame_type),
         )
     except ValueError as exc:
         return jsonify({'error': str(exc)}), 400
@@ -2828,7 +2830,9 @@ def api_tt_pacing_plan():
         'profile': {
             'distance_km': result.distance_km,
             'altitude_m': result.altitude_m,
+            'surface_type': result.surface_type,
             'power_w': result.power_w,
+            'crr': result.crr,
             'speed_kph': result.speed_kph,
             'gradient_pct': result.gradient_pct,
         },
@@ -2885,14 +2889,29 @@ def api_ttt_pacing_riders():
                                 headers=headers, timeout=10)
             if resp.status_code == 200 and resp.text.strip():
                 p = resp.json()
-                name = f"{p.get('firstName', '')} {p.get('lastName', '')}".strip()
+                if not isinstance(p, dict):
+                    raise ValueError('Invalid profile payload')
+                name = f"{p.get('firstName') or ''} {p.get('lastName') or ''}".strip()
+                name = name or str(p.get('displayName') or '').strip()
                 rider['name'] = name or rider['name']
-                if p.get('height'):
-                    rider['height_cm'] = round(p['height'] / 10, 1)
-                if p.get('weight'):
-                    rider['weight_kg'] = round(p['weight'] / 1000, 1)
-                if p.get('ftp'):
-                    rider['ftp_w'] = int(p['ftp'])
+                weight_kg, height_cm = _ttt_profile_measurements(p)
+                rider['height_cm'] = round(height_cm, 1) if height_cm is not None else None
+                rider['weight_kg'] = round(weight_kg, 1) if weight_kg is not None else None
+                try:
+                    ftp = float(p.get('ftp'))
+                    if np.isfinite(ftp) and ftp > 0:
+                        rider['ftp_w'] = int(ftp)
+                except (TypeError, ValueError):
+                    pass
+                missing = []
+                if not name:
+                    missing.append('Name unavailable from Zwift')
+                for key, label in (('height_cm', 'Height'), ('weight_kg', 'Weight'),
+                                   ('ftp_w', 'CP / FTP')):
+                    if rider[key] is None:
+                        missing.append(f'{label} unavailable from Zwift')
+                if missing:
+                    rider['warning'] = '; '.join(missing)
             else:
                 rider['error'] = f'Profile lookup failed ({resp.status_code})'
         except (requests.RequestException, ValueError):
@@ -2987,7 +3006,9 @@ def api_ttt_pacing_plan():
         )
         if custom_distance_km is not None:
             route = truncate_route_profile(route, custom_distance_km * 1000.0)
+        from shared.surface_lookup import get_bike_type_for_frame
         options = {
+            'bike_type': get_bike_type_for_frame(bike_setup.frame_type),
             'reserve_fraction': reserve_pct / 100.0,
             'max_power_cp_mult': max_power_pct / 100.0,
             'draft_second_pct': draft_second_pct,
@@ -3024,6 +3045,8 @@ def _ttt_plan_payload(result):
         'profile': {
             'distance_km': result.distance_km,
             'altitude_m': result.altitude_m,
+            'surface_type': result.surface_type,
+            'crr': result.crr,
             'gradient_pct': result.gradient_pct,
             'speed_kph': result.speed_kph,
             'leader': result.leader,

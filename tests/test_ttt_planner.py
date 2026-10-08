@@ -29,6 +29,47 @@ def rider(name, cp, w_prime=20000.0, weight=75.0, height=1.80):
     return TTTRider(name=name, weight_kg=weight, height_m=height, cp_w=cp, w_prime_j=w_prime)
 
 
+def test_surface_resistance_affects_group_speed_and_survives_downsampling():
+    route = RouteProfile(
+        name="Mixed", distance_m=np.array([0.0, 100.0, 200.0, 300.0]),
+        altitude_m=np.zeros(4), surfaces=np.array(["Tarmac", "Dirt", "Tarmac", "Tarmac"]))
+    team = _Team([rider(name, 300) for name in ("A", "B", "C", "D")], 0.004)
+    planner = _CoursePlanner(
+        route, team, crr=0.004, max_chunk_m=50.0, reserve_fraction=0.0,
+        reserve_release_m=2000.0, max_power_cp_mult=1.5,
+        min_pull_s=20.0, max_pull_s=20.0, pull_step_s=10.0, speed_step_mps=0.1)
+    assert planner.surfaces.tolist() == ["Tarmac", "Tarmac", "Dirt", "Dirt", "Tarmac", "Tarmac"]
+    assert planner.crr.tolist() == pytest.approx([0.004, 0.004, 0.016, 0.016, 0.004, 0.004])
+    factors = np.array([1.0, 0.75, 0.6, 0.6])
+    mask = np.ones(4, dtype=bool)
+    tarmac_speed = planner.advance(0, 10.0, 1.0, 0, factors, mask, 50.0)[0]
+    dirt_speed = planner.advance(2, 10.0, 1.0, 0, factors, mask, 50.0)[0]
+    assert dirt_speed < tarmac_speed
+    drop = tuple([planner.C] * 4)
+    sim = planner.simulate(np.ones(planner.C), drop, 1.0)
+    plan = _Plan(np.ones(planner.C), sim, True, 0.0, planner.lam)
+    result = _build_result(route, planner, plan, drop, 1.0, 3, downsample_points=2)
+    assert result.surface_type == planner.surfaces.tolist()
+    assert result.crr == planner.crr.tolist()
+    assert len(result.altitude_m) == len(result.surface_type) == len(result.speed_kph)
+
+
+@pytest.mark.parametrize("bike_type", ["road_bike", "gravel_bike", "mtb"])
+def test_surface_resistance_uses_the_selected_bike_category(bike_type):
+    from shared.surface_lookup import surface_types_to_crr
+
+    route = flat_route(200.0)
+    route.surfaces = np.array(["Dirt", "Dirt"])
+    team = _Team([rider(name, 300) for name in ("A", "B", "C", "D")], 0.004)
+    planner = _CoursePlanner(
+        route, team, crr=0.004, max_chunk_m=100.0, reserve_fraction=0.0,
+        reserve_release_m=2000.0, max_power_cp_mult=1.5,
+        min_pull_s=20.0, max_pull_s=20.0, pull_step_s=10.0, speed_step_mps=0.1,
+        bike_type=bike_type)
+
+    assert planner.crr.tolist() == surface_types_to_crr(np.array(["Dirt", "Dirt"]), bike_type).tolist()
+
+
 def test_power_driven_traversal_preserves_coasting_momentum():
     riders = [TTTRider(name, 75.0, 1.8, 300.0, 20000.0, cda=0.3)
               for name in ("A", "B", "C", "D")]
@@ -300,6 +341,89 @@ def test_team_plan_is_feasible_and_faster_than_strongest_solo_rider():
     assert result.avg_speed_kph > solo
     assert sum(row["time_on_front_s"] for row in result.riders) == pytest.approx(
         result.total_time_seconds, abs=0.5)
+
+
+def test_scheduled_drop_keeps_a_rider_drafting_while_they_can_hold_the_group(monkeypatch):
+    route = flat_route(1000.0)
+    team = _Team([rider(name, 300) for name in ("A", "B", "C", "D")], 0.004)
+    planner = _CoursePlanner(
+        route, team, crr=0.004, max_chunk_m=100.0,
+        reserve_fraction=0.1, reserve_release_m=2000.0, max_power_cp_mult=1.5,
+        min_pull_s=20.0, max_pull_s=20.0, pull_step_s=10.0, speed_step_mps=0.1)
+    monkeypatch.setattr(planner, "cp_eff", lambda *args: tuple(team.cp))
+    monkeypatch.setattr(planner, "pulls_for", lambda active, *args:
+                        np.array([20.0 if member else 0.0 for member in active]))
+    drops = np.array([planner.C, planner.C, planner.C, 2])
+    efforts = np.ones(planner.C)
+
+    sim, slack, feasible = planner._check(efforts, drops, np.ones(4))
+    result = _build_result(route, planner, _Plan(efforts, sim, feasible, float(np.min(slack)),
+                                               planner.lam), drops, np.ones(4), 3, 400)
+
+    assert feasible
+    assert not np.any(sim.front[2:, 3])
+    assert result.riders[3]["finishes"]
+    assert result.riders[3]["drop_km"] is None
+    assert all(value is not None for value in result.wbal_j["D"])
+    assert all(value is not None and value > 0.0 for value in result.power_w["D"])
+    assert result.phases[-1]["riders"] == ["A", "B", "C", "D"]
+    assert result.phases[-1]["pulls_s"]["D"] == 0.0
+
+
+@pytest.mark.parametrize("mode", ["exhaustion", "recovery", "power_cap", "finish"])
+def test_hanging_rider_exit_follows_simulated_power_and_wbal(monkeypatch, mode):
+    route = flat_route(1000.0)
+    team = _Team([rider(name, 300) for name in ("A", "B", "C")] +
+                 [rider("D", 200, w_prime=1000.0)], 0.004)
+    planner = _CoursePlanner(
+        route, team, crr=0.004, max_chunk_m=100.0,
+        reserve_fraction=0.1, reserve_release_m=2000.0, max_power_cp_mult=1.5,
+        min_pull_s=20.0, max_pull_s=20.0, pull_step_s=10.0, speed_step_mps=0.1)
+    monkeypatch.setattr(planner, "cp_eff", lambda *args: tuple(team.cp))
+    monkeypatch.setattr(planner, "pulls_for", lambda active, *args:
+                        np.array([20.0 if active[index] and index < 3 else 0.0
+                                  for index in range(4)]))
+
+    def advance(chunk, speed, effort, leader, factors, mask, distance, **kwargs):
+        trailing_power = 100.0 if chunk < 2 or mode == "finish" else 250.0
+        if chunk >= 2 and mode == "power_cap":
+            trailing_power = 350.0
+        if chunk == 3 and mode == "recovery":
+            trailing_power = 100.0
+        power = np.where(mask, [300.0, 300.0, 300.0, trailing_power], 0.0)
+        return 10.0, distance / 10.0, power, np.zeros(4), power
+
+    monkeypatch.setattr(planner, "advance", advance)
+    drops = np.array([planner.C, planner.C, planner.C, 2])
+    efforts = np.ones(planner.C)
+    sim = planner.simulate(efforts, drops, np.ones(4), initial_speed_mps=10.0)
+    result = _build_result(route, planner, _Plan(efforts, sim, True, 0.1, planner.lam),
+                           drops, np.ones(4), 3, 400)
+    trailing = result.riders[3]
+
+    assert sim.total_time == pytest.approx(100.0)
+    assert not np.any(sim.front[:, 3])
+    assert np.all(sim.peak_power <= 1.5 * team.cp[None, :] + 1e-6)
+    if mode == "finish":
+        assert trailing["finishes"]
+        assert np.sum(sim.rider_time[:, 3]) == pytest.approx(100.0)
+        assert sim.wbal[-1, 3] == pytest.approx(1000.0)
+    else:
+        expected_time = 20.0 if mode == "power_cap" else 40.0
+        if mode == "recovery":
+            recovered_balance = 1000.0 - 500.0 * np.exp(-1.0)
+            expected_time = 40.0 + recovered_balance / 50.0
+        assert not trailing["finishes"]
+        assert sim.drop_time[3] == pytest.approx(expected_time)
+        assert sim.drop_distance[3] == pytest.approx(expected_time * 10.0)
+        assert np.sum(sim.rider_time[:, 3]) == pytest.approx(expected_time)
+        assert trailing["drop_time_s"] == round(expected_time, 1)
+        assert trailing["drop_km"] == round(expected_time / 100.0, 2)
+        last = np.flatnonzero(np.isfinite(sim.wbal[:, 3]))[-1]
+        assert np.all(np.isnan(sim.wbal[last + 1:, 3]))
+        assert sim.wbal[last, 3] == pytest.approx(1000.0 if mode == "power_cap" else 0.0)
+        energy = np.sum(sim.power[:, 3] * sim.rider_time[:, 3])
+        assert trailing["avg_power_w"] == round(energy / expected_time, 1)
 
 
 def test_dropping_a_weak_rider_never_slows_the_scoring_group():

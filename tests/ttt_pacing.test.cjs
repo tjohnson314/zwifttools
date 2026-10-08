@@ -130,6 +130,75 @@ test('TTT unit toggle updates the existing chart, uses plan weights, and saves t
     assert.deepEqual(updates, ['none', 'none']);
 });
 
+test('TTT charts share surface-colored elevation and identical plot margins', () => {
+    const { context } = plannerContext();
+    context.document.getElementById = () => null;
+    const configs = {};
+    context.drawChart = (id, config) => { configs[id] = config; };
+    const raw = { ...profile(), altitude_m: [5, 10, -5, 30, 20],
+        surface_type: ['Tarmac', 'Dirt', 'Cobbles', 'Unknown', 'Grass'],
+        crr: [0.004, 0.016, 0.0065, 0.004, 0.025],
+        wbal_j: { A: [20000, 18000, 15000, -30, 17000] },
+        speed_kph: [35, 33, 31, 40, 35], leader: ['A', 'A', 'A', 'A', 'A'],
+        gradient_pct: [0, 1, -1, 2, -1] };
+    const before = JSON.stringify(raw);
+    context.renderCharts(raw, { A: 50, B: 100 });
+    for (const config of Object.values(configs)) {
+        const elevation = config.data.datasets.find(dataset => dataset.yAxisID === 'yElev');
+        assert.deepEqual(Array.from(elevation.data), raw.altitude_m);
+        assert.equal(elevation.segment.borderColor({ p0DataIndex: 1 }), '#b79562');
+        assert.equal(elevation.segment.borderColor({ p0DataIndex: 2 }), '#d4a373');
+        assert.equal(elevation.segment.borderColor({ p0DataIndex: 3 }), '#9e9e9e');
+        const left = { width: 10 };
+        const right = { width: 20 };
+        config.options.scales.y.afterFit(left);
+        config.options.scales.yElev.afterFit(right);
+        assert.equal(left.width, 80);
+        assert.equal(right.width, 80);
+        const tooltip = { dataset: elevation, dataIndex: 1, parsed: { y: 10 } };
+        assert.deepEqual(Array.from(config.options.plugins.tooltip.callbacks.afterLabel(tooltip)),
+            ['Surface: Dirt', 'Crr: 0.016']);
+    }
+    assert.deepEqual(Array.from(configs.wbalChart.data.datasets[0].data), [20, 18, 15, -0.03, 17]);
+    const power = configs.powerChart;
+    const elevation = power.data.datasets.at(-1);
+    assert.equal(power.options.plugins.tooltip.callbacks.label(
+        { dataset: elevation, parsed: { y: -5 } }), 'Elevation: -5 m');
+    vm.runInContext('powerUnit = "W/kg";', context);
+    const perKg = context.buildPowerChartConfig(raw, { A: 50, B: 100 });
+    assert.deepEqual(Array.from(perKg.data.datasets.at(-1).data), raw.altitude_m);
+    assert.equal(JSON.stringify(raw), before);
+});
+
+test('TTT lookup preserves known names and identifies saved stats after a failed fetch', async () => {
+    const { context } = plannerContext();
+    context.document.getElementById = () => ({ value: '111 222' });
+    context.fetch = async () => ({ ok: true, status: 200, json: async () => ({ riders: [
+        { zwift_id: '111', name: 'Rider 111', height_cm: 175, weight_kg: 68, ftp_w: 290,
+            warning: 'Name unavailable from Zwift' },
+        { zwift_id: '222', name: 'Rider 222', error: 'Profile lookup failed (404)' },
+    ] }) });
+    vm.runInContext(`
+        riders = [
+            { zwift_id: '111', name: 'Ann', cp_w: 300, w_prime_kj: 22 },
+            { zwift_id: '222', name: 'Bob', height_cm: 180, weight_kg: 75, cp_w: 280 },
+        ];
+        renderRiderTable = () => {};
+        saveSettings = () => {};
+    `, context);
+    await context.fetchRiders();
+    const rows = vm.runInContext('riders', context);
+    assert.equal(rows[0].name, 'Ann');
+    assert.equal(rows[0].weight_kg, 68);
+    assert.equal(rows[0].cp_w, 300);
+    assert.equal(rows[0].error, undefined);
+    assert.match(rows[0].warning, /Name unavailable/);
+    assert.equal(rows[1].name, 'Bob');
+    assert.equal(rows[1].weight_kg, 75);
+    assert.equal(rows[1].error, undefined);
+    assert.match(rows[1].warning, /saved rider data retained/);
+});
+
 test('TTT pull CSV keeps numeric precision and quotes rider names correctly', () => {
     const { context } = plannerContext();
     const pulls = [{ rider: 'Ann, "A"\nTeam', start_time_s: 0, duration_s: 59.123456,

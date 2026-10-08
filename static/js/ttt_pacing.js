@@ -67,7 +67,7 @@ function saveSettings() {
         frameId: bike.frameId,
         wheelId: bike.wheelId,
         upgradeLevel: bike.level,
-        riders: riders.map(({ error, ...r }) => r),
+        riders: riders.map(({ error, warning, ...r }) => r),
     };
     try { localStorage.setItem(TTT_SETTINGS_KEY, JSON.stringify(data)); } catch (e) { /* ignore */ }
 }
@@ -256,14 +256,17 @@ async function fetchRiders() {
         const previous = new Map(riders.filter(r => r.zwift_id).map(r => [r.zwift_id, r]));
         riders = data.riders.map(r => {
             const old = previous.get(r.zwift_id);
+            const savedStats = ['height_cm', 'weight_kg', 'cp_w'].some(key => old?.[key] != null);
             return {
                 zwift_id: r.zwift_id,
-                name: r.name,
+                name: r.name && r.name !== `Rider ${r.zwift_id}` ? r.name : old?.name || r.name,
                 height_cm: r.height_cm ?? old?.height_cm ?? null,
                 weight_kg: r.weight_kg ?? old?.weight_kg ?? null,
                 cp_w: old?.cp_w ?? r.ftp_w ?? null,
                 w_prime_kj: old?.w_prime_kj ?? r.w_prime_kj ?? DEFAULT_W_PRIME_KJ,
-                error: r.error,
+                error: r.error && !savedStats ? r.error : undefined,
+                warning: r.error && savedStats
+                    ? 'Profile unavailable from Zwift; saved rider data retained.' : r.warning,
             };
         });
         renderRiderTable();
@@ -349,6 +352,12 @@ function renderRiderTable() {
                 err.className = 'lookup-error';
                 err.textContent = r.error;
                 td.appendChild(err);
+            }
+            if (field.key === 'name' && r.warning) {
+                const warning = document.createElement('div');
+                warning.className = 'lookup-warning';
+                warning.textContent = r.warning;
+                td.appendChild(warning);
             }
             tr.appendChild(td);
         });
@@ -654,6 +663,47 @@ function exportPullsCsv() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+const SURFACE_COLORS = {
+    Tarmac: '#78b4ff', Concrete: '#b0bec5', Cobbles: '#d4a373', Cobblestone: '#d4a373',
+    Brick: '#e57373', Dirt: '#b79562', Gravel: '#e6c75a',
+    Grass: '#81c784', Wood: '#c98c62', Snow: '#e4f1ff', Ice: '#80deea', Sand: '#f4df91',
+};
+
+function renderSurfaceLegend(p) {
+    const legend = document.getElementById('surfaceLegend');
+    if (!legend) return;
+    legend.replaceChildren();
+    [...new Set(p.surface_type?.length ? p.surface_type : ['Unknown'])].forEach(surface => {
+        const item = document.createElement('span');
+        const swatch = document.createElement('span');
+        swatch.className = 'surface-swatch';
+        swatch.style.backgroundColor = SURFACE_COLORS[surface] || '#9e9e9e';
+        item.append(swatch, document.createTextNode(surface));
+        legend.appendChild(item);
+    });
+}
+
+function elevationDataset(p) {
+    const color = index => SURFACE_COLORS[p.surface_type?.[index]] || '#9e9e9e';
+    return {
+        label: 'Elevation (m)', data: p.altitude_m || [], yAxisID: 'yElev',
+        borderColor: '#78b4ff', backgroundColor: 'rgba(120,180,255,0.10)',
+        segment: {
+            borderColor: context => color(context.p0DataIndex),
+            backgroundColor: context => color(context.p0DataIndex) + '26',
+        },
+        borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.1,
+    };
+}
+
+function elevationTooltip(context, p) {
+    if (context.dataset.yAxisID !== 'yElev') return [];
+    const i = context.dataIndex;
+    const lines = [`Surface: ${p.surface_type?.[i] || 'Unknown'}`];
+    if (p.crr?.[i] != null) lines.push(`Crr: ${p.crr[i]}`);
+    return lines;
+}
+
 function baseChartOptions(yTitle) {
     return {
         responsive: true,
@@ -670,6 +720,14 @@ function baseChartOptions(yTitle) {
                 title: { display: true, text: yTitle, color: '#ccc' },
                 ticks: { color: '#ccc' },
                 grid: { color: 'rgba(255,255,255,0.05)' },
+                afterFit: scale => { scale.width = 80; },
+            },
+            yElev: {
+                position: 'right',
+                title: { display: true, text: 'Elevation (m)', color: '#78b4ff' },
+                ticks: { color: '#78b4ff' },
+                grid: { drawOnChartArea: false },
+                afterFit: scale => { scale.width = 80; },
             },
         },
     };
@@ -693,15 +751,11 @@ function riderDatasets(series, scale = 1) {
 }
 
 function renderCharts(p, weights) {
+    renderSurfaceLegend(p);
     const speedOpts = baseChartOptions('Speed (km/h)');
-    speedOpts.scales.yElev = {
-        position: 'right',
-        title: { display: true, text: 'Elevation (m)', color: '#78b4ff' },
-        ticks: { color: '#78b4ff' },
-        grid: { drawOnChartArea: false },
-    };
     speedOpts.plugins.tooltip = {
         callbacks: {
+            afterLabel: context => elevationTooltip(context, p),
             afterBody: items => {
                 const i = items[0].dataIndex;
                 const lines = [`Leader: ${p.leader[i]}   Grade: ${p.gradient_pct[i]}%`];
@@ -719,18 +773,20 @@ function renderCharts(p, weights) {
             datasets: [
                 { label: 'Group speed (km/h)', data: p.speed_kph, borderColor: '#f7931e',
                   borderWidth: 2, pointRadius: 0, tension: 0.1 },
-                { label: 'Elevation (m)', data: p.altitude_m, yAxisID: 'yElev',
-                  borderColor: 'rgba(120,180,255,0.9)', backgroundColor: 'rgba(120,180,255,0.10)',
-                  borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.1 },
+                                elevationDataset(p),
             ],
         },
         options: speedOpts,
     });
 
+    const wbalOpts = baseChartOptions('W′ balance (kJ)');
+    wbalOpts.plugins.tooltip = {
+        callbacks: { afterLabel: context => elevationTooltip(context, p) },
+    };
     drawChart('wbalChart', {
         type: 'line',
-        data: { labels: p.distance_km, datasets: riderDatasets(p.wbal_j, 0.001) },
-        options: baseChartOptions('W′ balance (kJ)'),
+        data: { labels: p.distance_km, datasets: [...riderDatasets(p.wbal_j, 0.001), elevationDataset(p)] },
+        options: wbalOpts,
     });
 
     powerChartData = { profile: p, weights };
@@ -751,8 +807,11 @@ function buildPowerChartConfig(p, weights) {
     const powerOpts = baseChartOptions(`Power (${unit})`);
     powerOpts.plugins.tooltip = {
         callbacks: {
-            label: context => `${context.dataset.label}: ${format(context.parsed.y)}`,
+            label: context => context.dataset.yAxisID === 'yElev'
+                ? `Elevation: ${context.parsed.y} m`
+                : `${context.dataset.label}: ${format(context.parsed.y)}`,
             afterLabel: context => {
+                if (context.dataset.yAxisID === 'yElev') return elevationTooltip(context, p);
                 const name = context.dataset.label;
                 const i = context.dataIndex;
                 const lines = [];
@@ -768,7 +827,7 @@ function buildPowerChartConfig(p, weights) {
     };
     return {
         type: 'line',
-        data: { labels: p.distance_km, datasets: riderDatasets(series) },
+        data: { labels: p.distance_km, datasets: [...riderDatasets(series), elevationDataset(p)] },
         options: powerOpts,
     };
 }

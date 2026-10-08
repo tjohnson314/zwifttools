@@ -697,9 +697,30 @@ const dividerPlugin = {
     },
 };
 
+const SURFACE_COLORS = {
+    Tarmac: '#78b4ff', Concrete: '#b0bec5', Cobbles: '#d4a373', Cobblestone: '#d4a373',
+    Brick: '#e57373', Dirt: '#b79562', Gravel: '#e6c75a',
+    Grass: '#81c784', Wood: '#c98c62', Snow: '#e4f1ff', Ice: '#80deea', Sand: '#f4df91',
+};
+
+function renderSurfaceLegend(p) {
+    const legend = document.getElementById('surfaceLegend');
+    if (!legend) return;
+    legend.replaceChildren();
+    [...new Set(p.surface_type?.length ? p.surface_type : ['Unknown'])].forEach(surface => {
+        const item = document.createElement('span');
+        const swatch = document.createElement('span');
+        swatch.className = 'surface-swatch';
+        swatch.style.backgroundColor = SURFACE_COLORS[surface] || '#9e9e9e';
+        item.append(swatch, document.createTextNode(surface));
+        legend.appendChild(item);
+    });
+}
+
 function renderChart(p) {
     const ctx = document.getElementById('planChart').getContext('2d');
     if (planChart) planChart.destroy();
+    renderSurfaceLegend(p);
 
     const imp = isImperial();
     const distUnit = imp ? 'mi' : 'km';
@@ -730,6 +751,10 @@ function renderChart(p) {
                     data: elevData,
                     borderColor: 'rgba(120,180,255,0.9)',
                     backgroundColor: 'rgba(120,180,255,0.10)',
+                    segment: {
+                        borderColor: context => SURFACE_COLORS[p.surface_type?.[context.p0DataIndex]] || '#9e9e9e',
+                        backgroundColor: context => (SURFACE_COLORS[p.surface_type?.[context.p0DataIndex]] || '#9e9e9e') + '26',
+                    },
                     yAxisID: 'yElev',
                     borderWidth: 1.5,
                     pointRadius: 0,
@@ -754,6 +779,8 @@ function renderChart(p) {
                 tooltip: {
                     callbacks: {
                         title: items => `${items[0].label} ${distUnit}`,
+                        afterLabel: context => context.dataset.yAxisID === 'yElev'
+                            ? `Surface: ${p.surface_type?.[context.dataIndex] || 'Unknown'}` : '',
                         afterBody: items => {
                             const i = items[0].dataIndex;
                             const spd = speedData[i];

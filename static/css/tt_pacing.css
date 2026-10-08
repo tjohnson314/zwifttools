@@ -494,6 +494,26 @@ h1 .logo-emoji {
 }
 
 /* Chart */
+.surface-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    color: #ccc;
+    font-size: 0.8rem;
+    margin-bottom: 10px;
+}
+
+.surface-legend > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.surface-swatch {
+    width: 14px;
+    height: 3px;
+}
+
 .chart-container {
     position: relative;
     height: 320px;

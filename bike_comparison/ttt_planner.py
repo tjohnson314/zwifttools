@@ -25,7 +25,9 @@ Optimisation
     W' uses conservative substep peak power so intermediate depletion is not
     hidden by chunk averaging. Recovery is simulated but not rewarded in pricing.
 * WTRL scores the 3rd finisher for teams of 4 and the 4th for teams of 5-8, so
-  the outer search also chooses when the weakest riders are spent and dropped.
+    the outer search also chooses when the weakest riders stop pulling. They
+    continue drafting until W' is exhausted or they cannot match the group within
+    their power cap; staying on the back does not slow the scoring group.
 """
 
 from __future__ import annotations
@@ -38,6 +40,7 @@ import numpy as np
 
 from bike_comparison.pacing_planner import V_FLOOR, _build_chunks, _traverse
 from bike_comparison.physics import AIR_DENSITY, GRAVITY, rider_cda, speed_from_power
+from shared.surface_lookup import surface_types_to_crr
 
 DRAFT_FACTORS = (1.0, 0.75, 0.60)
 MIN_TEAM_SIZE = 4
@@ -126,6 +129,8 @@ class TTTPlanResult:
     peak_power_w: dict = field(default_factory=dict)
     braking_w: dict = field(default_factory=dict)
     pulls: list = field(default_factory=list)
+    surface_type: list = field(default_factory=list)
+    crr: list = field(default_factory=list)
 
     @property
     def total_time_formatted(self) -> str:
@@ -318,6 +323,9 @@ class _Sim:
     efforts: np.ndarray
     motion_feasible: bool = True
     pulls: list = field(default_factory=list)
+    rider_time: Optional[np.ndarray] = None
+    drop_time: Optional[np.ndarray] = None
+    drop_distance: Optional[np.ndarray] = None
 
 
 @dataclass
@@ -337,15 +345,22 @@ class _Plan:
 class _CoursePlanner:
     def __init__(self, route, team: _Team, *, crr, max_chunk_m, reserve_fraction,
                  reserve_release_m, max_power_cp_mult, min_pull_s, max_pull_s,
-                 pull_step_s, speed_step_mps):
+                 pull_step_s, speed_step_mps, bike_type="road_bike"):
         self.team = team
         length, grad, mid, end = _build_chunks(route, max_chunk_m, crr)
         if len(length) < 2:
             raise ValueError("Route is too short to plan.")
         self.length, self.grad, self.mid, self.end = length, grad, mid, end
         self.C = len(length)
+        if route.surfaces is not None:
+            surface_idx = np.searchsorted(route.distance_m, mid, side="right") - 1
+            self.surfaces = np.asarray(route.surfaces, dtype=object)[surface_idx]
+            self.crr = surface_types_to_crr(self.surfaces, bike_type)
+        else:
+            self.surfaces = np.full(self.C, "Unknown", dtype=object)
+            self.crr = np.full(self.C, crr)
         cos = np.cos(np.arctan(grad))
-        self.f_static = GRAVITY * (grad[:, None] + crr * cos[:, None]) * team.mass[None, :]
+        self.f_static = GRAVITY * (grad[:, None] + self.crr[:, None] * cos[:, None]) * team.mass[None, :]
         self.effort_grid = np.unique(np.r_[np.arange(0.0, max_power_cp_mult, 0.025),
                           max_power_cp_mult])
         self.reserve_fraction = reserve_fraction
@@ -461,6 +476,11 @@ class _CoursePlanner:
         exit_speeds = np.empty(C)
         peak_power = np.zeros(shape)
         braking_power = np.zeros(shape)
+        rider_time = np.zeros(shape)
+        drop_time = np.full(n, np.nan)
+        drop_distance = np.full(n, np.nan)
+        attached = np.ones(n, dtype=bool)
+        cap = self.max_power_cp_mult * cp
         cp_eff = self.cp_eff(drop_chunk)
         active = None
         previous_overrides = None
@@ -512,6 +532,7 @@ class _CoursePlanner:
                     })
                 if leader not in factor_cache:
                     factor_cache[leader] = _line_factors(active, pulls, leader, team.draft_factors)
+                    factor_cache[leader][~mask] = team.draft_factors[-1]
                 requested = pull_effort * cp[leader]
                 acceleration = (requested / speed - self.f_static[c, leader] -
                                 team.aero_k[leader] * speed ** 2) / team.mass[leader]
@@ -521,7 +542,7 @@ class _CoursePlanner:
                     distance = min(distance, 0.05 * speed ** 2 / abs(acceleration))
                 for _ in range(8):
                     exit_speed, dt, P, braking, peak = self.advance(
-                        c, speed, pull_effort, leader, factor_cache[leader], mask, distance,
+                        c, speed, pull_effort, leader, factor_cache[leader], mask | attached, distance,
                         enforce_caps=False)
                     if dt <= remaining + 1e-9:
                         break
@@ -530,11 +551,27 @@ class _CoursePlanner:
                         P[leader] < self.f_static[c, leader] * V_FLOOR +
                         team.aero_k[leader] * V_FLOOR ** 3):
                     motion_feasible = False
-                B = _wbal_step(B, peak, dt, cp, wp, rec)
+                durations = np.where(mask | attached, dt, 0.0)
+                hanging = attached & ~mask
+                if np.any(hanging):
+                    spending = np.maximum(peak - cp, 0.0)
+                    until_empty = np.divide(np.maximum(B, 0.0), spending,
+                                            out=np.full(n, np.inf), where=spending > 0.0)
+                    exhausted = hanging & ((until_empty <= dt) | (B <= 0.0))
+                    over_cap = hanging & (peak > cap + 1e-6)
+                    lost = exhausted | over_cap
+                    durations[exhausted] = np.minimum(until_empty[exhausted], dt)
+                    durations[hanging & (B <= 0.0)] = 0.0
+                    durations[over_cap] = 0.0
+                    drop_time[lost] = total_elapsed + durations[lost]
+                    drop_distance[lost] = self.end[c] - distance_left + distance * durations[lost] / dt
+                    attached[lost] = False
+                B = _wbal_step(B, peak, durations, cp, wp, rec)
                 seg_min = np.minimum(seg_min, B)
-                power[c] += P * dt
-                braking_power[c] += braking * dt
-                peak_power[c] = np.maximum(peak_power[c], peak)
+                power[c] += P * durations
+                braking_power[c] += braking * durations
+                rider_time[c] += durations
+                peak_power[c] = np.maximum(peak_power[c], np.where(durations > 0.0, peak, 0.0))
                 front[c, leader] += dt
                 lead_energy[leader] += P[leader] * dt
                 pull_log[-1]["duration_s"] += dt
@@ -551,13 +588,15 @@ class _CoursePlanner:
             chunk_time[c] = elapsed
             actual[c] = length / elapsed
             exit_speeds[c] = speed
-            power[c] /= elapsed
-            braking_power[c] /= elapsed
-            min_b[c, mask] = seg_min[mask]
-            wbal[c, mask] = B[mask]
+            np.divide(power[c], rider_time[c], out=power[c], where=rider_time[c] > 0.0)
+            np.divide(braking_power[c], rider_time[c], out=braking_power[c], where=rider_time[c] > 0.0)
+            present = rider_time[c] > 0.0
+            min_b[c, present] = seg_min[present]
+            wbal[c, present] = B[present]
         return _Sim(float(np.sum(chunk_time)), actual, chunk_time, power, min_b, wbal, front,
                     lead_energy, pulls_start, enter_speeds, exit_speeds, peak_power,
-                    braking_power, np.asarray(efforts).copy(), motion_feasible, pull_log)
+                    braking_power, np.asarray(efforts).copy(), motion_feasible, pull_log,
+                    rider_time, drop_time, drop_distance)
 
     def slack(self, sim: _Sim, drop_chunk) -> np.ndarray:
         active, reserve = self.masks(drop_chunk)
@@ -822,12 +861,14 @@ def plan_ttt_pacing(
     progress_callback: Optional[Callable[[dict], None]] = None,
     draft_second_pct: float = 25.0,
     draft_rest_pct: float = 40.0,
+    bike_type: str = "road_bike",
 ) -> TTTPlanResult:
     """Optimise a WTRL team time trial for riders listed in rotation order.
 
     Args:
         route: A ``RouteProfile``.
         riders: 4-8 riders in their fixed rotation order.
+        bike_type: Surface rolling-resistance category for the team's bike.
         reserve_fraction: W' fraction each rider keeps in hand, as a margin for
             CP/W' estimation error, until ``reserve_release_m`` before they
             finish or are dropped.
@@ -838,7 +879,8 @@ def plan_ttt_pacing(
         min_pull_s, max_pull_s, pull_step_s: Allowed pull durations (0 = never
             pulls), defaulting to 20-60 seconds in 10-second steps; the model has
             no changeover cost, so a minimum is required.
-        allow_drops: Let riders beyond the scoring count be spent and dropped.
+        allow_drops: Let riders beyond the scoring count stop pulling and hang
+            on in the draft until they can no longer match the group.
         drop_candidates: Rider names, in the order they may be dropped;
             defaults to weakest first for this course.
         progress_callback: Called after each iteration with progress metadata
@@ -861,7 +903,7 @@ def plan_ttt_pacing(
         route, team, crr=crr, max_chunk_m=max_chunk_m, reserve_fraction=reserve_fraction,
         reserve_release_m=reserve_release_m, max_power_cp_mult=max_power_cp_mult,
         min_pull_s=min_pull_s, max_pull_s=max_pull_s, pull_step_s=pull_step_s,
-        speed_step_mps=speed_step_mps)
+        speed_step_mps=speed_step_mps, bike_type=bike_type)
     C, n = planner.C, team.n
     incumbent = None
     incumbent_result = None
@@ -960,25 +1002,25 @@ def plan_ttt_pacing(
 def _build_result(route, planner: _CoursePlanner, plan: _Plan, drop_chunk, mult,
                   scoring: int, downsample_points: int) -> TTTPlanResult:
     team, sim, C = planner.team, plan.sim, planner.C
-    active, _ = planner.masks(drop_chunk)
+    active = sim.rider_time > 0.0
     total_time = sim.total_time
     dist_km = route.display_distance_km
 
     rider_rows = []
     for i, r in enumerate(team.riders):
         act = active[:, i]
-        active_time = float(np.sum(sim.chunk_time[act]))
-        energy = float(np.sum(sim.power[act, i] * sim.chunk_time[act]))
+        active_time = float(np.sum(sim.rider_time[:, i]))
+        energy = float(np.sum(sim.power[:, i] * sim.rider_time[:, i]))
         front_time = float(np.sum(sim.front[:, i]))
-        dropped = drop_chunk[i] < C
+        dropped = bool(np.isfinite(sim.drop_time[i]))
         min_wbal = float(np.nanmin(sim.min_b[:, i]))
         rider_rows.append({
             "name": r.name,
             "cp_w": r.cp_w,
             "w_prime_j": r.w_prime_j,
             "finishes": not dropped,
-            "drop_km": round(float(planner.end[drop_chunk[i] - 1]) / 1000.0, 2) if dropped else None,
-            "drop_time_s": round(float(np.sum(sim.chunk_time[:drop_chunk[i]])), 1) if dropped else None,
+            "drop_km": round(float(sim.drop_distance[i]) / 1000.0, 2) if dropped else None,
+            "drop_time_s": round(float(sim.drop_time[i]), 1) if dropped else None,
             "min_wbal_j": round(min_wbal),
             "min_wbal_pct": round(100.0 * min_wbal / r.w_prime_j, 1),
             "avg_power_w": round(energy / active_time, 1) if active_time > 0 else 0.0,
@@ -1016,6 +1058,8 @@ def _build_result(route, planner: _CoursePlanner, plan: _Plan, drop_chunk, mult,
         idx = np.unique(np.round(np.linspace(0, C - 1, downsample_points)).astype(int))
     else:
         idx = np.arange(C)
+    transitions = np.flatnonzero(planner.surfaces[1:] != planner.surfaces[:-1]) + 1
+    idx = np.unique(np.r_[idx, transitions - 1, transitions])
     altitude = np.interp(planner.mid, np.asarray(route.distance_m, dtype=float),
                          np.asarray(route.altitude_m, dtype=float))
     leader_idx = np.argmax(sim.front, axis=1)
@@ -1038,6 +1082,8 @@ def _build_result(route, planner: _CoursePlanner, plan: _Plan, drop_chunk, mult,
         flat_rotation=flat_summary,
         distance_km=[round(float(planner.mid[c]) / 1000.0, 3) for c in idx],
         altitude_m=[round(float(altitude[c]), 1) for c in idx],
+        surface_type=[str(planner.surfaces[c]) for c in idx],
+        crr=[float(planner.crr[c]) for c in idx],
         gradient_pct=[round(float(planner.grad[c]) * 100.0, 1) for c in idx],
         speed_kph=[round(float(sim.speeds[c]) * 3.6, 1) for c in idx],
         leader=[team.names[int(leader_idx[c])] for c in idx],
