@@ -64,6 +64,18 @@ _FIXED_WHEEL_OWNERS = {
     ('Zwift', 'Zwift_Concept_Gold'): 'Zwift_Concept_Gold',
 }
 
+_WHEEL_FRAME_TYPES = {
+    ('Cadex', 'Cadex_AR35'): 'Gravel',
+    ('Enve', 'EnveG23'): 'Gravel',
+    ('Reserve', 'Reserve25GR'): 'Gravel',
+    ('Roval', 'RovalTerraAeroCLX'): 'Gravel',
+    ('Roval', 'RovalTerraCLX'): 'Gravel',
+    ('Zipp', 'Zipp303XPLR'): 'Gravel',
+    ('Zwift', 'ZwiftGravel'): 'Gravel',
+    ('Zwift', 'ZwiftMountain'): 'MTB',
+    ('Zwift', 'ZwiftHandcycle'): 'Hand',
+}
+
 
 def _humanize(text: str, strip_prefix: Optional[str] = None) -> str:
     """Turn a CamelCase/PackedDigits identifier into spaced, readable text."""
@@ -208,11 +220,14 @@ class BikeDatabase:
                 wheel_id = f'{base}{i}'
             seen.add(wheel_id)
             level = wh.get('level')
+            fits_frame = _WHEEL_FRAME_TYPES.get((brand, model), 'Standard,TT')
+            if owner_frame_id in self.frames:
+                fits_frame = self.frames[owner_frame_id]['frametype']
             self.wheels[wheel_id] = {
                 'wheelid': wheel_id,
                 'wheelmake': brand,
                 'wheelmodel': _humanize(model, strip_prefix=brand),
-                'wheelfitsframe': 'Standard,TT,Gravel,MTB,Tron,Hand',
+                'wheelfitsframe': fits_frame,
                 'wheelownerframeid': owner_frame_id,
                 'wheellevel': int(level) if isinstance(level, (int, float)) else 0,
                 'wheelprice': wh.get('price'),
@@ -223,6 +238,14 @@ class BikeDatabase:
                 'wheelcda_bias_tt': (wh.get('pair_cda_bias_tt')
                                      if wh.get('pair_cda_bias_tt') is not None else cda_bias),
             }
+
+    @staticmethod
+    def _wheel_fits_frame(frame: dict, wheel: dict) -> bool:
+        owner = wheel.get('wheelownerframeid')
+        if owner and owner != frame['frameid']:
+            return False
+        fits = [value.strip() for value in wheel.get('wheelfitsframe', 'Standard,TT').split(',')]
+        return frame.get('frametype', 'Standard') in fits
 
     @staticmethod
     def _wheel_bias_for_frame(frame: dict, wheel: Optional[dict]) -> float:
@@ -267,6 +290,8 @@ class BikeDatabase:
             for wid, wheel in self.wheels.items():
                 if is_halo_frame != bool(wheel.get('wheelownerframeid') == fid):
                     continue
+                if not self._wheel_fits_frame(frame, wheel):
+                    continue
                 stages = [self._combo_cda_weight(frame, wheel, lvl) for lvl in range(6)]
                 self.bikes[(fid, wid)] = {
                     'cda': [c for c, _ in stages],
@@ -294,7 +319,7 @@ class BikeDatabase:
                             if w.get('wheelownerframeid') == frame_id), None)
         if owned_wheel and wheel is not owned_wheel:
             return None
-        if wheel and wheel.get('wheelownerframeid') not in (None, frame_id):
+        if wheel and not self._wheel_fits_frame(frame, wheel):
             return None
 
         level = max(0, min(5, int(upgrade_level or 0)))
