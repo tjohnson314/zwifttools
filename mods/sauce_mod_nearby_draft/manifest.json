@@ -1,0 +1,15 @@
+{
+    "manifest_version": 1,
+    "name": "Nearby Draft",
+    "description": "Effective draft for every rider within 15 seconds of you",
+    "version": "0.1.0",
+    "author": "zwifttools",
+    "windows": [{
+        "id": "nearby-draft",
+        "file": "nearby-draft.html",
+        "name": "Nearby Draft",
+        "description": "Nearby riders' effective draft and residual summary",
+        "overlay": true,
+        "default_bounds": {"width": 400, "height": 520}
+    }]
+}

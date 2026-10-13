@@ -86,6 +86,7 @@ Standalone browser overlays for [Sauce4Zwift](https://www.sauce.llc/), installed
 | **Surface Telemetry** | `sauce_mod_surface_telemetry/` | Records your telemetry with manual surface type tagging (Tarmac, Cobbles, Brick, Wood, Dirt, Gravel) for CRR mapping. Exports CSV. |
 | **Team Race Score** | `sauce_mod_team_race/` | Live team race scoreboard — tracks two teams across categories with 3/2/1 point scoring, gap-to-rival, and power stats. |
 | **Race Telemetry** | `sauce_mod_telemetry/` | Records per-second telemetry for all nearby riders (power, HR, speed, cadence, location, draft). Exports rider telemetry + profiles as separate CSVs. |
+| **Nearby Draft** | `sauce_mod_nearby_draft/` | Effective-draft summary for you and every rider within +/-15 seconds: green effective draft and blue residual bars. Uses each rider's Zwift weight/height, automatic road surfaces, and a configurable shared bike assumption. |
 
 ## Data Sources
 
