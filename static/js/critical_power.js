@@ -566,6 +566,17 @@ function calculate() {
         return;
     }
 
+    // Shared with the Race Replay analysis panel ("Use my CP").
+    try {
+        localStorage.setItem("criticalPowerModelV1", JSON.stringify({
+            cp: regression.cp,
+            wPrime: regression.wPrime,
+            savedAt: new Date().toISOString()
+        }));
+    } catch {
+        // Ignore storage failures (private mode or blocked storage).
+    }
+
     document.getElementById("cpValue").textContent = `${regression.cp.toFixed(1)} W`;
     document.getElementById("wPrimeValue").textContent = `${(regression.wPrime / 1000).toFixed(2)} kJ (${regression.wPrime.toFixed(0)} J)`;
     document.getElementById("rValue").textContent = regression.r.toFixed(4);

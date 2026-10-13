@@ -77,6 +77,260 @@
         </p>
     </details>
 
+    {# Rider Analysis FAQs: thresholds come from race_replay/race_analyzer.py (passed in as `ra`). #}
+    {% set d_style = "margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;" %}
+    {% set s_style = "cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;" %}
+    {% set p_style = "margin-top: 10px; color: #aaa; line-height: 1.6;" %}
+    {% set l_style = "margin: 8px 0 0 20px; color: #aaa; line-height: 1.6;" %}
+    {% set b_style = "color: #e0e0e0;" %}
+
+    <details style="{{ d_style }}">
+        <summary style="{{ s_style }}">What does the Rider Analysis show?</summary>
+        <p style="{{ p_style }}">
+            Pick any rider and the analysis finds where they lost contact with their group, what it would have taken
+            to stay on, and why they didn't. Each event card leads with a one-line verdict, then
+            <strong style="{{ b_style }}">What happened</strong> (a timeline),
+            <strong style="{{ b_style }}">What would have kept you on</strong> (ranked options), and
+            <strong style="{{ b_style }}">Next time</strong> (advice). The numbers behind it are under
+            <strong style="{{ b_style }}">Details</strong>. Below the cards,
+            <strong style="{{ b_style }}">Good moves</strong> lists attacks that stuck and bridges that worked, and
+            <strong style="{{ b_style }}">Where you spent extra</strong> lists efforts where the rider spent more than
+            the riders around them. The chart shows 30-second power against what the riders around them spent
+            (converted to the selected rider), wind protection, and reserve (W&#8242;).
+        </p>
+        <p style="{{ p_style }}">
+            It's all physics and statistics from the race data — no guessing about intent. Every rider is modelled on
+            the same bike (see the Race Efficiency question), so treat absolute watts as estimates and comparisons
+            between riders as the more reliable part.
+        </p>
+    </details>
+
+    <details style="{{ d_style }}">
+        <summary style="{{ s_style }}">What counts as a drop or a near miss?</summary>
+        <p style="{{ p_style }}">
+            Every second, riders are split into groups: sorted by distance, a new group starts wherever someone is more
+            than <strong style="{{ b_style }}">{{ '%g' % ra.GROUP_GAP_SEC }} s</strong> behind the rider in front
+            (measured in time, not metres, so it works at any speed). Then, for the selected rider:
+        </p>
+        <ul style="{{ l_style }}">
+            <li><strong style="{{ b_style }}">Lost contact</strong> — their group (at least {{ ra.MIN_GROUP_SIZE }}
+                riders) splits and a real group ends up ahead of them: more than {{ ra.FLIER_MAX_RIDERS }} riders and at
+                least {{ (ra.SPLIT_MIN_FRAC * 100) | int }}% of the group. If just a few riders ride away, that's a
+                breakaway, and the riders left behind aren't flagged.</li>
+            <li><strong style="{{ b_style }}">Drop</strong> — still off that group
+                {{ (ra.DROP_CONFIRM_SEC / 60) | int }} minutes later.</li>
+            <li><strong style="{{ b_style }}">Near miss</strong> — back on within
+                {{ (ra.DROP_CONFIRM_SEC / 60) | int }} minutes (on your own, or because your whole group got back on).
+                Gaps that close within {{ ra.MIN_SEPARATION_SEC }} s are ignored as measurement flicker.</li>
+            <li><strong style="{{ b_style }}">Finish sprint</strong> — anything in the last
+                {{ '%g' % (ra.FINISH_EXCLUDE_M / 1000) }} km is the sprint, not getting dropped.</li>
+        </ul>
+        <p style="{{ p_style }}">
+            The "key moment" is the first drop. Near misses get their own short card: how long you were off, what
+            getting back on cost, and whether you'd slid back or were riding with no margin.
+        </p>
+    </details>
+
+    <details style="{{ d_style }}">
+        <summary style="{{ s_style }}">What are CP and the reserve (W&#8242;), and where do the numbers come from?</summary>
+        <p style="{{ p_style }}">
+            <strong style="{{ b_style }}">CP</strong> (critical power) is the power you can hold for a long time,
+            roughly your threshold. <strong style="{{ b_style }}">Reserve (W&#8242;)</strong> is the energy you can
+            spend above CP before you're cooked. Going over CP drains it; riding under CP refills it, faster the
+            further under you are. The app tracks it second by second (the Skiba W&#8242; balance model).
+        </p>
+        <p style="{{ p_style }}">
+            Reserve is measured in <strong style="{{ b_style }}">kJ</strong> (kilojoules, a unit of energy). A rough
+            feel: <strong style="{{ b_style }}">1 kJ ≈ 100 W above your CP for 10 seconds</strong>. Most racers have a
+            reserve somewhere around 10–25 kJ, so a 5 kJ effort is a big chunk of it.
+        </p>
+        <p style="{{ p_style }}">
+            If you leave CP and reserve on <strong style="{{ b_style }}">auto</strong>, they're estimated from that
+            {%- set cp_mins = [] %}{% for d in ra.CP_ESTIMATE_DURATIONS %}{% set _ = cp_mins.append('%g' % (d / 60)) %}{% endfor %}
+            rider's best {{ cp_mins[:-1] | join(', ') }} and {{ cp_mins[-1] }}-minute efforts in
+            the race (the same work-vs-duration fit as the Critical Power page). The reserve is kept between
+            {{ (ra.W_PRIME_RANGE_J[0] / 1000) | int }} and {{ (ra.W_PRIME_RANGE_J[1] / 1000) | int }} kJ, and CP is
+            raised until the race never takes the reserve below zero. That makes it a picture of your form
+            <em>on the day</em> — the right thing for judging that race. A race isn't a maximal test, so it can read
+            lower than your best.
+        </p>
+        <p style="{{ p_style }}">
+            You can type in your own values, or click <strong style="{{ b_style }}">Use my CP</strong> to pull them
+            from the Critical Power page. As a rough guide, CP moves a few percent from day to day, and reserve moves
+            much more (often 10–20%). Use the race estimate to judge a race, and your usual FTP/CP to set workouts.
+        </p>
+    </details>
+
+    <details style="{{ d_style }}">
+        <summary style="{{ s_style }}">How is "needed" worked out, and what does "for you" mean?</summary>
+        <p style="{{ p_style }}">
+            <strong style="{{ b_style }}">"For you"</strong> means another rider's power converted to your body.
+            Climbing, rolling and speeding up scale with weight; wind resistance scales with how big a hole you
+            punch in the air (estimated from height and weight). Because their actual wind cost is used, the draft
+            they were getting carries over. So "6.0 W/kg for you" means "what that rider did would have cost you
+            6.0 W/kg".
+        </p>
+        <p style="{{ p_style }}">
+            <strong style="{{ b_style }}">Riders who stayed on</strong> are the ones who were in your group when the
+            gap opened and were still with the group that rode away. <strong style="{{ b_style }}">"Needed"</strong> is
+            what the best-placed of them did, converted to you (the {{ (ra.REQUIRED_QUANTILE * 100) | int }}th
+            percentile — the riders who got through cheapest). <strong style="{{ b_style }}">"Typical"</strong> is the
+            middle one.
+        </p>
+        <p style="{{ p_style }}">
+            The <strong style="{{ b_style }}">surge</strong> is the stretch where the group was riding above your CP.
+            It's anchored on the group's hardest 30 seconds in the {{ ra.SELECTION_LOOKBACK_SEC }} s before you lost
+            contact, because the damage is often done before the gap actually opens. If the group never went
+            over your CP, the card says so: that points to position or reaction, not fitness. Riding within
+            {{ (ra.NO_MARGIN_FRAC * 100) | int }}% of "needed" is called "right at the limit, no margin".
+        </p>
+    </details>
+
+    <details style="{{ d_style }}">
+        <summary style="{{ s_style }}">How do the "What would have kept you on" options work?</summary>
+        <ul style="{{ l_style }}">
+            <li><strong style="{{ b_style }}">Close the gap right away</strong> — a physics simulation of you chasing
+                the real back of the group. Draft is full out to about {{ ra.DRAFT_FULL_M | int }} m behind the wheel and
+                gone by about {{ ra.DRAFT_ZERO_M | int }} m (measured from race data). It finds the lowest steady power
+                that gets you back within {{ ra.CLOSE_TARGET_M | int }} m within
+                {{ ra.CLOSE_LIMITS_SEC | map('string') | join(' or ') }} s, if you'd reacted at successive moments
+                (every {{ ra.CLOSE_STEP_SEC }} s) as the gap grew. It's checked first by replaying your actual power;
+                if the simulated gap is off by more than {{ ra.GAP_MODEL_MAX_ERROR_M | int }} m (usually because the group
+                was strung out), the estimate is hidden.</li>
+            <li><strong style="{{ b_style }}">Hang on longer</strong> — after a drop, how long until the group's
+                pace (30-second average, converted to you) fell back under your CP — checked for up to
+                {{ (ra.HANG_ON_MAX_SEC / 60) | int }} minutes — and what riding with them until then would have cost.
+                Surges often end soon after riders get dropped; if this one eased within {{ ra.HANG_ON_SHORT_SEC }} s and you
+                could afford it, the verdict says so.</li>
+            <li><strong style="{{ b_style }}">Stay glued to the last wheel</strong> — the power to stay within
+                {{ ra.DRAFT_FULL_M | int }} m of the wheel from when the gap started opening.</li>
+            <li><strong style="{{ b_style }}">Hold your spot</strong> — if you slid back at least
+                {{ ra.POSITION_DRIFT_MIN_PLACES }} places (measured from your best position in the
+                {{ (ra.POSITION_DRIFT_LOOKBACK_SEC / 60) | int }} minutes before), what the riders who stayed on from
+                within {{ ra.MOVE_UP_SLOT_SPAN }} places of you actually rode from there, converted to you.</li>
+            <li><strong style="{{ b_style }}">Move up before the surge</strong> — moving up through the bunch (riders
+                moving up keep about {{ (ra.MOVE_UP_DRAFT_FRAC * 100) | int }}% of the group's draft in Zwift), then
+                riding it like the riders who stayed on from that spot. Only shown if it gains at least
+                {{ ra.MOVE_UP_MIN_GAIN_M | int }} m of road, if you didn't actually make that move, and if the model
+                passes the same replay check.</li>
+        </ul>
+        <p style="{{ p_style }}">
+            Getting back on only helps if you can stay on, so every option is costed through to when the group eased
+            (see "Hang on longer"). Once you're back on the wheel, you ride at the group's pace converted to you.
+        </p>
+        <p style="{{ p_style }}">
+            <strong style="{{ b_style }}">✓</strong> fits in the reserve you had,
+            <strong style="{{ b_style }}">≈</strong> is within {{ (ra.BORDERLINE_W_PRIME_FRAC * 100) | int }}% of your
+            reserve (a coin flip), and <strong style="{{ b_style }}">✗</strong> is more than you had.
+        </p>
+        <p style="{{ p_style }}">
+            <strong style="{{ b_style }}">Was sliding back a mistake?</strong> It's judged by what holding your spot
+            would have cost. If it would have emptied your reserve, letting riders past was the right call, and the
+            advice is to be further forward before the hard part, so you have places to give back. If holding was
+            affordable, the slide counts against you.
+        </p>
+    </details>
+
+    <details style="{{ d_style }}">
+        <summary style="{{ s_style }}">What counts as "spending extra"?</summary>
+        <p style="{{ p_style }}">
+            Everything is compared with <strong style="{{ b_style }}">the riders around you</strong>: the
+            {{ ra.NEARBY_RIDERS }} group-mates nearest you on the road, converted to you. (The whole group's average
+            would be skewed by whoever is pulling on the front.) An effort is listed when:
+        </p>
+        <ul style="{{ l_style }}">
+            <li>you're above CP (5-second average) and it drains at least
+                <strong style="{{ b_style }}">{{ '%g' % (ra.EFFORT_MIN_RESERVE_J / 1000) }} kJ</strong> of reserve, or you
+                spend at least <strong style="{{ b_style }}">{{ '%g' % ra.EFFORT_MIN_EXTRA_KJ }} kJ</strong> more than the
+                riders around you while out of the draft, <em>and</em></li>
+            <li>the riders around you spent less than {{ (ra.EVERYONE_PAID_FRAC * 100) | int }}% of what you did. If
+                they spent about the same, the whole group surged, and that's just the race.</li>
+        </ul>
+        <p style="{{ p_style }}">Each one is labelled from context:</p>
+        <ul style="{{ l_style }}">
+            <li><strong style="{{ b_style }}">Chased a move</strong> — a group of 1–{{ ra.FLIER_MAX_RIDERS }} riders who
+                left your group in the last {{ (ra.MOVE_ORIGIN_SEC / 60) | int }} minutes was up the road, and you were at
+                1st or 2nd wheel at least {{ (ra.ON_FRONT_MIN_FRAC * 100) | int }}% of the time. It also says whether
+                they were caught (watched for {{ (ra.CHASE_LOOKAHEAD_SEC / 60) | int }} minutes).</li>
+            <li><strong style="{{ b_style }}">Attack</strong> — leading at more than
+                {{ (ra.ATTACK_POWER_FRAC_CP * 100) | int }}% of CP, with the gap you opened (a gap of at least
+                {{ '%g' % ra.ATTACK_GAP_SEC }} s counts as getting away). Side-to-side movement isn't in the data, so an
+                attack that never opened a gap looks the same as a very hard pull.</li>
+            <li><strong style="{{ b_style }}">Rode on the front</strong> — at 1st or 2nd wheel at least half the time,
+                with nobody up the road.</li>
+            <li><strong style="{{ b_style }}">Surged in the group</strong> — a hard effort (over
+                {{ (ra.ATTACK_POWER_FRAC_CP * 100) | int }}% of CP) from inside the group, often a sign of closing a gap
+                or moving up late.</li>
+            <li><strong style="{{ b_style }}">Out of the draft</strong> — anything else, e.g. gaps in the line
+                mid-group.</li>
+            <li><strong style="{{ b_style }}">Spent extra for N min</strong> — a long, slow leak: your 5-minute
+                average stayed at least <strong style="{{ b_style }}">{{ ra.SUSTAINED_MIN_W | int }} W</strong> above the
+                riders around you for at least {{ (ra.SUSTAINED_MIN_SEC / 60) | int }} minutes. This is usually riding
+                near the front or with poor draft. It's often below CP, so it barely touches your reserve, but it's real
+                energy.</li>
+        </ul>
+        <p style="{{ p_style }}">
+            To judge each effort, the app replays your reserve as if you'd ridden like the riders around you instead,
+            and checks your next close call or drop. <strong style="{{ b_style }}">✗</strong> means you'd have had at
+            least {{ '%g' % (ra.EFFORT_MATTERED_J / 1000) }} kJ more there. <strong style="{{ b_style }}">≈</strong>
+            means it cost you, but your reserve refilled before it mattered. <strong style="{{ b_style }}">✓</strong>
+            means a chase that worked, with you doing less than half the work. The reserve model refills fully between
+            efforts, so it can't capture fatigue building up over a race. Repeated "≈" efforts still add up.
+        </p>
+    </details>
+
+    <details style="{{ d_style }}">
+        <summary style="{{ s_style }}">What counts as a "good move"?</summary>
+        <ul style="{{ l_style }}">
+            <li><strong style="{{ b_style }}">Got away</strong> — you left your group going forward, got at least
+                {{ ra.GETAWAY_MIN_GAP_SEC | int }} s clear within {{ (ra.GETAWAY_CONFIRM_SEC / 60) | int }} minutes, and
+                they never got back to you. It shows what it cost (power, time, reserve), the terrain, and how big the gap
+                grew by the end. In the last {{ '%g' % (ra.FINISH_EXCLUDE_M / 1000) }} km it's called
+                <strong style="{{ b_style }}">Sprinted clear</strong>.</li>
+            <li><strong style="{{ b_style }}">Bridged up</strong> — you closed a gap of at least
+                {{ ra.BRIDGE_MIN_GAP_SEC | int }} s to the rider or group ahead, either alone (<strong style="{{ b_style }}">solo</strong>)
+                or leading your group at least half the time. If your group caught them while you sat in, it doesn't
+                count as your move.</li>
+        </ul>
+        <p style="{{ p_style }}">
+            Moves are marked green on the power chart. Use ▶ Watch to see how it played out.
+        </p>
+    </details>
+
+    <details style="{{ d_style }}">
+        <summary style="{{ s_style }}">What do wind protection, losing the draft and sitting up mean?</summary>
+        <p style="{{ p_style }}">
+            <strong style="{{ b_style }}">Wind protection</strong> (draft %) is the share of the wind cost you were
+            spared compared with riding alone, worked out from your power, speed and the physics model. It's about
+            30–40% inside a bunch, and close to zero once you're more than about {{ ra.DRAFT_ZERO_M | int }} m off the
+            wheel at speed.
+        </p>
+        <p style="{{ p_style }}">
+            <strong style="{{ b_style }}">Out of the draft</strong> is flagged when you're still in the group but your
+            wind protection is at least {{ ra.DRAFT_LOSS_PCT | int }} points below the group's for at least
+            {{ ra.DRAFT_LOSS_MIN_SEC }} s: hanging off the back, sitting on the front, or out of line mid-group.
+            <strong style="{{ b_style }}">Sat up</strong> means riding below {{ (ra.SAT_UP_FRAC * 100) | int }}% of what
+            the group was riding for at least {{ ra.SAT_UP_MIN_SEC }} s, right around the moment the gap opened.
+        </p>
+    </details>
+
+    <details style="{{ d_style }}">
+        <summary style="{{ s_style }}">How accurate is the Rider Analysis?</summary>
+        <p style="{{ p_style }}">
+            It's good for <em>where</em> and <em>why</em>. Treat the exact watts as estimates. Known limits:
+        </p>
+        <ul style="{{ l_style }}">
+            <li>Every rider is modelled on the same bike. Real bikes, wheels and power-ups (aero, draft boost) aren't
+                visible in the data.</li>
+            <li>Rider weights and heights come from Zwift profiles, and some aren't accurate.</li>
+            <li>Positions come from 1-second distance data. Draft changes over a few metres, so gaps under a few metres
+                are near the limit of what the data can resolve.</li>
+            <li>Reserve (W&#8242;) models disagree about how fast it refills, and they don't model fatigue building
+                up over a long race.</li>
+            <li>It's one race. Patterns that show up across several races are the ones to act on.</li>
+        </ul>
+    </details>
+
     <details style="margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
         <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">What are the two chart modes?</summary>
         <p style="margin-top: 10px; color: #aaa; line-height: 1.6;">

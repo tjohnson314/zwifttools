@@ -172,6 +172,43 @@
             <div id="peloton-details-body"></div>
         </section>
 
+        <!-- Rider analysis: where contact was lost and why -->
+        <section class="panel" id="analysis-panel" style="display:none;">
+            <div class="table-header">
+                <h2>Rider Analysis</h2>
+                <span class="efficiency-subtitle">Where contact was lost, what it took to stay, and why</span>
+            </div>
+            <div class="analysis-controls">
+                <label>Rider
+                    <select id="analysis-rider-select"></select>
+                </label>
+                <label>CP
+                    <input type="number" id="analysis-cp" placeholder="auto" min="50" step="1"> W
+                </label>
+                <label>Reserve (W&#8242;)
+                    <input type="number" id="analysis-wprime" placeholder="auto" min="1" step="0.1"> kJ
+                </label>
+                <button id="analysis-run-btn" class="btn btn-primary">Analyze</button>
+                <button id="analysis-use-saved-cp" class="btn btn-secondary" style="display:none;"
+                        title="Fill in CP/W&#8242; from the Critical Power page">Use my CP</button>
+            </div>
+            <p id="analysis-cp-note" class="analysis-note"></p>
+            <details class="analysis-help">
+                <summary>How to read this</summary>
+                <ul>
+                    <li><strong>Reserve (W&#8242;)</strong> — the energy you can spend above your CP before you're cooked. Going over CP drains it; easing off refills it, slowly. "Reserve unused when dropped" means you had more to give.</li>
+                    <li><strong>kJ</strong> — the unit for energy. Rough feel: <strong>1 kJ ≈ 100 W above your CP for 10 seconds</strong>. A typical reserve is 10–25 kJ.</li>
+                    <li><strong>CP</strong> — the power you can hold for a long time, roughly your threshold.</li>
+                    <li><strong>Wind protection (draft)</strong> — how much of the wind you're spared. About 30–40% inside the bunch; close to zero once you're ~25 m off the wheel at speed.</li>
+                    <li><strong>"For you"</strong> — other riders' power converted to your weight and height, so their numbers compare directly with yours.</li>
+                    <li><strong>Riders around you</strong> — the 5 group-mates nearest you on the road. <strong>Riders who stayed on</strong> — the ones who were with you when the gap opened and stayed with the group. "Needed" is what the best-placed of them did, for you.</li>
+                    <li><strong>✓ / ≈ / ✗</strong> — fits in the reserve you had / right at the limit / more than you had.</li>
+                </ul>
+            </details>
+            <div id="analysis-events"></div>
+            <div id="analysis-chart" class="chart analysis-chart"></div>
+        </section>
+
         <!-- Race efficiency -->
         <section class="panel" id="efficiency-panel" style="display:none;">
             <div class="table-header">

@@ -28,6 +28,7 @@ A web app for analyzing Zwift racing. Includes **Bike Comparison**, **Race Repla
 - **Interactive map** — overhead view of the Zwift world with route line and rider dots, zoom/pan/follow
 - **Rider table** — live position, gap, power, 1-min avg, NP, weight, HR, speed, distance; sortable columns, W/kg toggle
 - **YouTube stream links** — auto-detects known streamers, links to VOD at the current playback timestamp, handles trimmed VODs
+- **Rider analysis** — pick any rider to see where they lost contact (drops and near misses), what it would have taken to stay on, where they spent more than the riders around them, and moves that worked; thresholds are explained in the in-app FAQ
 - Shareable URLs via `?activity_id=` parameter
 - Server-side caching for fast reloads
 - In-app FAQ panels for both Bike Comparison and Race Replay
@@ -105,12 +106,16 @@ Standalone browser overlays for [Sauce4Zwift](https://www.sauce.llc/), installed
 
 ## Local Development
 
-1. Clone and install:
+1. Clone and install (a virtual environment is recommended):
    ```bash
    git clone https://github.com/YOUR_USERNAME/zwifttools.git
    cd zwifttools
-   pip install -r requirements.txt
+   python -m venv venv
+   source venv/bin/activate
+   pip install -r requirements-dev.txt
    ```
+   `requirements-dev.txt` pulls in `requirements.txt` plus the test tools (pytest). Use plain
+   `requirements.txt` if you only want to run the app.
 
 2. Set environment variables (all optional for local dev):
    - `YOUTUBE_API_KEY` — YouTube stream matching for Race Replay
@@ -124,6 +129,24 @@ Standalone browser overlays for [Sauce4Zwift](https://www.sauce.llc/), installed
    python app.py
    ```
    Open http://localhost:5000
+
+### Running tests
+
+Python tests (in `tests/`, all synthetic data — no Zwift login or cached races needed):
+```bash
+python -m pytest tests                          # everything
+python -m pytest tests/test_race_analyzer.py    # one file
+python -m pytest tests -k near_miss             # tests matching a name
+```
+
+JavaScript tests (`tests/*.test.cjs`, need Node 18+, no npm install):
+```bash
+node --test tests/*.test.cjs
+```
+
+> CI (`.github/workflows/deploy.yml`) runs `python -m unittest discover -s tests`, which only picks up
+> `unittest.TestCase` classes — pytest-style test functions are skipped there. Run `pytest` locally to
+> cover everything.
 
 ## Deployment
 

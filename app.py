@@ -279,7 +279,9 @@ def critical_power():
 @app.route('/race-replay')
 def race_replay():
     """Race replay tool."""
-    return render_template('race_replay.html')
+    # The FAQ quotes the analyzer's thresholds, so they stay in sync with the code.
+    from race_replay import race_analyzer
+    return render_template('race_replay.html', ra=race_analyzer)
 
 
 @app.route('/zrl/leaderboard')
@@ -4045,11 +4047,12 @@ def _load_multi_subgroup_race(race_id):
     })
 
 
-@app.route('/api/race/data/<race_id>')
-def api_race_data(race_id):
-    """Get full cleaned race data (all riders, all timestamps) as JSON."""
+def _get_race_data(race_id):
+    """Cleaned race data from memory, disk or blob storage.
+
+    Returns ``(race_data, None)`` or ``(None, (json_response, status))``.
+    """
     if race_id not in _race_data_cache:
-        # Try loading
         data_path = Path('race_data') / race_id
         if not data_path.exists():
             # Try downloading from blob storage
@@ -4058,13 +4061,21 @@ def api_race_data(race_id):
                 data_path.mkdir(parents=True, exist_ok=True)
                 blob_storage.download_race_dir(race_id, data_path)
         if not data_path.exists():
-            return jsonify({'error': f'Race data not found: {race_id}'}), 404
+            return None, (jsonify({'error': f'Race data not found: {race_id}'}), 404)
         try:
             from race_replay.data_cleaner import clean_race_data
-            race_data = clean_race_data(data_path, cache=True)
-            _race_data_cache[race_id] = race_data
+            _race_data_cache[race_id] = clean_race_data(data_path, cache=True)
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            return None, (jsonify({'error': str(e)}), 500)
+    return _race_data_cache[race_id], None
+
+
+@app.route('/api/race/data/<race_id>')
+def api_race_data(race_id):
+    """Get full cleaned race data (all riders, all timestamps) as JSON."""
+    _, err = _get_race_data(race_id)
+    if err:
+        return err
 
     try:
         return _build_race_data_response(race_id)
@@ -4277,6 +4288,49 @@ def _build_race_data_response(race_id):
         'route_segments': route_segments,
         'dev_warnings': dev_warnings,
     })
+
+
+# Race grids for the rider analyzer, keyed by (race_id, gap_sec).  Grouping the
+# whole field is the expensive part, so it's shared across riders.
+_race_grid_cache = {}
+
+
+@app.route('/api/race/analysis/<race_id>/<int:rank>')
+def api_race_analysis(race_id, rank):
+    """Where did this rider lose contact, what would it have taken, and why.
+
+    Optional query params: ``cp`` (W), ``w_prime`` (J) — estimated from the
+    race when omitted — and ``gap_sec`` to override the grouping threshold.
+    """
+    from race_replay.race_analyzer import GROUP_GAP_SEC, build_race_grid, analyze_rider
+
+    race_data, err = _get_race_data(race_id)
+    if err:
+        return err
+
+    gap_sec = request.args.get('gap_sec', type=float) or GROUP_GAP_SEC
+    cp = request.args.get('cp', type=float)
+    w_prime = request.args.get('w_prime', type=float)
+
+    try:
+        key = (race_id, gap_sec)
+        grid = _race_grid_cache.get(key)
+        # Rebuild if the race was reloaded since the grid was built.
+        if grid is None or grid[0] is not race_data:
+            setup = _get_efficiency_setup()
+            grid = (race_data, build_race_grid(
+                race_data,
+                bike_weight_kg=setup.weight_kg if setup else 8.0,
+                bike_cda_bias=setup.cda_bias if setup else 0.0,
+                gap_sec=gap_sec,
+            ))
+            _race_grid_cache[key] = grid
+        return jsonify(analyze_rider(grid[1], race_data, rank, cp=cp, w_prime=w_prime))
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 404
+    except Exception as e:
+        logger.exception("Error analyzing rider")
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/race/streams/<race_id>')

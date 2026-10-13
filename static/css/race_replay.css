@@ -834,3 +834,232 @@ h1 .header-icon {
 #map-zoom-out {
     bottom: 12px;
 }
+
+/* Rider analysis */
+.analysis-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin: 10px 0;
+}
+
+.analysis-controls label {
+    color: #aaa;
+    font-size: 0.9rem;
+}
+
+.analysis-controls select,
+.analysis-controls input {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 6px;
+    color: #fff;
+    padding: 6px 8px;
+    margin-left: 4px;
+}
+
+.analysis-controls input {
+    width: 80px;
+}
+
+.analysis-note {
+    color: #888;
+    font-size: 0.85rem;
+    margin-bottom: 10px;
+}
+
+.analysis-event {
+    border-left: 4px solid #888;
+    background: rgba(255,255,255,0.04);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+}
+
+.analysis-event.drop { border-left-color: #ef5350; }
+.analysis-event.near_miss { border-left-color: #ffa726; }
+.analysis-event.finish { border-left-color: #29b6f6; }
+.analysis-event.key { box-shadow: 0 0 0 1px rgba(239, 83, 80, 0.5); }
+
+.analysis-event-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.analysis-event-title {
+    font-weight: 600;
+}
+
+.analysis-event-meta {
+    color: #888;
+    font-size: 0.85rem;
+}
+
+.analysis-event-header .btn {
+    margin-left: auto;
+    padding: 4px 10px;
+    font-size: 0.8rem;
+}
+
+.analysis-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    margin: 6px 0 8px;
+    font-size: 0.85rem;
+    color: #ccc;
+}
+
+.analysis-stats strong {
+    color: #fff;
+}
+
+.analysis-findings {
+    margin-left: 18px;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    color: #ddd;
+}
+
+.analysis-chart {
+    height: 440px;
+}
+
+.analysis-subheading {
+    font-size: 1rem;
+    margin: 18px 0 8px;
+    color: #ddd;
+}
+
+.analysis-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    margin-bottom: 14px;
+}
+
+.analysis-table th,
+.analysis-table td {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.analysis-table th {
+    color: #888;
+    font-weight: 500;
+}
+
+.analysis-table .btn {
+    padding: 3px 8px;
+    font-size: 0.75rem;
+}
+
+.gc-ok { color: #66bb6a; font-weight: 600; }
+.gc-no { color: #ef5350; font-weight: 600; }
+
+.gc-hold {
+    font-size: 0.85rem;
+    color: #ccc;
+    margin: 4px 0 8px;
+}
+
+.analysis-summary {
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.45;
+    margin: 4px 0 10px;
+}
+
+.analysis-story,
+.analysis-options {
+    list-style: none;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: #ddd;
+    margin-bottom: 6px;
+}
+
+.analysis-story li {
+    display: flex;
+    gap: 12px;
+    padding: 3px 0;
+}
+
+.analysis-story-time {
+    flex: 0 0 44px;
+    color: #888;
+    font-variant-numeric: tabular-nums;
+}
+
+.analysis-options li {
+    display: flex;
+    gap: 10px;
+    padding: 4px 0;
+}
+
+.opt-mark {
+    flex: 0 0 16px;
+    text-align: center;
+}
+
+.gc-borderline { color: #ffa726; font-weight: 600; }
+
+.analysis-details,
+.analysis-help {
+    margin-top: 8px;
+    font-size: 0.85rem;
+    color: #bbb;
+}
+
+.analysis-details summary,
+.analysis-help summary {
+    cursor: pointer;
+    color: #999;
+    margin-bottom: 6px;
+}
+
+.analysis-help ul {
+    margin: 4px 0 10px 18px;
+    line-height: 1.5;
+}
+
+.analysis-advice {
+    margin: 0 0 6px 18px;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: #ddd;
+}
+
+.analysis-efforts {
+    margin-top: 6px;
+}
+
+.analysis-effort-list {
+    list-style: none;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: #ddd;
+    margin-bottom: 6px;
+}
+
+.analysis-effort-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.analysis-effort-body {
+    flex: 1;
+}
+
+.analysis-effort-list .btn {
+    padding: 3px 8px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
