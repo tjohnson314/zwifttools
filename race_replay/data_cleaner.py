@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # Bump this version when data cleaning logic changes in a way that invalidates
 # previously cached results.  The cache loader will discard stale caches.
-CLEANING_VERSION = 37
+CLEANING_VERSION = 38
 
 # Grace period after the official race start before a rider is treated as a
 # "late joiner".  Riders routinely begin recording / cross the start banner a
@@ -979,9 +979,12 @@ def align_riders_to_game_route(
             if 'speed_kmh' in df.columns
             else np.ones(len(df), dtype=bool)
         )
-        on_route_indices = np.where(
-            (deviations < on_route_threshold_m) & moving
-        )[0]
+        on_route = deviations < on_route_threshold_m
+        if not is_late and not route.has_leadin:
+            # The pen approach can overlap a later pass of the main route.
+            # Without lead-in checkpoints, trust the odometer until it ends.
+            on_route &= raw_traveled_m >= route.leadin_distance_m
+        on_route_indices = np.where(on_route & moving)[0]
 
         initial_offset = 0.0
         if len(on_route_indices) > 0:
@@ -1044,9 +1047,7 @@ def align_riders_to_game_route(
         route_distances = variants[
             row_indices, best_neighbor, selected_lap
         ]
-        route_distances[deviations >= on_route_threshold_m] = expected_distance[
-            deviations >= on_route_threshold_m
-        ]
+        route_distances[~on_route] = expected_distance[~on_route]
 
         distance_origin = 0.0 if is_late else initial_offset
         route_distances -= distance_origin

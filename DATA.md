@@ -377,8 +377,9 @@ For each `rank*_*.csv` file:
 
 **If the WAD route has no lead-in checkpoints:**
 
-- Use raw Zwift distance while the rider is off the calibrated main lap
-- Estimate the pen offset when the rider joins the main lap, then rebase on-time riders to 0
+- For on-time riders, use raw Zwift distance through the known lead-in distance, even if the pen approach overlaps a later pass of the main lap
+- Only estimate the pen offset and apply GPS corrections after that lead-in; then rebase on-time riders to 0
+- True late joiners can still match directly to their starting position on the main lap
 - Retain the previous telemetry-altitude fallback because no authoritative lead-in elevation exists
 
 **If WAD/ZwiftMap calibration fails** → `align_riders_to_route()` retains the previous heuristic alignment.

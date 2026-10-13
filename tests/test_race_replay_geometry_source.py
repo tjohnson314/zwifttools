@@ -2,6 +2,7 @@ from unittest.mock import Mock, patch
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from race_replay.data_cleaner import (
     CalibratedGameRoute,
@@ -189,3 +190,61 @@ def test_on_time_starters_use_first_pass_of_overlapping_route():
         aligned[2]["data"]["distance_km"], 7.0 + np.arange(40) * 0.01,
         atol=0.001,
     )
+
+
+@pytest.mark.parametrize("detect_late_joiners", [True, False])
+def test_missing_leadin_geometry_does_not_match_a_later_route_pass(detect_late_joiners):
+    main_gps = np.column_stack([
+        np.zeros(100), 0.005 + np.arange(100) * 0.0001,
+    ])
+    pen_gps = np.column_stack([
+        np.zeros(40), np.arange(40) * 0.0001,
+    ])
+    route = CalibratedGameRoute(
+        route_name="Missing Lead-in",
+        leadin_distance_m=500.0,
+        lap_distance_m=19390.0,
+        leadin_distance=np.array([]),
+        leadin_altitude=np.array([]),
+        leadin_latlng=np.empty((0, 2)),
+        route_distance=np.concatenate([
+            np.arange(100) * 10.0, 19000.0 + np.arange(40) * 10.0,
+        ]),
+        route_altitude=np.zeros(140),
+        route_latlng=np.vstack([main_gps, pen_gps]),
+        horizontal_p95_m=3.0,
+    )
+    gps = np.vstack([pen_gps, main_gps])
+    distances = np.concatenate([
+        np.arange(40) * 0.01, 0.5 + np.arange(100) * 0.01,
+    ])
+    rider = {
+        "activity_start_time": "2026-10-13T04:06:34Z",
+        "data": pd.DataFrame({
+            "distance_km": distances,
+            "lat": gps[:, 0],
+            "lng": gps[:, 1],
+            "speed_kmh": np.full(140, 36.0),
+        }),
+    }
+    late_rider = {
+        "activity_start_time": "2026-10-13T04:11:00Z",
+        "data": rider["data"].iloc[:40].copy(),
+    }
+
+    aligned, _ = align_riders_to_game_route(
+        [rider, late_rider] if detect_late_joiners else [rider],
+        route,
+        race_start_time="2026-10-13T04:10:00Z",
+        detect_late_joiners=detect_late_joiners,
+    )
+
+    np.testing.assert_allclose(
+        aligned[0]["data"]["distance_km"], distances, atol=0.001,
+    )
+    if detect_late_joiners:
+        np.testing.assert_allclose(
+            aligned[1]["data"]["distance_km"],
+            19.5 + np.arange(40) * 0.01,
+            atol=0.001,
+        )
