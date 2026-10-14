@@ -351,6 +351,7 @@ For each `rank*_*.csv` file:
 
 - `load_game_route_profile()` resolves `race_meta.json.route_id` directly against the WAD route `nameHash` in `zwift_routes/index.json`
 - Each WAD profile contains distance, altitude, and local-world `x/z` coordinates for the lead-in and main lap
+- Lead-in checkpoints can omit the pen approach. Anchor the last checkpoint at the declared lead-in distance, preserving checkpoint spacing rather than stretching it. GPS projection, altitude calibration, and elevation profiles use this same axis, avoiding a distance jump at the main-lap join.
 - `calibrate_game_route()` fits the WAD main lap to the existing ZwiftMap main-route data:
    - affine `x/z → lat/lng` transform
    - linear raw-altitude → exported-altitude transform
@@ -359,7 +360,7 @@ For each `rank*_*.csv` file:
 
 **Full-course projection:**
 
-- Combine `[lead-in distance] + [leadin_distance + lap distance]` on an absolute race axis beginning at 0
+- Combine `[lead-in distance] + [leadin_distance + lap distance]` on an absolute race axis; if pen checkpoints are missing, the known geometry begins after 0
 - Query the complete path's `cKDTree` for K=12 nearest route points
 - KD-tree uses latitude-scaled coordinates: `[lat, lng × cos(median_lat)]`
 - Repeat only main-lap candidates for multi-lap races; lead-in candidates can occur only once

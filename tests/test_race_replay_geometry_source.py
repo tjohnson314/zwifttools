@@ -9,7 +9,9 @@ from race_replay.data_cleaner import (
     CleanedRaceData,
     RiderData,
     align_riders_to_game_route,
+    build_game_elevation_profile,
     build_replay_route_segments,
+    load_game_route_profile,
     load_preferred_route_geometry,
 )
 from tools.extract_zwift_routes import parse_segment_definitions
@@ -141,6 +143,50 @@ def test_strava_is_used_only_when_zwift_geometry_is_unavailable():
     assert calibrated is None
     assert route_data is strava_route
     assert source == "zwiftmap_strava"
+
+
+def test_volcano_leadin_preserves_checkpoint_spacing_and_joins_main_lap():
+    profile = load_game_route_profile(686828068, "Volcano Circuit")
+
+    assert profile is not None
+    assert profile.leadin_distance[-1] == pytest.approx(profile.leadin_distance_m)
+    assert profile.leadin_distance[0] == pytest.approx(211.72)
+    assert np.ptp(profile.leadin_distance) == pytest.approx(2546.38)
+
+    route, _, _ = load_preferred_route_geometry(
+        686828068, "Volcano Circuit", "volcano-circuit", None,
+    )
+    elevation = build_game_elevation_profile(
+        route, route.leadin_distance_m + route.lap_distance_m,
+    )
+    np.testing.assert_allclose(
+        elevation["distance_km"].to_numpy()[:len(route.leadin_distance) - 1],
+        route.leadin_distance[:-1] / 1000.0,
+    )
+    assert elevation["distance_km"].is_monotonic_increasing
+
+
+def test_volcano_projection_does_not_add_missing_pen_approach_at_lap_join():
+    route, _, _ = load_preferred_route_geometry(
+        686828068, "Volcano Circuit", "volcano-circuit", None,
+    )
+    # Start at the first available checkpoint, not the unrecorded pen approach.
+    gps = np.vstack([route.leadin_latlng[:-1], route.route_latlng])
+    traveled_m = np.concatenate([
+        route.leadin_distance[:-1] - route.leadin_distance[0],
+        np.ptp(route.leadin_distance) + route.route_distance,
+    ])
+    rider = {"data": pd.DataFrame({
+        "distance_km": traveled_m / 1000.0,
+        "lat": gps[:, 0], "lng": gps[:, 1],
+        "speed_kmh": np.full(len(gps), 36.0),
+    })}
+
+    aligned, _ = align_riders_to_game_route([rider], route)
+
+    np.testing.assert_allclose(
+        aligned[0]["data"]["distance_km"], traveled_m / 1000.0, atol=0.015,
+    )
 
 
 def test_on_time_starters_use_first_pass_of_overlapping_route():

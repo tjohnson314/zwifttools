@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # Bump this version when data cleaning logic changes in a way that invalidates
 # previously cached results.  The cache loader will discard stale caches.
-CLEANING_VERSION = 38
+CLEANING_VERSION = 39
 
 # Grace period after the official race start before a rider is treated as a
 # "late joiner".  Riders routinely begin recording / cross the start banner a
@@ -543,13 +543,20 @@ def load_game_route_profile(
         world_scale = get_world_altitude_scale(int(route['mapID']))
         leadin_alt = np.asarray(leadin['alt'], dtype=float) * world_scale
         route_alt = np.asarray(main['alt'], dtype=float) * world_scale
+        leadin_distance = np.asarray(leadin['d'], dtype=float)
+        if len(leadin_distance) > 0:
+            # Checkpoints can omit the pen approach; anchor their end at the
+            # lap join without stretching the recorded checkpoint spacing.
+            leadin_distance = leadin_distance + (
+                float(route['leadin_distance_m']) - leadin_distance[-1]
+            )
         return GameRouteProfile(
             name_hash=int(route['nameHash']),
             route_name=route['name'],
             map_id=int(route['mapID']),
             distance_m=float(route['distance_m']),
             leadin_distance_m=float(route['leadin_distance_m']),
-            leadin_distance=np.asarray(leadin['d'], dtype=float),
+            leadin_distance=leadin_distance,
             leadin_altitude=leadin_alt,
             leadin_x=np.asarray(leadin.get('x', []), dtype=float),
             leadin_z=np.asarray(leadin.get('z', []), dtype=float),
@@ -1074,15 +1081,7 @@ def build_game_elevation_profile(
 ) -> pd.DataFrame:
     """Build lead-in plus repeated-lap elevation on the absolute race axis."""
     if route.has_leadin:
-        leadin_span_m = route.leadin_distance[-1] - route.leadin_distance[0]
-        if leadin_span_m > 0:
-            normalized_leadin_distance = (
-                (route.leadin_distance - route.leadin_distance[0])
-                * route.leadin_distance_m / leadin_span_m
-            )
-        else:
-            normalized_leadin_distance = route.leadin_distance
-        distance_parts = [normalized_leadin_distance[:-1]]
+        distance_parts = [route.leadin_distance[:-1]]
         altitude_parts = [route.leadin_altitude[:-1]]
     else:
         distance_parts = []
