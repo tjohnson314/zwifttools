@@ -140,6 +140,22 @@
             position: relative;
             height: 350px;
         }
+        .position-gap-summary {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            gap: 8px 20px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255,255,255,0.08);
+            color: #aaa;
+            font-size: 0.85rem;
+        }
+        .position-gap-rider {
+            min-width: 0;
+            max-width: 100%;
+            overflow-wrap: anywhere;
+        }
 
         .team-roster {
             display: flex;
@@ -528,6 +544,7 @@
                 <div class="chart-wrapper">
                     <canvas id="positionDeviationChart"></canvas>
                 </div>
+                <div class="position-gap-summary" id="positionGapSummary" aria-live="polite"></div>
             </div>
 
             <div class="chart-container">
@@ -1624,16 +1641,37 @@
 
     }
 
+    function averageRiderGap(rider, lo, hi) {
+        const series = rider.gap_ahead;
+        if (!series) return null;
+        let total = 0;
+        let count = 0;
+        series.distance_km.forEach((distance, index) => {
+            const gap = series.gap_m[index];
+            if (distance >= lo && distance <= hi && Number.isFinite(gap) && gap <= 25) {
+                total += gap;
+                count++;
+            }
+        });
+        return count ? total / count : null;
+    }
+
     function renderPositionDeviationChart(teams, focusedTeam, lo, hi) {
         if (positionDeviationChartInstance) positionDeviationChartInstance.destroy();
         positionDeviationChartInstance = null;
 
         const container = document.getElementById('positionDeviationContainer');
+        const gapSummary = document.getElementById('positionGapSummary');
+        gapSummary.replaceChildren();
         if (!focusedTeam) {
             container.style.display = 'none';
             return;
         }
 
+        const summaryLabel = document.createElement('span');
+        summaryLabel.textContent = 'Average gap ahead:';
+        summaryLabel.title = 'Non-leading samples with gaps up to 25 m';
+        gapSummary.appendChild(summaryLabel);
         const chartTeams = [focusedTeam];
         const datasets = [];
         let colorIndex = 0;
@@ -1657,6 +1695,12 @@
                     tension: 0.15,
                     spanGaps: false,
                 });
+                const average = averageRiderGap(rider, lo, hi);
+                const summary = document.createElement('span');
+                summary.className = 'position-gap-rider';
+                summary.style.color = color;
+                summary.textContent = `${rider.name}: ${average == null ? 'N/A' : average.toFixed(1) + ' m'}`;
+                gapSummary.appendChild(summary);
             });
         });
 

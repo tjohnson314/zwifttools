@@ -223,3 +223,48 @@ def test_position_deviation_leader_axis_never_moves_backwards():
 
     for rider in team["position_deviation"]["riders"]:
         assert np.all(np.diff(rider["distance_km"]) > 0)
+
+
+def test_position_gaps_use_next_rider_and_exclude_tied_leaders():
+    distances_by_rider = {
+        "leader": [100, 110, 120, 130, 140, 150],
+        "middle": [90, 100, 120, 110, 140, 140],
+        "rear": [85, 90, 100, 80, 115, 100],
+    }
+    processed = {}
+    for activity_id, distances in distances_by_rider.items():
+        rider = _rider_with_distance(distances)
+        rider.update({"name": activity_id, "activity_id": activity_id})
+        processed[activity_id] = rider
+
+    team = app_module._build_ttt_team_results(
+        processed, {activity_id: "RTB" for activity_id in processed}, ["RTB"]
+    )[0]
+    riders = {
+        rider["activity_id"]: rider
+        for rider in team["position_deviation"]["riders"]
+    }
+
+    assert riders["leader"]["gap_ahead"]["gap_m"] == [None] * 6
+    assert riders["middle"]["gap_ahead"]["gap_m"] == [10, 10, None, 20, None, 10]
+    assert riders["rear"]["gap_ahead"]["gap_m"] == [5, 10, 20, 30, 25, 40]
+    assert riders["rear"]["gap_ahead"]["distance_km"] == [
+        0.1, 0.11, 0.12, 0.13, 0.14, 0.15,
+    ]
+
+
+def test_position_gaps_preserve_samples_when_leader_distance_stalls():
+    leader = _rider_with_distance([100, 100, 100, 110])
+    leader.update({"name": "Leader", "activity_id": "leader"})
+    follower = _rider_with_distance([90, 92, 94, 100])
+    follower.update({"name": "Follower", "activity_id": "follower"})
+
+    team = app_module._build_ttt_team_results(
+        {"leader": leader, "follower": follower},
+        {"leader": "RTB", "follower": "RTB"},
+        ["RTB"],
+    )[0]
+
+    rider = team["position_deviation"]["riders"][1]
+    assert rider["gap_ahead"]["gap_m"] == [10, 8, 6, 10]
+    assert rider["gap_ahead"]["distance_km"] == [0.1, 0.1, 0.1, 0.11]

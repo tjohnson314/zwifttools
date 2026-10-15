@@ -5740,7 +5740,12 @@ def _build_ttt_team_results(all_processed, team_assignments, tag_order):
         for row_index, (rd, in_range, _) in enumerate(position_rows):
             valid = in_range & np.isfinite(leader_position_m)
             rider_leader_progress = leader_progress_m[valid]
-            deviations = position_matrix[row_index, valid] - leader_position_m[valid]
+            rider_positions = position_matrix[row_index, valid]
+            deviations = rider_positions - leader_position_m[valid]
+            distances_ahead = position_matrix[:, valid] - rider_positions
+            gap_ahead_m = np.min(
+                np.where(distances_ahead > 0, distances_ahead, np.inf), axis=0
+            )
             distance_km = np.round(rider_leader_progress / 1000.0, 5)
             keep = np.r_[np.diff(distance_km) > 0, True]
             position_deviation_riders.append({
@@ -5748,6 +5753,11 @@ def _build_ttt_team_results(all_processed, team_assignments, tag_order):
                 'activity_id': rd['activity_id'],
                 'distance_km': distance_km[keep].tolist(),
                 'deviation_m': [round(float(v), 2) for v in deviations[keep]],
+                'gap_ahead': {
+                    'distance_km': distance_km.tolist(),
+                    'gap_m': [float(gap) if np.isfinite(gap) else None
+                              for gap in gap_ahead_m],
+                },
             })
 
         unique_secs = np.unique(cat_times)
