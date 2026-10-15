@@ -1,15 +1,15 @@
 {
     "manifest_version": 1,
     "name": "Nearby Draft",
-    "description": "Effective draft for every rider within 15 seconds of you",
-    "version": "0.1.0",
+    "description": "Live draft map with configurable radius and closest-rider display limit",
+    "version": "0.2.0",
     "author": "zwifttools",
     "windows": [{
         "id": "nearby-draft",
         "file": "nearby-draft.html",
         "name": "Nearby Draft",
-        "description": "Nearby riders' effective draft and residual summary",
+        "description": "Rider positions with effective, wasted, and remaining draft donuts",
         "overlay": true,
-        "default_bounds": {"width": 400, "height": 520}
+        "default_bounds": {"width": 560, "height": 600}
     }]
 }

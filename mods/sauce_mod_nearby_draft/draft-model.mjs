@@ -1,6 +1,8 @@
 import {MODEL} from './bike-model.mjs';
 
 export const DEFAULTS = {
+    radiusM: 50,
+    maxRiders: 0,
     frameId: 'Zwift_TT',
     wheelId: '',
     upgradeLevel: 5,
@@ -32,6 +34,61 @@ export function summarizeDraft(values) {
         percent: maxDraft > 0 ? effective / maxDraft * 100 : null};
 }
 
+export function positionOffset(origin, state) {
+    if (!origin || !state || origin.courseId == null || origin.courseId !== state.courseId) return null;
+    if ([origin.x, origin.y, state.x, state.y].every(Number.isFinite)) {
+        return {x: (state.x - origin.x) / 100, y: (state.y - origin.y) / 100};
+    }
+    const valid = point => Array.isArray(point) && point.length >= 2 &&
+        Number.isFinite(point[0]) && Number.isFinite(point[1]);
+    if (!valid(origin.latlng) || !valid(state.latlng)) return null;
+    const radians = Math.PI / 180;
+    return {
+        x: 6371000 * (state.latlng[1] - origin.latlng[1]) * radians * Math.cos(origin.latlng[0] * radians),
+        y: -6371000 * (state.latlng[0] - origin.latlng[0]) * radians,
+    };
+}
+
+export function selectSpatialNearby(entries, self, radiusM = DEFAULTS.radiusM) {
+    if (!Array.isArray(entries) || self?.athleteId == null || !positionOffset(self.state, self.state)) return [];
+    const unique = new Map(entries.filter(entry => entry.athleteId != null)
+        .map(entry => [String(entry.athleteId), entry]));
+    unique.set(String(self.athleteId), self);
+    return [...unique.values()].flatMap(entry => {
+        const position = positionOffset(self.state, entry.state);
+        if (!position) return [];
+        const distance = Math.hypot(position.x, position.y);
+        return distance <= radiusM ? [{...entry, position, distance,
+            isSelf: String(entry.athleteId) === String(self.athleteId)}] : [];
+    }).sort((left, right) => left.distance - right.distance || Number(right.isSelf) - Number(left.isSelf));
+}
+
+export function selectDisplayedRiders(entries, self, settings = DEFAULTS) {
+    const withinRadius = selectSpatialNearby(entries, self, settings.radiusM);
+    return {
+        riders: settings.maxRiders > 0 ? withinRadius.slice(0, settings.maxRiders) : withinRadius,
+        actual: withinRadius.length,
+    };
+}
+
+export function riderInitials(athlete, athleteId) {
+    const name = (athlete?.sanitizedFullname || '').replace(/\[[^\]]*\]|\([^)]*\)/g, '').trim();
+    const parts = name.split(/\s+/).filter(Boolean);
+    if (!parts.length) return String(athleteId).slice(-2);
+    return (Array.from(parts[0])[0] + (parts.length > 1 ? Array.from(parts[parts.length - 1])[0] : '')).toUpperCase();
+}
+
+export function donutSegments(summary) {
+    const values = [summary.effective, summary.residual,
+        summary.maxDraft - summary.effective - summary.residual];
+    const total = values.reduce((sum, value) => sum + Math.abs(value), 0);
+    return {
+        values,
+        fractions: total > 0 ? values.map(value => Math.abs(value) / total) : [0, 0, 1],
+        signed: values.some(value => value < 0),
+    };
+}
+
 export function draftGeometry(summary) {
     const greenStart = Math.min(0, summary.effective);
     const greenEnd = Math.max(0, summary.effective);
@@ -57,6 +114,102 @@ function groundDistance(left, right) {
     const longitude = (right[1] - left[1]) * radians *
         Math.cos((left[0] + right[0]) * 0.5 * radians);
     return 6371000 * Math.hypot(latitude, longitude);
+}
+
+export class PositionInterpolator {
+    constructor() {
+        this.riders = new Map();
+        this.clock = null;
+        this.timestamped = false;
+        this.delayMs = 1000;
+    }
+
+    retain(ids) {
+        const active = new Set(ids.map(String));
+        for (const id of this.riders.keys()) {
+            if (!active.has(id)) this.riders.delete(id);
+        }
+    }
+
+    update(athleteId, state, now) {
+        const id = String(athleteId);
+        if (!positionOffset(state, state)) {
+            this.riders.delete(id);
+            return;
+        }
+        const timestamped = Number.isFinite(state.worldTime);
+        if (timestamped && !this.timestamped) {
+            this.riders.clear();
+            this.clock = null;
+            this.timestamped = true;
+        }
+        const time = timestamped ? state.worldTime : this.clock ?
+            this.clock.time + now - this.clock.receivedAt : now;
+        let previous = this.riders.get(id);
+        const native = Number.isFinite(state.x) && Number.isFinite(state.y);
+        const latest = previous?.samples[previous.samples.length - 1];
+        if (latest && (latest.state.courseId !== state.courseId || time < latest.time - 3000)) {
+            this.riders.clear();
+            this.clock = null;
+            previous = null;
+        } else if (latest && time <= latest.time) {
+            return;
+        }
+        if (previous && (previous.native !== native || now - previous.receivedAt >= 3000 || time - latest.time >= 3000)) previous = null;
+        const target = {...state, latlng: state.latlng ? [...state.latlng] : state.latlng};
+        const samples = previous?.samples || [];
+        samples.push({time, state: target});
+        while (samples.length > 2 && samples[1].time < time - 5000) samples.shift();
+        this.riders.set(id, {samples, native, receivedAt: now});
+        if (!this.clock || time > this.clock.time) this.clock = {time, receivedAt: now};
+    }
+
+    timeline(now, referenceId = this.riders.keys().next().value) {
+        const reference = this.riders.get(String(referenceId));
+        if (!reference || !this.clock) return null;
+        const start = reference.samples[0].time;
+        let end = reference.samples[reference.samples.length - 1].time;
+        for (const {samples, receivedAt} of this.riders.values()) {
+            const latest = samples[samples.length - 1].time;
+            if (samples.length > 1 && now - receivedAt < 3000 && latest >= start) {
+                end = Math.min(end, latest);
+            }
+        }
+        return {time: Math.max(start, Math.min(end,
+            this.clock.time + now - this.clock.receivedAt - this.delayMs)), end};
+    }
+
+    latencyMs(now, displayedTime = this.timeline(now)?.time) {
+        if (!this.clock || !Number.isFinite(displayedTime)) return null;
+        return this.clock.time + now - this.clock.receivedAt - displayedTime;
+    }
+
+    sample(athleteId, now, timeline = this.timeline(now)) {
+        const motion = this.riders.get(String(athleteId));
+        if (!motion || !timeline) return null;
+        if (timeline.time < motion.samples[0].time ||
+            timeline.time > motion.samples[motion.samples.length - 1].time) return null;
+        let index = 0;
+        while (index < motion.samples.length - 2 && motion.samples[index + 1].time < timeline.time) index++;
+        const from = motion.samples[index];
+        const target = motion.samples[index + 1] || from;
+        const fraction = target.time > from.time ? (timeline.time - from.time) / (target.time - from.time) : 1;
+        const state = {...target.state};
+        if (Number.isFinite(state.worldTime)) state.worldTime = timeline.time;
+        if (motion.native) {
+            state.x = from.state.x + (target.state.x - from.state.x) * fraction;
+            state.y = from.state.y + (target.state.y - from.state.y) * fraction;
+        } else {
+            state.latlng = target.state.latlng.map((value, coordinate) =>
+                from.state.latlng[coordinate] + (value - from.state.latlng[coordinate]) * fraction);
+        }
+        return state;
+    }
+
+    isAnimating(now, referenceId) {
+        const timeline = this.timeline(now, referenceId);
+        return timeline != null && timeline.time < timeline.end;
+    }
 }
 
 export class DraftTracker {

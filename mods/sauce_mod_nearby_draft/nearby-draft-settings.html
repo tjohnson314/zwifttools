@@ -25,6 +25,11 @@
     <div id="content">
         <form id="options" class="section">
             <fieldset>
+                <legend>Nearby riders</legend>
+                <label>Radius (m) <input type="number" data-set="radiusM" min="1" step="1" required/></label>
+                <label>Max riders (0 = unlimited) <input type="number" data-set="maxRiders" min="0" step="1" required/></label>
+            </fieldset>
+            <fieldset>
                 <legend>Bike assumption (all riders)</legend>
                 <label>Frame <select data-set="frameId"></select></label>
                 <label>Wheels <select data-set="wheelId"></select></label>

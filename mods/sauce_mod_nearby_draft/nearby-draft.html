@@ -24,7 +24,7 @@
             <div class="title">Nearby Draft</div>
             <div class="filler"></div>
             <div class="buttons">
-                <a class="button open-settings" href="nearby-draft-settings.html?width=380&amp;height=440&amp;child-window"
+                <a class="button open-settings" href="nearby-draft-settings.html?width=380&amp;height=520&amp;child-window"
                    title="Open settings" target="nearby-draft-settings"><ms>settings</ms></a>
                 <div title="Minimize" class="button minimize electron-only"><ms>minimize</ms></div>
                 <div title="Close" class="button close electron-only"><ms>close</ms></div>
@@ -32,9 +32,31 @@
         </header>
     </div>
     <main id="content">
-        <div class="list-head"><span>Effective draft</span><span class="rider-count">0 riders</span></div>
-        <div class="empty" role="status">Waiting for rider data...</div>
-        <div class="draft-rows" aria-label="Nearby riders"></div>
+        <div class="list-head">
+            <span class="radius-label">50 m radius</span>
+            <span class="position-latency" title="Estimated age of the displayed positions, including the playback buffer">Latency: --</span>
+            <span class="rider-count">0/0 riders</span>
+        </div>
+        <div class="draft-map" aria-label="Rider positions within 50 metres">
+            <canvas class="road-map" aria-hidden="true"></canvas>
+            <div class="empty" role="status">Waiting for rider data...</div>
+            <div class="map-controls">
+                <button type="button" data-zoom="1.5" title="Zoom in" aria-label="Zoom in"><ms>add</ms></button>
+                <button type="button" data-zoom="0.6666667" title="Zoom out" aria-label="Zoom out"><ms>remove</ms></button>
+                <button type="button" data-zoom="reset" title="Show full 50 m radius" aria-label="Reset zoom"><ms>center_focus</ms></button>
+            </div>
+            <div class="map-scale">10 m</div>
+            <div class="map-status" role="status"></div>
+        </div>
+        <div class="legend" aria-label="Draft colors">
+            <span class="effective">Effective</span><span class="wasted">Wasted</span><span class="remaining">Remaining</span>
+        </div>
+        <section class="rider-details" aria-label="Selected rider" hidden>
+            <div class="detail-head"><span class="detail-name"></span><span class="detail-distance"></span></div>
+            <div class="detail-values">
+                <span class="effective-value"></span><span class="wasted-value"></span><span class="remaining-value"></span>
+            </div>
+        </section>
     </main>
 </body>
 </html>
