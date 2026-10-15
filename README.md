@@ -87,6 +87,9 @@ Standalone browser overlays for [Sauce4Zwift](https://www.sauce.llc/), installed
 | **Surface Telemetry** | `sauce_mod_surface_telemetry/` | Records your telemetry with manual surface type tagging (Tarmac, Cobbles, Brick, Wood, Dirt, Gravel) for CRR mapping. Exports CSV. |
 | **Team Race Score** | `sauce_mod_team_race/` | Live team race scoreboard — tracks two teams across categories with 3/2/1 point scoring, gap-to-rival, and power stats. |
 | **Race Telemetry** | `sauce_mod_telemetry/` | Records per-second telemetry for all nearby riders (power, HR, speed, cadence, location, draft). Exports rider telemetry + profiles as separate CSVs. |
+| **Nearby Draft** | `sauce_mod_nearby_draft/` | Live road map with initials-centered draft donuts at actual rider positions: green effective draft, blue wasted watts, gray remaining maximum draft. Configurable radius (default 50 m) and closest-rider limit (0 = unlimited), with displayed/actual rider counts including you. Zoomable; negative segments are dashed and flagged rather than clipped. Uses each rider's Zwift weight/height, automatic road surfaces, and a configurable shared bike assumption. |
+
+Nearby Draft interpolates all rider positions, displayed distances, and camera motion at approximately 30 Hz using one shared delayed game timestamp. Playback has a one-second buffer anchored to your position history. New or stale riders wait individually until their history covers the displayed timestamp, without hiding the rest of the group or extrapolating positions. Draft values and radius filtering continue to use the actual telemetry.
 
 ## Data Sources
 

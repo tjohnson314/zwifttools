@@ -1,0 +1,66 @@
+html, body {
+    margin: 0;
+    padding: 0;
+    color: #e8e8e8;
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 16px;
+    letter-spacing: 0;
+}
+
+* { box-sizing: border-box; }
+html:not(.settings-page), html:not(.settings-page) body { height: 100%; }
+html:not(.settings-page) body { display: flex; flex-direction: column; }
+#titlebar { flex-shrink: 0; }
+#content { padding: 8px 10px 10px; }
+html:not(.settings-page) #content { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.list-head {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px 6px;
+    margin-bottom: 4px;
+    color: #9aa;
+    font-size: 13px;
+}
+.list-head > span { min-width: 0; overflow-wrap: anywhere; }
+.position-latency { text-align: center; font-variant-numeric: tabular-nums; }
+.rider-count { text-align: right; }
+.empty { position: absolute; inset: 42% 10px auto; z-index: 2; text-align: center; color: #9aa; overflow-wrap: anywhere; }
+.empty[hidden] { display: none; }
+.draft-map { position: relative; flex: 1; min-height: 180px; overflow: hidden; background: rgba(18, 24, 27, 0.92); }
+.road-map { position: absolute; inset: 0; width: 100%; height: 100%; }
+.rider-marker { position: absolute; width: 36px; height: 36px; margin: 0; padding: 0; border: 0; border-radius: 50%; background: #1c2327; color: #fff; transform: translate(-50%, -50%); cursor: pointer; z-index: 1; }
+.rider-marker.self { outline: 2px solid #e8e8e8; outline-offset: 2px; }
+.rider-marker.selected, .rider-marker:hover, .rider-marker:focus-visible { z-index: 3; box-shadow: 0 0 0 2px #e5c96b; }
+.donut { position: absolute; inset: 0; width: 36px; height: 36px; }
+.initials { position: absolute; inset: 0; display: grid; place-items: center; font-size: 11px; line-height: 1; font-weight: 700; pointer-events: none; }
+.signed-flag { display: none; position: absolute; right: -3px; top: -5px; width: 12px; height: 12px; border-radius: 50%; background: #e5c96b; color: #171c1f; font-size: 10px; font-weight: 700; }
+.signed .signed-flag { display: block; }
+.map-controls { position: absolute; top: 8px; right: 8px; display: flex; gap: 3px; z-index: 4; }
+.map-controls button { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid #73828a; border-radius: 3px; color: #e8e8e8; background: #222c31; cursor: pointer; }
+.map-controls ms { font-size: 19px; }
+.map-scale { position: absolute; bottom: 8px; left: 10px; border: solid #b8c4ca; border-width: 0 1px 2px; text-align: center; font-size: 11px; line-height: 18px; white-space: nowrap; pointer-events: none; }
+.map-status { position: absolute; bottom: 8px; right: 8px; max-width: 60%; font-size: 11px; color: #b2bfc5; text-align: right; pointer-events: none; }
+.legend, .detail-values { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; font-size: 12px; padding-top: 8px; }
+.legend span { display: flex; align-items: center; gap: 5px; }
+.legend span::before { content: ''; width: 7px; height: 7px; flex-shrink: 0; border-radius: 50%; background: #737b80; }
+.legend .effective::before { background: #45a86e; }
+.legend .wasted::before { background: #4c8fd6; }
+.rider-details { margin-top: 8px; padding-top: 8px; border-top: 1px solid #ffffff20; font-variant-numeric: tabular-nums; }
+.rider-details[hidden] { display: none; }
+.detail-head { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.detail-name { min-width: 0; overflow-wrap: anywhere; }
+.detail-distance { flex-shrink: 0; color: #abb8bf; }
+.detail-values { padding-top: 4px; }
+.effective-value { color: #72cf98; }
+.wasted-value { color: #7eafe3; }
+.remaining-value { color: #b6bfc4; }
+
+.settings-page #options { padding: 4px 2px; }
+.settings-page fieldset { min-width: 0; margin: 0 0 12px; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 4px; }
+.settings-page legend { max-width: 100%; color: #cfd3d6; overflow-wrap: anywhere; }
+.settings-page label { overflow-wrap: anywhere; }
+.settings-page select { width: 100%; min-width: 0; max-width: 100%; }
+.settings-page input[type="number"] { width: 6em; max-width: 100%; }
+@media (max-width: 280px) {
+    .detail-head { flex-wrap: wrap; }
+}

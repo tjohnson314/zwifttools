@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html class="settings-page" tabindex="0" data-settings-key="nearby-draft-settings-v1">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';"/>
+    <title>Nearby Draft Settings - Sauce for Zwift</title>
+    <script src="/pages/src/preloads.js"></script>
+    <link rel="stylesheet" href="/pages/css/common.css"/>
+    <link rel="stylesheet" href="/pages/css/settings.css"/>
+    <link rel="stylesheet" href="nearby-draft.css"/>
+    <script type="module">
+        import {settingsMain} from './nearby-draft.mjs';
+        settingsMain();
+    </script>
+</head>
+<body>
+    <div id="titlebar">
+        <header>
+            <div class="title">Nearby Draft Settings</div>
+            <div class="filler"></div>
+            <div class="buttons"><div title="Close" class="button close electron-only"><ms>close</ms></div></div>
+        </header>
+    </div>
+    <div id="content">
+        <form id="options" class="section">
+            <fieldset>
+                <legend>Nearby riders</legend>
+                <label>Radius (m) <input type="number" data-set="radiusM" min="1" step="1" required/></label>
+                <label>Max riders (0 = unlimited) <input type="number" data-set="maxRiders" min="0" step="1" required/></label>
+            </fieldset>
+            <fieldset>
+                <legend>Bike assumption (all riders)</legend>
+                <label>Frame <select data-set="frameId"></select></label>
+                <label>Wheels <select data-set="wheelId"></select></label>
+                <label>Upgrade level <select data-set="upgradeLevel">
+                    <option value="0">0 (stock)</option><option value="1">1</option>
+                    <option value="2">2</option><option value="3">3</option>
+                    <option value="4">4</option><option value="5">5</option>
+                </select></label>
+            </fieldset>
+            <fieldset>
+                <legend>Missing rider data</legend>
+                <label>Weight (kg) <input type="number" data-set="weightKg" min="1" step="0.1" required/></label>
+                <label>Height (cm) <input type="number" data-set="heightCm" min="1" step="1" required/></label>
+            </fieldset>
+            <fieldset>
+                <legend>Model</legend>
+                <label>Smoothing (s) <input type="number" data-set="smoothSec" min="0.5" step="0.5" required/></label>
+                <label><input type="checkbox" data-set="physicalSpeed"/> Physical speed</label>
+            </fieldset>
+        </form>
+    </div>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+    "manifest_version": 1,
+    "name": "Nearby Draft",
+    "description": "Live draft map with configurable radius and closest-rider display limit",
+    "version": "0.2.0",
+    "author": "zwifttools",
+    "windows": [{
+        "id": "nearby-draft",
+        "file": "nearby-draft.html",
+        "name": "Nearby Draft",
+        "description": "Rider positions with effective, wasted, and remaining draft donuts",
+        "overlay": true,
+        "default_bounds": {"width": 560, "height": 600}
+    }]
+}
