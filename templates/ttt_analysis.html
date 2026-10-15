@@ -140,6 +140,22 @@
             position: relative;
             height: 350px;
         }
+        .position-chart-header {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .position-chart-header h3 { margin-bottom: 0; }
+        .position-axis-control {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #aaa;
+            font-size: 0.85rem;
+        }
         .position-gap-summary {
             display: flex;
             flex-wrap: wrap;
@@ -540,7 +556,14 @@
             </div>
 
             <div class="chart-container" id="positionDeviationContainer" style="display:none">
-                <h3>Rider Position Relative to Team Leader</h3>
+                <div class="position-chart-header">
+                    <h3>Rider Position Relative to Team Leader</h3>
+                    <label class="position-axis-control" for="positionMaxGap">
+                        Max gap (m)
+                        <input id="positionMaxGap" class="rider-offset-input" type="number" min="0" step="any"
+                               placeholder="Auto" onchange="updatePositionYAxisRange()">
+                    </label>
+                </div>
                 <div class="chart-wrapper">
                     <canvas id="positionDeviationChart"></canvas>
                 </div>
@@ -1656,6 +1679,27 @@
         return count ? total / count : null;
     }
 
+    function positionYAxisBounds(value) {
+        const range = Number(value);
+        return Number.isFinite(range) && range > 0
+            ? { min: -range, max: 0 }
+            : { min: undefined, max: undefined };
+    }
+
+    function updatePositionYAxisRange() {
+        const input = document.getElementById('positionMaxGap');
+        input.setCustomValidity('');
+        if (input.value !== '' && Number(input.value) <= 0) {
+            input.setCustomValidity('Enter a positive range, or clear for automatic scaling.');
+        }
+        if (!input.reportValidity() || !positionDeviationChartInstance) return;
+        Object.assign(
+            positionDeviationChartInstance.options.scales.y,
+            positionYAxisBounds(input.value),
+        );
+        positionDeviationChartInstance.update('none');
+    }
+
     function renderPositionDeviationChart(teams, focusedTeam, lo, hi) {
         if (positionDeviationChartInstance) positionDeviationChartInstance.destroy();
         positionDeviationChartInstance = null;
@@ -1742,6 +1786,7 @@
                         grid: { color: 'rgba(255,255,255,0.05)' },
                     },
                     y: {
+                        ...positionYAxisBounds(document.getElementById('positionMaxGap').value),
                         title: { display: true, text: 'Position Relative to Leader (m)', color: '#aaa' },
                         ticks: { color: '#888' },
                         grid: {

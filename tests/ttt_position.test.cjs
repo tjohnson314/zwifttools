@@ -47,3 +47,59 @@ test('average gap is unavailable when no samples qualify or gap data is absent',
     assert.equal(averageRiderGap({}, 0, 3), null);
     assert.equal(averageRiderGap({ gap_ahead: { distance_km: [], gap_m: [] } }, 0, 3), null);
 });
+
+const boundsSource = template.match(/    function positionYAxisBounds\(value\) \{[\s\S]*?\n    \}/)[0];
+const positionYAxisBounds = vm.runInNewContext(`(${boundsSource})`);
+
+test('position axis range shows the requested maximum gap below the leader', () => {
+    assert.equal(positionYAxisBounds('25').min, -25);
+    assert.equal(positionYAxisBounds('25').max, 0);
+    assert.equal(positionYAxisBounds('12.5').min, -12.5);
+});
+
+test('empty or invalid position axis ranges leave automatic scaling enabled', () => {
+    for (const value of ['', '0', '-10', 'invalid', 'Infinity']) {
+        assert.equal(positionYAxisBounds(value).min, undefined);
+        assert.equal(positionYAxisBounds(value).max, undefined);
+    }
+});
+
+test('position axis updates preserve raw dropped-rider data and restore auto scaling', () => {
+    const chart = {
+        data: { datasets: [{ data: [{ x: 1, y: -1000 }] }] },
+        options: { scales: { y: { title: { text: 'Position' } } } },
+        update(mode) { this.lastUpdate = mode; },
+    };
+    const input = {
+        value: '25',
+        setCustomValidity(message) { this.validationMessage = message; },
+        reportValidity() { return !this.validationMessage; },
+    };
+    const context = vm.createContext({
+        positionDeviationChartInstance: chart,
+        positionYAxisBounds,
+        document: { getElementById() { return input; } },
+    });
+    const updateSource = template.match(/    function updatePositionYAxisRange\(\) \{[\s\S]*?\n    \}/)[0];
+    vm.runInContext(updateSource, context);
+    const before = JSON.stringify(chart.data);
+
+    context.updatePositionYAxisRange();
+    assert.equal(chart.options.scales.y.min, -25);
+    assert.equal(chart.options.scales.y.max, 0);
+    assert.equal(chart.lastUpdate, 'none');
+    assert.equal(chart.options.scales.y.title.text, 'Position');
+
+    for (const value of ['0', '-10']) {
+        input.value = value;
+        context.updatePositionYAxisRange();
+        assert.ok(input.validationMessage);
+        assert.equal(chart.options.scales.y.min, -25);
+    }
+
+    input.value = '';
+    context.updatePositionYAxisRange();
+    assert.equal(chart.options.scales.y.min, undefined);
+    assert.equal(chart.options.scales.y.max, undefined);
+    assert.equal(JSON.stringify(chart.data), before);
+});
