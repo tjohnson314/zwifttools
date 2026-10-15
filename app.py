@@ -5324,8 +5324,9 @@ def api_ttt_fetch():
         }
 
     # ---- 5b. Route-project riders for accurate distance alignment ----
-    # Reuse the battle-tested align_riders_to_route() from race_replay
+    # Reuse route geometry and alignment from race_replay.
     route_data = None
+    calibrated_game_route = None
     leadin_m = 0.0
     if route_id:
         from shared.route_lookup import get_route_info as _get_ri
@@ -5333,10 +5334,13 @@ def api_ttt_fetch():
         if ri:
             route_slug = ri['name'].lower().replace(' ', '-').replace("'", "")
             leadin_m = ri.get('leadinDistanceInMeters', 0.0)
-            from race_replay.data_cleaner import load_route_data, align_riders_to_route
-            route_data = load_route_data(route_slug)
+            from race_replay.data_cleaner import load_preferred_route_geometry
+            calibrated_game_route, route_data, _ = load_preferred_route_geometry(
+                route_id, ri['name'], route_slug,
+            )
 
-    if route_data:
+    if calibrated_game_route is not None or route_data is not None:
+        from race_replay.data_cleaner import align_riders_to_game_route, align_riders_to_route
         from scipy.interpolate import interp1d
         import pandas as pd
 
@@ -5370,11 +5374,17 @@ def api_ttt_fetch():
             act_id_order.append(act_id)
 
         if alignment_riders:
-            aligned, _ = align_riders_to_route(
-                alignment_riders, route_data,
-                leadin_distance_m=leadin_m,
-                detect_late_joiners=False,  # TTT: teams start at staggered times, not late joiners
-            )
+            if calibrated_game_route is not None:
+                aligned, _ = align_riders_to_game_route(
+                    alignment_riders, calibrated_game_route,
+                    detect_late_joiners=False,
+                )
+            else:
+                aligned, _ = align_riders_to_route(
+                    alignment_riders, route_data,
+                    leadin_distance_m=leadin_m,
+                    detect_late_joiners=False,
+                )
             # Copy projected distances back into all_processed.
             # On loop courses, route alignment breaks down after the
             # finish line (the route segment is only 1 lap, so post-
@@ -5418,10 +5428,15 @@ def api_ttt_fetch():
                 finish_line_m = sd / 100.0  # cm -> m
                 break
 
-    if finish_line_m and route_data is not None:
+    finish_latlng = (
+        calibrated_game_route.route_latlng
+        if calibrated_game_route is not None
+        else route_data.latlng if route_data is not None else None
+    )
+    if finish_line_m and finish_latlng is not None:
         from race_replay.data_cleaner import compute_ttt_time_offset
-        finish_lat = route_data.latlng[-1, 0]
-        finish_lng = route_data.latlng[-1, 1]
+        finish_lat = finish_latlng[-1, 0]
+        finish_lng = finish_latlng[-1, 1]
 
         elapsed_lookup = {}
         for p in participants:
@@ -5460,9 +5475,7 @@ def api_ttt_fetch():
                 finish_lng=finish_lng,
                 finish_distance_m=finish_line_m,
                 official_time_sec=ems / 1000.0,
-                finish_tangent_latlng=(
-                    route_data.latlng[-1] - route_data.latlng[-2]
-                ),
+                finish_tangent_latlng=finish_latlng[-1] - finish_latlng[-2],
             )
             if offset is not None:
                 chart_shift_sec = -float(offset)
@@ -5476,6 +5489,23 @@ def api_ttt_fetch():
         if offsets_applied:
             logger.info("TTT: applied time offsets to %d / %d riders",
                         offsets_applied, len(all_processed))
+
+    alignment_warnings = []
+    unaligned_count = sum(
+        rd['time_offset_source'] == 'none' for rd in all_processed.values()
+    )
+    if unaligned_count:
+        if finish_latlng is None:
+            reason = 'Route finish geometry is unavailable.'
+        elif not finish_line_m:
+            reason = 'The race finish distance is unavailable.'
+        else:
+            reason = 'An official finish time or a valid GPS finish crossing is missing.'
+        alignment_warnings.append(
+            f'Automatic time alignment unavailable for {unaligned_count} of '
+            f'{len(all_processed)} riders. {reason} '
+            'Their offsets are unset (displayed as 0 s), not verified zero offsets.'
+        )
 
     # Resample all riders to integer-second grid (same as data_cleaner).
     # After TTT offset, timestamps are fractional; this makes all riders
@@ -5535,6 +5565,7 @@ def api_ttt_fetch():
         'race_distance_km': race_distance_km,
         'unassigned': unassigned,
         'team_tags': team_tags,
+        'warnings': alignment_warnings,
     })
 
 

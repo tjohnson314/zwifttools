@@ -1,5 +1,9 @@
+from types import SimpleNamespace
+
 import app as app_module
 import numpy as np
+import pandas as pd
+import pytest
 
 
 def test_parse_ttt_manual_activity_ids_accepts_ids_and_urls():
@@ -211,3 +215,113 @@ def test_reassign_endpoint_applies_and_returns_manual_offset(monkeypatch):
     rider_json = response.get_json()["teams"][0]["riders"][0]
     assert rider_json["is_manual"] is True
     assert rider_json["time_offset_sec"] == 12.0
+
+
+@pytest.mark.parametrize("geometry_source", ["zwift_wad", "zwiftmap_strava", None])
+@pytest.mark.parametrize("official_time_sec", [8, 12])
+def test_fetch_offsets_use_available_route_geometry(monkeypatch, geometry_source, official_time_sec):
+    from race_replay import data_cleaner
+    from shared import route_lookup
+
+    participant = {
+        "activity_id": "111",
+        "name": "Test Rider [TTT]",
+        "weight_kg": 75.0,
+        "elapsed_ms": official_time_sec * 1000,
+        "end_date": "2026-10-15T12:00:08Z",
+    }
+    times = np.arange(21, dtype=float)
+    telemetry = {
+        "timeInSec": times.tolist(),
+        "distanceInCm": (times * 1000).tolist(),
+        "latlng": np.column_stack([(times - 10) * 0.0001, times * 0]).tolist(),
+    }
+    frame = pd.DataFrame({
+        "time_sec": times,
+        "speed_kmh": np.full(21, 36.0),
+        "distance_km": times / 100,
+        "altitude_m": np.zeros(21),
+        "power_watts": np.full(21, 200.0),
+    })
+    game_route = data_cleaner.CalibratedGameRoute(
+        route_name="Test Route",
+        leadin_distance_m=0.0,
+        lap_distance_m=100.0,
+        leadin_distance=np.array([]),
+        leadin_altitude=np.array([]),
+        leadin_latlng=np.empty((0, 2)),
+        route_distance=np.array([0.0, 100.0]),
+        route_altitude=np.array([0.0, 0.0]),
+        route_latlng=np.array([[-0.001, 0.0], [0.0, 0.0]]),
+        horizontal_p95_m=0.0,
+    )
+
+    class EventResponse:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {
+                "name": "Test TTT",
+                "eventSubgroups": [{"id": 987655, "routeId": 123, "laps": 1}],
+            }
+
+    monkeypatch.setattr(app_module, "get_headers", lambda: {"Authorization": "test"})
+    monkeypatch.setattr(app_module, "get_race_entries", lambda *args: ([participant], None))
+    monkeypatch.setattr(
+        app_module, "get_activity_details", lambda *args: ({"eventInfo": {"id": 456}}, None)
+    )
+    monkeypatch.setattr(app_module, "_request_with_retry", lambda *args, **kwargs: EventResponse())
+    monkeypatch.setattr(
+        app_module, "fetch_rider_telemetry", lambda *args: (telemetry, {}, None)
+    )
+    monkeypatch.setattr(app_module, "convert_telemetry_to_dataframe", lambda raw: frame.copy())
+    monkeypatch.setattr(
+        route_lookup, "get_route_info",
+        lambda route_id: {"name": "Test Route", "distanceInMeters": 100},
+    )
+    monkeypatch.setattr(data_cleaner, "load_route_data", lambda slug: None)
+    geometry = {
+        "zwift_wad": (game_route, None, "zwift_wad"),
+        "zwiftmap_strava": (
+            None, SimpleNamespace(latlng=game_route.route_latlng), "zwiftmap_strava",
+        ),
+        None: (None, None, None),
+    }[geometry_source]
+    monkeypatch.setattr(
+        data_cleaner, "load_preferred_route_geometry",
+        lambda *args, **kwargs: geometry,
+    )
+    monkeypatch.setattr(
+        data_cleaner, "align_riders_to_route",
+        lambda riders, *args, **kwargs: (riders, None),
+    )
+    monkeypatch.setattr(
+        app_module, "_build_ttt_team_results",
+        lambda processed, assignments, tags: [{
+            "riders": [app_module._ttt_rider_summary(processed["111"])],
+        }],
+    )
+    monkeypatch.setattr(app_module, "_ttt_cache", {})
+
+    response = app_module.app.test_client().post(
+        "/api/ttt/fetch", json={"subgroup_id": 987655}
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    rider = payload["teams"][0]["riders"][0]
+    if geometry_source is None:
+        assert rider["time_offset_source"] == "none"
+        assert rider["time_offset_sec"] == 0.0
+        assert "Route finish geometry is unavailable" in payload["warnings"][0]
+        return
+
+    expected_shift = official_time_sec - 10.0
+    assert rider["time_offset_source"] == "calculated"
+    assert rider["calculated_time_offset_sec"] == expected_shift
+    assert rider["time_offset_sec"] == expected_shift
+    assert payload["warnings"] == []
+    processed = app_module._ttt_cache[987655]["all_processed"]["111"]
+    assert processed["time_sec"][0] == expected_shift
+    np.testing.assert_array_equal(processed["base_time_sec"], times)
