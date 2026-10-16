@@ -8,6 +8,11 @@ A web app for analyzing Zwift racing. Includes **Bike Comparison**, **Race Repla
 
 ## Features
 
+The homepage separates current **Tools** from **Archived** tools. The ZRL
+Leaderboard is available under **Archived** (`/?tab=archived`) and remains
+accessible at its existing `/zrl/leaderboard` URL with event loading and scoring
+unchanged.
+
 ### Bike Comparison
 
 - Load any Zwift activity by URL/ID or upload a .fit file
@@ -17,6 +22,14 @@ A web app for analyzing Zwift racing. Includes **Bike Comparison**, **Race Repla
 - Time range slider to focus analysis on specific sections
 - "Find Best Bikes" search with Pareto-optimal filtering
 - Power chart showing actual vs. alternative vs. draft savings
+
+### Top Performers
+
+- Compare road or TT frame/wheel combinations at `/top-performers`
+- Switch bike type with the **Road / TT** toggle at the top left, above Upgrade Level
+- Keep separate frame and wheel selections for each bike type while retaining the upgrade level
+- TT mode uses TT-specific wheel drag; both modes use the same stock road reference bike
+- Share TT mode with `/top-performers?bike=tt`; the old `/top-performers-tt` URL redirects there
 
 ### Race Replay
 

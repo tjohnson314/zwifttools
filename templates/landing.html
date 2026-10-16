@@ -28,8 +28,27 @@
         }
         .subtitle {
             color: #888;
-            margin-bottom: 60px;
+            margin-bottom: 30px;
             font-size: 1.1rem;
+        }
+        .tools-tabs {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 30px;
+        }
+        .tools-tabs a {
+            padding: 10px 20px;
+            border: 2px solid rgba(255,255,255,0.08);
+            border-radius: 8px;
+            color: #bbb;
+            text-decoration: none;
+        }
+        .tools-tabs a:hover,
+        .tools-tabs a:focus-visible,
+        .tools-tabs a[aria-current="page"] {
+            border-color: #f7931e;
+            color: #f7931e;
+            background: rgba(255,255,255,0.05);
         }
         .tools-grid {
             display: grid;
@@ -124,7 +143,20 @@
     <h1>Zwift Tools</h1>
     <p class="subtitle">Performance analysis tools for Zwift</p>
 
+    {% set archived = request.args.get('tab') == 'archived' %}
+    <nav class="tools-tabs" aria-label="Tool categories">
+        <a href="/" {% if not archived %}aria-current="page"{% endif %}>Tools</a>
+        <a href="/?tab=archived" {% if archived %}aria-current="page"{% endif %}>Archived</a>
+    </nav>
+
     <div class="tools-grid">
+        {% if archived %}
+        <a href="/zrl/leaderboard" class="tool-card">
+            <div class="tool-icon">&#x1F3C6;</div>
+            <h2>ZRL Leaderboard</h2>
+            <p>Archived tool: view the Stage 1 Race of Truth points table with finish, FAL, FTS, and podium scoring breakdowns.</p>
+        </a>
+        {% else %}
         <a href="/bike-comparison" class="tool-card">
             <div class="tool-icon">&#x1F6B2;</div>
             <h2>Bike Comparison</h2>
@@ -135,12 +167,6 @@
             <div class="tool-icon">&#x1F3C1;</div>
             <h2>Race Replay</h2>
             <p>Replay any Zwift race with an interactive timeline. Visualise rider positions, gaps, peloton formations, and elevation profiles.</p>
-        </a>
-
-        <a href="/zrl/leaderboard" class="tool-card">
-            <div class="tool-icon">&#x1F3C6;</div>
-            <h2>ZRL Leaderboard</h2>
-            <p>View the Stage 1 Race of Truth points table with finish, FAL, FTS, and podium scoring breakdowns.</p>
         </a>
 
         <a href="/surface-map" class="tool-card">
@@ -202,14 +228,9 @@
         <a href="/top-performers" class="tool-card">
             <div class="tool-icon">&#x1F3C6;</div>
             <h2>Top Performers</h2>
-            <p>Plot every frame and wheel combination by aero and weight advantage versus the Zwift Carbon reference bike. Toggle stock or maxed upgrade levels.</p>
+            <p>Compare road and TT frame and wheel combinations by aero and weight advantage versus the Zwift Carbon reference bike. Toggle bike type and stock or maxed upgrade levels.</p>
         </a>
-
-        <a href="/top-performers-tt" class="tool-card">
-            <div class="tool-icon">&#x1F3C6;</div>
-            <h2>TT Top Performers</h2>
-            <p>The same aero-vs-weight scatter for time-trial frames, using each wheel's TT-specific drag. Toggle stock or maxed upgrade levels.</p>
-        </a>
+        {% endif %}
     </div>
 </body>
 </html>

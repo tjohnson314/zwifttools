@@ -53,6 +53,7 @@
             background: linear-gradient(90deg, #ff6b35, #f7931e);
             color: #fff; border-color: transparent;
         }
+        .toggle-btn:disabled { cursor: wait; opacity: 0.5; }
         .check-list { max-height: 320px; overflow-y: auto; padding-right: 4px; }
         .check-item {
             display: flex; align-items: center; gap: 8px;
@@ -117,12 +118,18 @@
     <a href="/" class="back-link">← Back to Tools</a>
     <h1>🏆 Top Performers</h1>
     <p class="subtitle">
-        Aerodynamic &amp; weight advantage of every frame + wheel combination, relative to the
+        Aerodynamic &amp; weight advantage of road and time-trial frame + wheel combinations, relative to the
         <strong>Zwift Carbon + Zwift 32mm Carbon</strong> reference bike. Up and to the right is faster.
     </p>
 
     <div class="layout">
         <div class="sidebar">
+            <div class="panel-title" id="bikeTypeLabel">Bike Type</div>
+            <div class="toggle-row" role="group" aria-labelledby="bikeTypeLabel">
+                <button type="button" class="toggle-btn" id="roadBtn" aria-pressed="false" disabled>Road</button>
+                <button type="button" class="toggle-btn" id="ttBtn" aria-pressed="false" disabled>TT</button>
+            </div>
+
             <div class="panel-title">Upgrade Level</div>
             <div class="toggle-row">
                 <button class="toggle-btn active" data-level="0" id="lvl0Btn">Level 0 (Stock)</button>
@@ -148,7 +155,8 @@
             <div id="wheelList" class="check-list"></div>
             <p class="hint">
                 Each non-Halo frame is plotted once per selected wheel. Halo bikes have built-in
-                wheels, so they always show as a single point. The reference bike is fixed at Level 0.
+                wheels, so they always show as a single point. TT frames use TT-specific wheel drag.
+                The reference bike is fixed at Level 0.
             </p>
         </div>
 
@@ -156,7 +164,7 @@
             <div class="chart-canvas-box">
                 <canvas id="scatter"></canvas>
             </div>
-            <p class="hint" id="pointCount"></p>
+            <p class="hint" id="pointCount" role="status">Loading bike data...</p>
         </div>
     </div>
 
@@ -185,6 +193,12 @@
                 <code>game_frames.json</code> and <code>game_wheels.json</code>.
             </li>
             <li>
+                <strong>Road &amp; TT bikes</strong> use separate frame selections and defaults.
+                The Bike Type toggle switches the chart and selection lists while retaining your
+                choices for each type and the selected upgrade level. TT frames use each wheel's
+                TT-specific CdA bias; the road reference bike stays unchanged.
+            </li>
+            <li>
                 <strong>Upgrade levels</strong> — each frame has a five-step upgrade ladder. The
                 Level 0 (stock) figures are read straight from the game assets, but the per-level
                 upgrade deltas are <em>not</em> stored there; they are estimated by matching each
@@ -193,7 +207,7 @@
                 bike is always held at Level 0.
             </li>
             <li>
-                <strong>Halo bikes</strong> (Tron, R4000 Roller Blade, Project 74) have permanently
+                <strong>Halo bikes</strong> (Tron, R4000 Roller Blade, Project 74, Pinarello Espada) have permanently
                 attached wheels, so they appear as a single point using their built-in wheelset
                 rather than one point per selectable wheel.
             </li>
@@ -206,6 +220,7 @@
             is simply the reference minus the bike, so positive means better:
         </p>
         <span class="math">CdA reduction (m²) = ref_CdA − (frame_CdA + wheel_CdA)</span>
+        <p>For TT frames, wheel_CdA is the wheel's TT-specific bias, including built-in wheelsets.</p>
         <span class="math">Weight reduction (g) = ref_weight − (frame_weight + wheel_weight)</span>
         <p>
             Because the reduction is measured relative to a common reference, the rider's own baseline
@@ -225,7 +240,7 @@
         <h3>Frame &amp; wheel selection</h3>
         <p>
             The frames and wheelsets shown here mirror the curated set on the ZwiftInsider Top
-            Performers chart, so this page can be compared against it directly.
+            Performers road and TT charts, so each bike type can be compared against its chart directly.
         </p>
 
         <h3>Download the data</h3>

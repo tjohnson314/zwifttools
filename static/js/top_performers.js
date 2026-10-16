@@ -13,11 +13,14 @@
   ];
 
   let DATA = null;
+  let bikeType = 'road';
+  const bikeData = {};
+  const selections = {};
   let chart = null;
   let level = 0;                      // 0 = stock (index 0), 1 = maxed (index 1)
   const frameColor = {};             // frame id -> color
-  const selectedFrames = new Set();  // frame ids
-  const selectedWheels = new Set();  // wheel ids
+  let selectedFrames = new Set();    // frame ids for the current bike type
+  let selectedWheels = new Set();    // wheel ids for the current bike type
 
   function wheelBiasFor(frame, wheel) {
     return frame.type === 'TT' ? wheel.cdaTT : wheel.cda;
@@ -118,7 +121,7 @@
     if (chart) { chart.destroy(); }
     chart = new Chart(document.getElementById('scatter'), config);
     document.getElementById('pointCount').textContent =
-      `${points.length} data point${points.length === 1 ? '' : 's'} shown ` +
+      `${points.length} ${bikeType === 'tt' ? 'TT' : 'road'} data point${points.length === 1 ? '' : 's'} shown ` +
       `(frames at level ${level === 0 ? '0 / stock' : '5 / maxed'}, reference fixed at level 0).`;
   }
 
@@ -170,6 +173,8 @@
   }
 
   function wireControls() {
+    document.getElementById('roadBtn').addEventListener('click', () => setBikeType('road'));
+    document.getElementById('ttBtn').addEventListener('click', () => setBikeType('tt'));
     document.getElementById('lvl0Btn').addEventListener('click', () => setLevel(0));
     document.getElementById('lvl5Btn').addEventListener('click', () => setLevel(1));
 
@@ -198,17 +203,42 @@
     render();
   }
 
-  fetch(window.TOP_PERF_API || '/api/top_performers')
-    .then(r => r.json())
-    .then(data => {
-      DATA = data;
-      DATA.frames.forEach((f, i) => { frameColor[f.id] = PALETTE[i % PALETTE.length]; });
-      DATA.frames.forEach(f => { if (f.default) selectedFrames.add(f.id); });
-      DATA.wheels.forEach(w => { if (w.default) selectedWheels.add(w.id); });
-      buildFrameList();
-      buildWheelList();
+  function setBikeType(type) {
+    bikeType = type;
+    DATA = bikeData[type];
+    selectedFrames = selections[type].frames;
+    selectedWheels = selections[type].wheels;
+    DATA.frames.forEach((f, i) => { frameColor[f.id] = PALETTE[i % PALETTE.length]; });
+    for (const [id, value] of [['roadBtn', 'road'], ['ttBtn', 'tt']]) {
+      const button = document.getElementById(id);
+      button.classList.toggle('active', type === value);
+      button.setAttribute('aria-pressed', String(type === value));
+      button.disabled = false;
+    }
+    const url = new URL(window.location.href);
+    if (type === 'tt') url.searchParams.set('bike', 'tt');
+    else url.searchParams.delete('bike');
+    window.history.replaceState(null, '', url);
+    buildFrameList();
+    buildWheelList();
+    render();
+  }
+
+  Promise.all(['road', 'tt'].map(async type => {
+    const endpoint = type === 'tt' ? '/api/top_performers_tt' : '/api/top_performers';
+    const response = await fetch(endpoint);
+    if (!response.ok) throw new Error(`${type} data request failed (${response.status})`);
+    const data = await response.json();
+    bikeData[type] = data;
+    selections[type] = {
+      frames: new Set(data.frames.filter(f => f.default).map(f => f.id)),
+      wheels: new Set(data.wheels.filter(w => w.default).map(w => w.id)),
+    };
+  }))
+    .then(() => {
       wireControls();
-      render();
+      const type = new URL(window.location.href).searchParams.get('bike');
+      setBikeType(type === 'tt' ? 'tt' : 'road');
     })
     .catch(err => {
       document.getElementById('pointCount').textContent = 'Failed to load data: ' + err;

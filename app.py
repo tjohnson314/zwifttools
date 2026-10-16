@@ -609,8 +609,10 @@ def top_performers():
 
 @app.route('/top-performers-tt')
 def top_performers_tt():
-    """TT top-performers scatter: CdA/weight reduction per time-trial frame+wheel."""
-    return render_template('top_performers_tt.html')
+    """Keep existing TT links pointing to the combined chart in TT mode."""
+    args = request.args.to_dict()
+    args['bike'] = 'tt'
+    return redirect(url_for('top_performers', **args))
 
 
 @app.route('/my-activities')
