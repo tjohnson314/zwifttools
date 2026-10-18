@@ -55,6 +55,7 @@ from shared.data_fetcher import (
 )
 from shared.route_lookup import get_route_info
 from shared import blob_storage
+from shared.workouts import load_workouts, workout_index, power_telemetry
 from shared.zwift_auth import exchange_code_for_tokens, refresh_access_token, ZwiftTokens, get_token_with_password
 
 try:
@@ -621,6 +622,53 @@ def my_activities():
     if 'tokens' not in session:
         return redirect(url_for('auth_login', next=url_for('my_activities')))
     return render_template('my_activities.html')
+
+
+@app.route('/workout-analysis')
+def workout_analysis():
+    if 'tokens' not in session:
+        return redirect(url_for('auth_login', next=request.full_path.rstrip('?')))
+    return render_template('workout_analysis.html')
+
+
+@app.route('/api/workouts')
+@app.route('/api/workouts/<workout_id>')
+def api_workouts(workout_id=None):
+    try:
+        if workout_id is None:
+            return jsonify({'workouts': workout_index()})
+        workout = load_workouts().get(workout_id)
+        if workout is None:
+            return jsonify({'error': 'Workout not found'}), 404
+        return jsonify(workout)
+    except (OSError, ValueError, KeyError):
+        logger.exception("Could not load workout catalog")
+        return jsonify({'error': 'Workout catalog unavailable. Run tools\\extract_zwift_workouts.py.'}), 503
+
+
+@app.route('/api/workout_activity/<activity_id>')
+def api_workout_activity(activity_id):
+    headers = get_headers()
+    if not headers:
+        return jsonify({'error': 'Not authenticated'}), 401
+    if not activity_id.isascii() or not activity_id.isdigit():
+        return jsonify({'error': 'Activity ID must be numeric'}), 400
+    try:
+        telemetry, activity, error = fetch_rider_telemetry(int(activity_id), headers)
+        if error:
+            return jsonify({'error': error}), 502
+        samples = power_telemetry(telemetry or {})
+        return jsonify({
+            'activity_id': activity_id,
+            'name': (activity or {}).get('name') or f'Activity {activity_id}',
+            **samples,
+        })
+    except ValueError as error:
+        logger.warning("Invalid workout activity %s: %s", activity_id, error)
+        return jsonify({'error': str(error)}), 422
+    except requests.RequestException:
+        logger.exception("Could not fetch workout activity %s", activity_id)
+        return jsonify({'error': 'Could not fetch activity from Zwift. Please try again.'}), 502
 
 
 @app.route('/power')
@@ -1797,7 +1845,7 @@ def download_data_file(filename):
 
 @app.route('/api/my_profile')
 def get_my_profile():
-    """Get the logged-in user's height and weight from their Zwift profile."""
+    """Get measurements and current FTP from the logged-in user's profile."""
     headers = get_headers()
     if not headers:
         return jsonify({'error': 'Not authenticated'}), 401
@@ -1820,11 +1868,18 @@ def get_my_profile():
             return jsonify({'error': 'Invalid response from Zwift API'}), 502
         height_mm = profile.get('height', 0)
         weight_g = profile.get('weight', 0)
+        try:
+            ftp = float(profile.get('ftp'))
+        except (TypeError, ValueError):
+            ftp = None
+        if ftp is not None and (not np.isfinite(ftp) or ftp <= 0):
+            ftp = None
         
         return jsonify({
             'height_cm': round(height_mm / 10, 1) if height_mm else None,
             'weight_kg': round(weight_g / 1000, 1) if weight_g else None,
-            'name': f"{profile.get('firstName', '')} {profile.get('lastName', '')}".strip()
+            'name': f"{profile.get('firstName', '')} {profile.get('lastName', '')}".strip(),
+            'ftp_w': ftp,
         })
     except Exception as e:
         logger.exception("Error fetching profile")

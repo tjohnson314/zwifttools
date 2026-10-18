@@ -16,7 +16,7 @@ def test_landing_shows_current_tools_by_default(query, monkeypatch):
     assert 'href="/zrl/leaderboard"' not in html
     for path in (
         "/bike-comparison", "/race-replay", "/surface-map", "/my-activities",
-        "/power", "/ttt-analysis", "/ride-compare", "/critical-power",
+        "/power", "/workout-analysis", "/ttt-analysis", "/ride-compare", "/critical-power",
         "/tt-pacing", "/ttt-pacing", "/top-performers",
     ):
         assert f'href="{path}" class="tool-card"' in html

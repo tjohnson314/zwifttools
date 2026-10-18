@@ -10,6 +10,7 @@ This document describes the complete data pipeline for every page and API endpoi
 - [Authentication](#authentication)
 - [Landing Page](#landing-page)
 - [My Activities](#my-activities)
+- [Workout Analysis](#workout-analysis)
 - [Bike Comparison](#bike-comparison)
 - [Race Replay](#race-replay)
 - [Ride Compare](#ride-compare)
@@ -116,6 +117,64 @@ Renders `my_activities.html`. Redirects to login if not authenticated.
 
 ---
 
+## Workout Analysis
+
+### Page: `GET /workout-analysis`
+
+Requires login and preserves `?activity_id=` across the login redirect. Linked
+from the homepage and each row in My Activities.
+
+### Catalog: `GET /api/workouts` and `GET /api/workouts/<workout_id>`
+
+`tools/extract_zwift_workouts.py` reads the installed client's
+`assets/Workouts/workouts.wad` with the existing WAD reader. It exports cycling
+workout names, source paths, numeric segments, and interpretation warnings to
+`zwiftdata/workouts.json`. Coaching text is not exported. Stable IDs are hashes
+of source paths. Running/swimming plans and untimed rest days are excluded.
+Distance-based dynamic workouts are also excluded rather than misinterpreted
+as elapsed-time plans. The checked-in catalog works without a local game installation.
+
+The index returns names, IDs, source paths, and durations. Detail adds timed
+segments with FTP-relative targets. Repeats are expanded; warmup/cooldown/ramp
+endpoints remain directional. Interval low/high values are target ranges.
+Free-ride, max-effort, and unresolved zone-only blocks have null targets.
+Quantized ramps are shown as continuous approximations, with a warning.
+An explicit `ftpOverride` is retained as `ftp_override`; fixed-reference FTP
+tests scale by that reference rather than the rider's profile FTP. The page
+disables the FTP field for these plans and explains the fixed reference.
+Missing or invalid catalog data returns an explicit 503 error.
+
+### Recorded power: `GET /api/workout_activity/<activity_id>`
+
+Requires authentication. Uses `fetch_rider_telemetry()` and returns raw
+`timeInSec` / `powerInWatts` as `time_sec` / `power_watts`, plus activity name/ID.
+No cooldown trimming, smoothing, or power clipping is applied. Null power and
+timestamp gaps are retained. Mismatched arrays, non-finite values, and
+non-increasing timestamps return 422; upstream failures return 502.
+
+### FTP and comparison
+
+`GET /api/my_profile` exposes finite positive `ftp` as `ftp_w` (otherwise null),
+alongside the existing name/height/weight fields. The page prefills this current
+profile value without overwriting manual edits. This is not historical FTP.
+Missing FTP or lookup failures prompt manual entry without blocking analysis.
+
+The browser scales targets by editable FTP and whole-workout intensity, then
+aligns the schedule using an editable elapsed-time offset. Statistics weight
+each recorded power sample until the next timestamp, capped at the median
+positive recording interval (lower median for an even count; one second for a
+single sample). Gaps and nulls are excluded, not interpreted as zero.
+Targets are rounded to the nearest 5 W after FTP/intensity scaling (half-way
+values round toward the higher target). Ramps step at rounding thresholds.
+Target integration uses the exact same covered time, splitting at those
+thresholds; target ranges use the midpoint of their rounded bounds for averages
+and signed errors. Time/range averages need not be multiples of 5 W. The chart
+shows the full raw activity and the planned bounds, including unscored gaps.
+There is no automatic workout matching, pause/skip reconstruction, or
+mid-workout intensity reconstruction.
+
+---
+
 ## Bike Comparison
 
 ### Page: `GET /bike-comparison`
@@ -152,6 +211,7 @@ Renders `bike_comparison.html`.
 - `height` (mm) → `height_cm` (÷ 10)
 - `weight` (g) → `weight_kg` (÷ 1000)
 - `firstName + lastName` → `name`
+- Finite positive `ftp` → `ftp_w`; missing/invalid FTP → null (editable in Workout Analysis)
 
 ### `GET /api/bike_stats`
 

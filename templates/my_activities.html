@@ -170,6 +170,13 @@
                 bikeLink.innerHTML = '&#x1F6B2;';
                 tdActions.appendChild(bikeLink);
 
+                const workoutLink = document.createElement('a');
+                workoutLink.href = `/workout-analysis?activity_id=${act.id}`;
+                workoutLink.className = 'action-link';
+                workoutLink.title = 'Workout Analysis';
+                workoutLink.innerHTML = '&#x1F4CA;';
+                tdActions.appendChild(workoutLink);
+
                 // Zwift activity page (orange Z logo)
                 const zwiftLink = document.createElement('a');
                 zwiftLink.href = `https://www.zwift.com/activity/${act.id}`;

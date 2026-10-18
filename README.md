@@ -1,6 +1,6 @@
 # ZwiftTools
 
-A web app for analyzing Zwift racing. Includes **Bike Comparison**, **Race Replay**, **Ride Compare**, and **TTT Analysis** tools, plus a collection of **Sauce4Zwift mods** for live in-game overlays.
+A web app for analyzing Zwift rides. Includes **Bike Comparison**, **Race Replay**, **Ride Compare**, **Workout Analysis**, and **TTT Analysis** tools, plus a collection of **Sauce4Zwift mods** for live in-game overlays.
 
 ## Live Site
 
@@ -53,6 +53,26 @@ unchanged.
 - Handles name disambiguation when the same rider appears multiple times
 - SSE progress streaming while fetching activities
 - Shareable URLs via `?activity_ids=` parameter
+
+### Workout Analysis
+
+- Open `/workout-analysis`, or use an activity's Workout Analysis link in My Activities
+- Load an activity by ID or Zwift activity URL and search the bundled built-in time-based cycling workout catalog
+- Prefill FTP from the current Zwift profile when available, with a manual override for the FTP used on that ride
+- Adjust whole-workout intensity and start offset; negative offsets are supported
+- Overlay raw recorded power with planned ramps, steady targets, and target ranges
+- Round planned targets to the nearest 5 W after FTP/intensity scaling; ramps step between rounded targets and recorded power stays unchanged
+- Compare time-weighted actual/target power per block over recorded coverage only; missing samples are not treated as zero
+- Free-ride, max-effort, and unresolved zone-only targets are unscored; quantized ramps are identified as continuous approximations
+- FTP tests with a fixed reference use the plan's reference rather than the rider's FTP; distance-based dynamic workouts are excluded
+- Select and align plans manually: pauses, skips, variable-duration tests, and mid-ride intensity changes are not reconstructed
+
+The deployable numeric catalog is checked in at `zwiftdata/workouts.json`; the server
+does not require Zwift to be installed. Refresh it after a client update with:
+
+```powershell
+python tools\extract_zwift_workouts.py --zwift-dir "C:\Program Files (x86)\Zwift"
+```
 
 ### TTT Analysis
 

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
+    <title>Workout Analysis - Zwift Tools</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="/static/css/workout_analysis.css">
+</head>
+<body>
+<main class="container">
+    <a href="/" class="back-link">&larr; Back to Tools</a>
+    <h1>Workout Analysis</h1>
+    <p class="subtitle">Compare your recorded power with a built-in Zwift time-based cycling workout.</p>
+    <section class="panel">
+        <h2>Activity</h2>
+        <form id="activityForm" class="controls">
+            <label>Activity ID or Zwift activity URL
+                <input id="activityId" type="text" required placeholder="Activity ID or https://www.zwift.com/activity/...">
+            </label>
+            <button id="loadActivity" type="submit">Load activity</button>
+        </form>
+        <p id="activityStatus" role="status">Choose an activity, or open this page from My Activities.</p>
+        <p id="activityError" class="error" role="alert"></p>
+        <a href="/my-activities">Browse my activities</a>
+    </section>
+    <section class="panel">
+        <h2>Workout plan</h2>
+        <div class="controls">
+            <label>Search workouts
+                <input id="workoutSearch" type="search" placeholder="Name or training-plan folder">
+            </label>
+            <label class="wide">Built-in workout
+                <select id="workoutSelect" disabled><option value="">Loading workout catalog...</option></select>
+            </label>
+        </div>
+        <p id="catalogStatus" role="status"></p>
+        <p id="planError" class="error" role="alert"></p>
+        <div class="controls">
+            <label>Workout FTP (W)
+                <input id="ftp" type="number" min="0.01" step="any" placeholder="Enter FTP" required>
+            </label>
+            <label>Workout intensity (%)
+                <input id="intensity" type="number" min="0.01" step="any" value="100" required>
+            </label>
+            <label>Workout start in activity (seconds)
+                <input id="offset" type="number" step="any" value="0" required>
+            </label>
+        </div>
+        <p id="ftpStatus" role="status">Looking up current profile FTP...</p>
+        <p class="help">Use the FTP you used for this ride, which may differ from your current FTP.
+            Fixed-reference FTP tests use the reference from their plan instead, and disable this field.
+            Positive start offsets move the plan later; negative offsets allow a workout that started before recording.
+            Intensity applies to the whole plan. Pauses, skipped blocks, and mid-ride intensity changes are not automatically detected.</p>
+        <p class="help">Distance-based dynamic workouts are not included in this time-based comparison.</p>
+        <p id="planWarnings" class="help"></p>
+        <p id="comparisonStatus" role="status"></p>
+    </section>
+    <section id="results" class="panel" hidden>
+        <h2 id="resultTitle">Power comparison</h2>
+        <p id="summary"></p>
+        <div class="chart"><canvas id="powerChart" aria-label="Raw actual power and planned power by activity time" role="img"></canvas></div>
+        <p id="chartError" class="error" role="alert"></p>
+        <p class="help">Actual power is raw, including zero and unusual readings. Shading shows prescribed target ranges;
+            free-ride and unresolved targets have no planned line.
+            Interval means are time-weighted over recorded samples only. Samples extend to the next timestamp,
+            at most one typical recording interval; gaps and missing power are excluded.
+            Planned targets are rounded to the nearest 5 W after FTP and intensity scaling, including ramp steps.
+            Target averages and errors use those same covered times. Range errors use the target midpoint;
+            averages across steps or ranges may fall between 5 W increments.</p>
+        <div class="table-scroll">
+            <table>
+                <thead><tr><th>Block</th><th>Activity time</th><th>Covered / planned</th><th>Target avg (W)</th><th>Actual avg (W)</th><th>Difference (W)</th></tr></thead>
+                <tbody id="intervals"></tbody>
+            </table>
+        </div>
+    </section>
+</main>
+<script src="/static/js/workout_analysis.js"></script>
+</body>
+</html>
