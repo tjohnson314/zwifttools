@@ -175,3 +175,82 @@ test('profile FTP prefills and missing FTP explicitly requests manual entry', as
     await scope.loadProfileFtp();
     assert.match(elements.ftpStatus.textContent, /manually/);
 });
+
+function uploadContext(fetch) {
+    const elements = Object.fromEntries([
+        'ftp', 'planError', 'planWarnings', 'uploadStatus', 'uploadWorkout',
+        'workoutSource', 'workoutFile', 'builtinControls', 'customControls', 'workoutSelect',
+    ].map(id => [id, { textContent: '', value: '', disabled: false, hidden: false }]));
+    elements.workoutSource.value = 'custom';
+    elements.workoutFile.files = [{ name: 'my-workout.zwo', size: 100 }];
+    const scope = context({
+        document: { addEventListener() {}, getElementById(id) { return elements[id]; } },
+        FormData: class {
+            constructor() { this.values = {}; }
+            append(key, value) { this.values[key] = value; }
+        },
+        fetch,
+    });
+    vm.runInContext('renderComparison = () => {};', scope);
+    return { scope, elements };
+}
+
+test('custom upload uses shared plan state and preserves FTP, intensity and rounding behavior', async () => {
+    const workout = { name: 'Custom', duration_sec: 10, ftp_override: null, warnings: ['Test warning'],
+        segments: [segment(0, 10, .731)] };
+    const { scope, elements } = uploadContext(async (url, options) => {
+        assert.equal(url, '/api/workouts/upload');
+        assert.equal(options.method, 'POST');
+        assert.equal(options.body.values.file.name, 'my-workout.zwo');
+        return { ok: true, json: async () => workout };
+    });
+    await scope.uploadWorkout({ preventDefault() {} });
+    assert.equal(vm.runInContext('selectedWorkout.name', scope), 'Custom');
+    assert.equal(elements.ftp.disabled, false);
+    assert.match(elements.uploadStatus.textContent, /Custom \(0:10\) loaded/);
+    assert.equal(elements.planWarnings.textContent, 'Test warning');
+    assert.equal(elements.uploadWorkout.disabled, false);
+    const result = scope.analyzeWorkout({ time_sec: [0], power_watts: [201.7] }, workout, 250, 100, 0);
+    assert.equal(result.rows[0].target, 185);
+    assert.equal(result.rows[0].actual, 201.7);
+});
+
+test('custom upload failures clear the previous plan and show the server error', async () => {
+    const { scope, elements } = uploadContext(async () => ({
+        ok: false, status: 400, json: async () => ({ error: 'Invalid workout XML' }),
+    }));
+    vm.runInContext('customWorkout = { name: "Old" }; selectedWorkout = customWorkout;', scope);
+    await scope.uploadWorkout({ preventDefault() {} });
+    assert.equal(vm.runInContext('selectedWorkout', scope), null);
+    assert.equal(vm.runInContext('customWorkout', scope), null);
+    assert.equal(elements.planError.textContent, 'Invalid workout XML');
+    assert.equal(elements.uploadWorkout.disabled, false);
+});
+
+test('custom upload rejects oversized and non-zwo files without a request', async () => {
+    const { scope, elements } = uploadContext(() => { throw new Error('Unexpected upload'); });
+    elements.workoutFile.files = [{ name: 'custom.fit', size: 20 }];
+    await scope.uploadWorkout({ preventDefault() {} });
+    assert.match(elements.planError.textContent, /\.zwo/);
+    elements.workoutFile.files = [{ name: 'custom.zwo', size: 1024 * 1024 + 1 }];
+    await scope.uploadWorkout({ preventDefault() {} });
+    assert.match(elements.planError.textContent, /1 MiB/);
+});
+
+test('switching to custom invalidates pending built-in requests and restores the last uploaded plan', async () => {
+    let finishBuiltin;
+    const { scope, elements } = uploadContext(url => {
+        assert.match(url, /^\/api\/workouts\//);
+        return new Promise(resolve => { finishBuiltin = resolve; });
+    });
+    elements.workoutSelect.value = 'official-id';
+    const pending = scope.chooseWorkout();
+    vm.runInContext('customWorkout = {name:"Custom", ftp_override:100, warnings:[]};', scope);
+    scope.changeWorkoutSource();
+    assert.equal(elements.builtinControls.hidden, true);
+    assert.equal(elements.customControls.hidden, false);
+    assert.equal(elements.ftp.disabled, true);
+    finishBuiltin({ ok: true, json: async () => ({ name: 'Official', ftp_override: null, warnings: [] }) });
+    await pending;
+    assert.equal(vm.runInContext('selectedWorkout.name', scope), 'Custom');
+});

@@ -55,7 +55,7 @@ from shared.data_fetcher import (
 )
 from shared.route_lookup import get_route_info
 from shared import blob_storage
-from shared.workouts import load_workouts, workout_index, power_telemetry
+from shared.workouts import load_workouts, workout_index, power_telemetry, parse_workout, MAX_WORKOUT_BYTES
 from shared.zwift_auth import exchange_code_for_tokens, refresh_access_token, ZwiftTokens, get_token_with_password
 
 try:
@@ -644,6 +644,31 @@ def api_workouts(workout_id=None):
     except (OSError, ValueError, KeyError):
         logger.exception("Could not load workout catalog")
         return jsonify({'error': 'Workout catalog unavailable. Run tools\\extract_zwift_workouts.py.'}), 503
+
+
+@app.route('/api/workouts/upload', methods=['POST'])
+def api_upload_workout():
+    if 'tokens' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    if request.content_length is not None and request.content_length > MAX_WORKOUT_BYTES + 65536:
+        return jsonify({'error': 'Workout file must be 1 MiB or smaller.'}), 413
+    uploaded = request.files.get('file')
+    if uploaded is None or not uploaded.filename:
+        return jsonify({'error': 'Choose a custom .zwo workout file.'}), 400
+    filename = uploaded.filename.replace('\\', '/').rsplit('/', 1)[-1]
+    if not filename.lower().endswith('.zwo'):
+        return jsonify({'error': 'Workout file must have a .zwo extension.'}), 400
+    data = uploaded.read(MAX_WORKOUT_BYTES + 1)
+    if len(data) > MAX_WORKOUT_BYTES:
+        return jsonify({'error': 'Workout file must be 1 MiB or smaller.'}), 413
+    try:
+        workout = parse_workout(filename, data)
+    except (ValueError, KeyError, SyntaxError, OverflowError) as error:
+        logger.warning("Invalid custom workout: %s", error)
+        return jsonify({'error': f'Invalid workout file: {error}'}), 400
+    if workout is None:
+        return jsonify({'error': 'Choose a time-based cycling .zwo workout with at least one timed block.'}), 400
+    return jsonify(workout)
 
 
 @app.route('/api/workout_activity/<activity_id>')

@@ -1,5 +1,6 @@
 import json
 import math
+from io import BytesIO
 
 import pytest
 import requests
@@ -114,7 +115,8 @@ def test_workout_page_preserves_activity_on_login_and_renders_controls():
     with client.session_transaction() as session:
         session["tokens"] = {}
     html = client.get("/workout-analysis?activity_id=123").get_data(as_text=True)
-    for field in ("ftp", "intensity", "offset", "workoutSearch", "workoutSelect", "powerChart"):
+    for field in ("ftp", "intensity", "offset", "workoutSearch", "workoutSelect", "powerChart",
+                  "workoutSource", "workoutFile", "uploadWorkoutForm"):
         assert f'id="{field}"' in html
     assert 'min="0.01"' in html
     assert b"/workout-analysis?activity_id=" in client.get("/my-activities").data
@@ -137,6 +139,76 @@ def test_missing_catalog_is_an_explicit_error(monkeypatch):
     response = app_module.app.test_client().get("/api/workouts")
     assert response.status_code == 503
     assert "catalog unavailable" in response.get_json()["error"]
+
+
+def upload_client():
+    client = app_module.app.test_client()
+    with client.session_transaction() as session:
+        session["tokens"] = {}
+    return client
+
+
+def test_custom_workout_upload_requires_login_and_does_not_change_catalog():
+    client = app_module.app.test_client()
+    assert client.post("/api/workouts/upload").status_code == 401
+    client = upload_client()
+    before = workouts.workout_index()
+    data = definition('<Warmup Duration="10" PowerLow=".5" PowerHigh=".8"/>'
+                      '<IntervalsT Repeat="2" OnDuration="5" OffDuration="5" OnPower="1.1" OffPower=".5"/>')
+    response = client.post("/api/workouts/upload", data={"file": (BytesIO(data), "custom.zwo")})
+    assert response.status_code == 200
+    result = response.get_json()
+    assert result == workouts.parse_workout("custom.zwo", data)
+    assert result["duration_sec"] == 30
+    assert len(result["segments"]) == 5
+    assert workouts.workout_index() == before
+    assert client.get(f"/api/workouts/{result['id']}").status_code == 404
+
+
+def test_custom_workout_accepts_optional_sport_and_removes_filename_directories():
+    data = b'<workout_file><name>Custom &amp; Test</name><workout><SteadyState Duration="10" Power=".731"/></workout></workout_file>'
+    response = upload_client().post("/api/workouts/upload", data={
+        "file": (BytesIO(data), r"C:\fakepath\custom.ZWO"),
+    })
+    assert response.status_code == 200
+    result = response.get_json()
+    assert result["name"] == "Custom & Test"
+    assert result["source"] == "custom.ZWO"
+    assert result["segments"][0]["power_low"] == .731
+
+
+@pytest.mark.parametrize("data,filename,error", [
+    (b"", "empty.zwo", "Invalid workout file"),
+    (b"<not-xml", "invalid.zwo", "Invalid workout file"),
+    (definition('<SteadyState Duration="10" Power=".5"/>'), "wrong.xml", ".zwo extension"),
+    (definition('<SteadyState Duration="10" Power=".5"/>', "run"), "run.zwo", "time-based cycling"),
+    (definition("<RestDay/>"), "rest.zwo", "timed block"),
+    (definition('<SteadyState Power=".5"/>'), "missing.zwo", "Invalid workout file"),
+    (definition('<Unknown Duration="10"/>'), "unknown.zwo", "unsupported step"),
+    (definition('<SteadyState Duration="10" Power="NaN"/>'), "nonfinite.zwo", "Non-finite"),
+    (definition('<SteadyState Duration="-10" Power=".5"/>'), "negative.zwo", "negative duration"),
+    (definition('<IntervalsT Repeat="1000000000000" OnPower="1" OffPower=".5" OnDuration="1" OffDuration="1"/>'),
+     "too-many.zwo", "10,000-block limit"),
+    (b'<!DOCTYPE workout_file [<!ENTITY target "1.0">]><workout_file><workout><SteadyState Duration="10" Power="&target;"/></workout></workout_file>',
+     "entities.zwo", "DOCTYPE"),
+    (definition('<SteadyState Duration="10" Power=".5"/>').replace(
+        b"<workout_file>", b"<workout_file><durationType>distance</durationType>"), "distance.zwo", "time-based cycling"),
+])
+def test_custom_workout_rejects_invalid_files(data, filename, error):
+    response = upload_client().post("/api/workouts/upload", data={"file": (BytesIO(data), filename)})
+    assert response.status_code == 400
+    assert error in response.get_json()["error"]
+
+
+def test_custom_upload_reports_missing_and_oversized_files():
+    client = upload_client()
+    assert client.post("/api/workouts/upload").status_code == 400
+    for size in (workouts.MAX_WORKOUT_BYTES + 1, workouts.MAX_WORKOUT_BYTES + 65537):
+        response = client.post("/api/workouts/upload", data={
+            "file": (BytesIO(b"x" * size), "oversize.zwo"),
+        })
+        assert response.status_code == 413
+        assert "1 MiB" in response.get_json()["error"]
 
 
 def test_activity_api_auth_validation_and_raw_samples(monkeypatch):

@@ -9,6 +9,13 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 
 CATALOG_PATH = Path(__file__).resolve().parent.parent / "zwiftdata" / "workouts.json"
+MAX_WORKOUT_BYTES = 1024 * 1024
+MAX_WORKOUT_SEGMENTS = 10000
+
+
+class _WorkoutTreeBuilder(ET.TreeBuilder):
+    def doctype(self, name, pubid, system):
+        raise ValueError("Workout XML must not contain a DOCTYPE declaration.")
 
 
 def _number(attributes: dict, key: str) -> float:
@@ -20,9 +27,9 @@ def _number(attributes: dict, key: str) -> float:
 
 def parse_workout(source: str, data: bytes) -> dict | None:
     """Keep names and numeric prescriptions, not copyrighted coaching text."""
-    root = ET.fromstring(data)
+    root = ET.fromstring(data, parser=ET.XMLParser(target=_WorkoutTreeBuilder()))
     workout = root.find("workout")
-    if workout is None or (root.findtext("sportType") or "").lower() not in ("bike", "ride"):
+    if root.tag != "workout_file" or workout is None or (root.findtext("sportType") or "bike").lower() not in ("bike", "ride"):
         return None
     if (root.findtext("durationType") or "time").strip().lower() != "time":
         return None
@@ -51,6 +58,10 @@ def parse_workout(source: str, data: bytes) -> dict | None:
             raise ValueError(f"{source}: negative duration")
         if duration == 0:
             return
+        if len(segments) >= MAX_WORKOUT_SEGMENTS:
+            raise ValueError(f"Workout exceeds the {MAX_WORKOUT_SEGMENTS:,}-block limit.")
+        if not math.isfinite(elapsed + duration):
+            raise ValueError("Workout total duration must be finite.")
         segments.append({
             "kind": kind, "start_sec": elapsed, "end_sec": elapsed + duration,
             "power_low": low, "power_high": high, "ramp": ramp,
@@ -66,6 +77,8 @@ def parse_workout(source: str, data: bytes) -> dict | None:
             repeat = _number(attributes, "Repeat")
             if repeat < 0 or not repeat.is_integer():
                 raise ValueError(f"{source}: invalid interval repeat")
+            if repeat * 2 + len(segments) > MAX_WORKOUT_SEGMENTS:
+                raise ValueError(f"Workout exceeds the {MAX_WORKOUT_SEGMENTS:,}-block limit.")
             on = power(attributes, "OnPower", "PowerOnLow", "PowerOnHigh")
             off = power(attributes, "OffPower", "PowerOffLow", "PowerOffHigh")
             for _ in range(int(repeat)):

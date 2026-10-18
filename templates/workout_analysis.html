@@ -12,7 +12,7 @@
 <main class="container">
     <a href="/" class="back-link">&larr; Back to Tools</a>
     <h1>Workout Analysis</h1>
-    <p class="subtitle">Compare your recorded power with a built-in Zwift time-based cycling workout.</p>
+    <p class="subtitle">Compare your recorded power with a built-in or custom Zwift time-based cycling workout.</p>
     <section class="panel">
         <h2>Activity</h2>
         <form id="activityForm" class="controls">
@@ -27,6 +27,13 @@
     </section>
     <section class="panel">
         <h2>Workout plan</h2>
+        <label>Workout source
+            <select id="workoutSource">
+                <option value="builtin">Built-in Zwift workout</option>
+                <option value="custom">Upload custom workout (.zwo)</option>
+            </select>
+        </label>
+        <div id="builtinControls">
         <div class="controls">
             <label>Search workouts
                 <input id="workoutSearch" type="search" placeholder="Name or training-plan folder">
@@ -36,6 +43,19 @@
             </label>
         </div>
         <p id="catalogStatus" role="status"></p>
+        </div>
+        <div id="customControls" hidden>
+            <form id="uploadWorkoutForm" class="controls">
+                <label>Custom Zwift workout file
+                    <input id="workoutFile" type="file" accept=".zwo" required>
+                </label>
+                <button id="uploadWorkout" type="submit">Use custom workout</button>
+            </form>
+            <p class="help">Upload a time-based cycling .zwo file (up to 1 MiB and 10,000 blocks).
+                Files are parsed for this analysis only, not saved or added to the built-in catalog.
+                If sport type is omitted, cycling is assumed.</p>
+            <p id="uploadStatus" role="status"></p>
+        </div>
         <p id="planError" class="error" role="alert"></p>
         <div class="controls">
             <label>Workout FTP (W)

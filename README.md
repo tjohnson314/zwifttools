@@ -58,6 +58,7 @@ unchanged.
 
 - Open `/workout-analysis`, or use an activity's Workout Analysis link in My Activities
 - Load an activity by ID or Zwift activity URL and search the bundled built-in time-based cycling workout catalog
+- Or choose **Upload custom workout (.zwo)** and load a time-based cycling workout file (up to 1 MiB and 10,000 blocks); uploads are not saved or added to the catalog
 - Prefill FTP from the current Zwift profile when available, with a manual override for the FTP used on that ride
 - Adjust whole-workout intensity and start offset; negative offsets are supported
 - Overlay raw recorded power with planned ramps, steady targets, and target ranges

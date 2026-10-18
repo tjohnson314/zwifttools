@@ -6,6 +6,7 @@ let loadedActivity = null;
 let powerChart = null;
 let planRequest = 0;
 let ftpEdited = false;
+let customWorkout = null;
 
 function typicalInterval(times) {
     const deltas = times.slice(1).map((time, index) => time - times[index]).sort((a, b) => a - b);
@@ -202,8 +203,8 @@ function renderComparison() {
     });
 }
 
-async function fetchJson(url) {
-    const response = await fetch(url);
+async function fetchJson(url, options) {
+    const response = await fetch(url, options);
     if (!response.ok) {
         let message = `Request failed (HTTP ${response.status})`;
         try {
@@ -238,21 +239,72 @@ function filterWorkouts() {
 async function chooseWorkout() {
     const requestId = ++planRequest;
     const id = document.getElementById('workoutSelect').value;
-    selectedWorkout = null;
-    document.getElementById('ftp').disabled = false;
     document.getElementById('planError').textContent = '';
-    document.getElementById('planWarnings').textContent = '';
-    renderComparison();
+    setSelectedWorkout(null);
     if (!id) return;
     try {
         const workout = await fetchJson(`/api/workouts/${encodeURIComponent(id)}`);
         if (requestId !== planRequest) return;
-        selectedWorkout = workout;
-        document.getElementById('ftp').disabled = Number.isFinite(workout.ftp_override);
-        document.getElementById('planWarnings').textContent = workout.warnings.join(' ');
-        renderComparison();
+        setSelectedWorkout(workout);
     } catch (error) {
         if (requestId === planRequest) document.getElementById('planError').textContent = error.message;
+    }
+}
+
+function setSelectedWorkout(workout) {
+    selectedWorkout = workout;
+    document.getElementById('ftp').disabled = workout !== null && Number.isFinite(workout.ftp_override);
+    document.getElementById('planWarnings').textContent = workout ? workout.warnings.join(' ') : '';
+    renderComparison();
+}
+
+function changeWorkoutSource() {
+    ++planRequest;
+    const custom = document.getElementById('workoutSource').value === 'custom';
+    document.getElementById('builtinControls').hidden = custom;
+    document.getElementById('customControls').hidden = !custom;
+    document.getElementById('planError').textContent = '';
+    if (custom) setSelectedWorkout(customWorkout);
+    else chooseWorkout();
+}
+
+async function uploadWorkout(event) {
+    event.preventDefault();
+    const requestId = ++planRequest;
+    const file = document.getElementById('workoutFile').files[0];
+    const errorField = document.getElementById('planError');
+    const status = document.getElementById('uploadStatus');
+    errorField.textContent = '';
+    status.textContent = '';
+    customWorkout = null;
+    setSelectedWorkout(null);
+    if (!file || !file.name.toLowerCase().endsWith('.zwo')) {
+        errorField.textContent = 'Choose a custom .zwo workout file.';
+        return;
+    }
+    if (file.size > 1024 * 1024) {
+        errorField.textContent = 'Workout file must be 1 MiB or smaller.';
+        return;
+    }
+    const form = new FormData();
+    form.append('file', file);
+    const button = document.getElementById('uploadWorkout');
+    button.disabled = true;
+    status.textContent = 'Reading custom workout...';
+    try {
+        const workout = await fetchJson('/api/workouts/upload', { method: 'POST', body: form });
+        if (requestId !== planRequest) return;
+        customWorkout = workout;
+        status.textContent = `${workout.name} (${formatTime(workout.duration_sec)}) loaded from ${file.name}.`;
+        setSelectedWorkout(workout);
+    } catch (error) {
+        if (requestId === planRequest) {
+            status.textContent = 'Custom workout not loaded.';
+            errorField.textContent = error.message;
+        }
+    } finally {
+        button.disabled = false;
+        if (requestId !== planRequest) status.textContent = '';
     }
 }
 
@@ -302,7 +354,7 @@ async function loadCatalog() {
         filterWorkouts();
         document.getElementById('workoutSelect').disabled = false;
     } catch (error) {
-        document.getElementById('planError').textContent = error.message;
+        document.getElementById('catalogStatus').textContent = `Built-in catalog unavailable: ${error.message}`;
     }
 }
 
@@ -326,6 +378,8 @@ function init() {
     document.getElementById('activityForm').addEventListener('submit', loadActivity);
     document.getElementById('workoutSearch').addEventListener('input', filterWorkouts);
     document.getElementById('workoutSelect').addEventListener('change', chooseWorkout);
+    document.getElementById('workoutSource').addEventListener('change', changeWorkoutSource);
+    document.getElementById('uploadWorkoutForm').addEventListener('submit', uploadWorkout);
     for (const id of ['ftp', 'intensity', 'offset']) {
         document.getElementById(id).addEventListener('input', () => {
             if (id === 'ftp') ftpEdited = true;

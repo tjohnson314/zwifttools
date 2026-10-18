@@ -144,6 +144,24 @@ tests scale by that reference rather than the rider's profile FTP. The page
 disables the FTP field for these plans and explains the fixed reference.
 Missing or invalid catalog data returns an explicit 503 error.
 
+### Custom plans: `POST /api/workouts/upload`
+
+Requires a logged-in session. Accepts a multipart `file` containing a `.zwo`
+workout, at most 1 MiB, and returns the same plan shape as catalog details.
+Uses the shared `parse_workout()` parser, so repeats, ramps, ranges, fixed FTP
+references, and unscored blocks behave identically. Missing sport type defaults
+to cycling; other sports, distance-based plans, untimed/empty plans, malformed
+XML, and unknown or invalid blocks return explicit 400 errors. Oversized uploads
+return 413. DOCTYPE declarations are rejected and expanded plans are limited to
+10,000 blocks to bound parsing work. Total duration must remain finite.
+
+Uploaded files and parsed plans are not saved, added to the catalog, or sent to
+Zwift. The browser keeps the parsed custom plan in memory for this page only.
+Switching sources preserves the selected built-in plan and the last successfully
+loaded custom plan, with stale requests prevented from changing the active plan.
+Both sources share the same FTP/intensity/offset controls, nearest-5-W target
+rounding, raw-power chart, and coverage statistics.
+
 ### Recorded power: `GET /api/workout_activity/<activity_id>`
 
 Requires authentication. Uses `fetch_rider_telemetry()` and returns raw

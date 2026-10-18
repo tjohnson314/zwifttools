@@ -11,6 +11,7 @@ label { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 190
 .wide { flex: 2; min-width: 0; }
 input, select, button { font: inherit; padding: 11px; border-radius: 6px; border: 1px solid #666; }
 input, select { background: #202039; color: #fff; width: 100%; }
+#workoutSource { margin-bottom: 16px; }
 button { background: #f7931e; color: #17172c; cursor: pointer; font-weight: 600; }
 button:disabled { opacity: .6; cursor: wait; }
 .error { color: #ff9898; }
