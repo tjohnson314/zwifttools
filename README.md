@@ -159,13 +159,151 @@ Nearby Draft interpolates all rider positions, displayed distances, and camera m
    - `SECRET_KEY` — Flask session secret (auto-generated if unset)
    - `AZURE_STORAGE_CONNECTION_STRING` — Azure Blob Storage for race data caching
    - `AZURE_STORAGE_CONTAINER` — blob container name (default: `race-cache`)
-   - `ZWIFT_USERNAME` / `ZWIFT_PASSWORD` — only needed for the Azure Function (headless Zwift auth)
+   - `ZWIFT_USERNAME` / `ZWIFT_PASSWORD` — headless Zwift auth for the Azure Function and CLI data downloads
 
 3. Run:
    ```bash
    python app.py
    ```
    Open http://localhost:5000
+
+### Tour of Watopia racing-score export
+
+Export every classified rider's Tour of Watopia race results using your Zwift
+email and password. Reuse an existing classification download:
+
+```powershell
+python tools\fetch_tour_of_watopia.py --classification-file race_data\tour_of_watopia_2026.json
+```
+
+Without `--classification-file`, the script first downloads the classification
+and saves it to `race_data/tour_of_watopia_2026.json` (`--output` overrides this).
+The script prompts for credentials (password input is hidden), or reads
+`ZWIFT_USERNAME` / `ZWIFT_PASSWORD` from the environment. It does not save
+credentials or tokens. Do not put credentials in source files or share them.
+
+The default table is `race_data/tour_of_watopia_2026.csv` (`--csv-output`
+overrides this), with exactly these columns:
+
+| Column | Source |
+|--------|--------|
+| `profileId` | Rider profile ID |
+| `eventId` | Race event ID |
+| `eventSubgroupId` | Race subgroup ID |
+| `previousScore` | `scoreHistory.previousScore`, the racing score before the race |
+| `rank` | Rank from that rider's race result |
+| `newScore` | `scoreHistory.newScore`, the racing score after the race |
+
+`newScore` is appended after the original five columns. Cached histories
+already retain `scoreHistory.newScore`; rerun with the same dates to regenerate
+the CSV without downloading completed rider histories again.
+
+Each unique classified rider's race history is paginated from **2026-10-01**
+through the API `to` date (default: tomorrow UTC). Override dates with
+`--since YYYY-MM-DD --until YYYY-MM-DD`. Completed rider histories, including
+unmodified API payloads, are cached under `race_data/tow_histories`
+(`--history-cache` overrides this). Rerunning with the same dates resumes from
+these caches; remove the specific history cache files if you want to refresh
+them. A different date range uses separate cache files.
+
+After all histories are loaded, one POST to `events/bulk-fetch` requests every
+unique event ID. Only results whose event has the exact `tourofwatopia2026` tag
+are included (`--league` also sets the tag). All matching attempts are retained,
+not only each rider's best attempt. Scores and ranks are not clipped, and
+missing scores/ranks remain blank with a warning; neither score is substituted
+for the other or replaced by a rider's current score. The export does not
+exclude flagged or unqualified results.
+Compare ranks within event subgroups rather than treating different fields as
+a single ranking.
+
+The script refreshes expired tokens and retries rate limits and transient
+server errors. All classification, history, and bulk-event requests share a
+minimum **2-second interval between request starts**, including retries.
+Use `--request-interval 5` for a slower starting pace. Every HTTP 429 doubles
+the interval (up to 60 seconds, or your starting interval if larger), and the
+slower interval persists for the rest of that run. Retries after a 429 wait
+at least 30, 60, then 120 seconds and honor longer `Retry-After` values in
+either seconds or HTTP-date form. Invalid headers produce a warning and use
+local backoff. These are conservative defaults, not a verified Zwift rate
+limit; a new run starts at the configured interval.
+
+Stop any running copy before restarting the updated script so separate
+processes do not compete for the same API quota. If rate limiting persists,
+allow a cooldown before resuming with the same dates and a larger interval.
+History, schema, or missing event-detail errors exit nonzero
+without replacing the final CSV; completed history caches remain available.
+The CSV and JSON writes use temporary files followed by replacement. All
+default data paths are git-ignored.
+
+The default classification includes the curly quotes in the supplied results
+URL. If Zwift's successful browser request uses plain `overall`, run:
+
+```powershell
+python tools\fetch_tour_of_watopia.py --classification overall
+```
+
+Use `--classification-only` for the original classification-only JSON download.
+Use `--page-size` to change the requested pagination size. Classification and
+history endpoints accept either entry arrays or objects with an `entries`
+array; bulk event details accept an event array or an object with an `events`
+array. Live history and bulk requests still require verification with your
+Zwift credentials.
+
+### ZwiftRacing.app event-rating export
+
+After the ZRS export finishes, use its unique event IDs to download all riders
+from every pen of each event's public ZwiftRacing.app page:
+
+```powershell
+python tools\fetch_zwiftracing_results.py
+```
+
+No Zwift credentials are used or sent to ZwiftRacing.app. The default input is
+`race_data/tour_of_watopia_2026.csv` (`--input` overrides this); only its
+`eventId` column is needed. Events are deduplicated, but riders are **not**
+restricted to those appearing in the input CSV. The input is assumed to have
+already been filtered to Tour of Watopia events.
+
+The default output is `race_data/tour_of_watopia_2026_velo.csv` (`--output`
+overrides this), with these columns:
+
+| Column | Embedded `props.pageProps.detail` source |
+|--------|-----------------------------------------|
+| `profileId` | `pens[].riders[].riderId` |
+| `eventId` | `eventId` |
+| `eventSubgroupId` | `pens[].id` |
+| `position` | `pens[].riders[].position` |
+| `expectedPosition` | `pens[].riders[].expectedPosition` |
+| `ratingBefore` | `pens[].riders[].ratingBefore` |
+| `ratingAfter` | `pens[].riders[].rating` |
+
+These are the **top-level rider ratings**, not the different scale in
+`velo.elo.before/after` or `velo.seed.before/after`. Missing positions and
+ratings remain blank with a warning, and raw values are never clipped,
+rounded, or substituted from the nested ratings.
+
+The script parses the HTML's `__NEXT_DATA__` JSON without running JavaScript.
+Validated event details are cached under `race_data/zwiftracing_events`
+(`--cache-dir` overrides this). Rerunning reuses completed events; `--refresh`
+redownloads them. Unfinalized results are retained with a warning, so refresh
+them later if needed. Parsing, HTTP, and incomplete-rider-list errors stop the
+export without replacing the final CSV; completed caches remain available.
+
+Requests use the same pacing/backoff helper as the ZRS downloader: 2-second
+starting intervals, adaptive slowdown on 429, and numeric or HTTP-date
+`Retry-After` support. Use `--request-interval` to adjust the starting interval.
+Each process has its own pacer. If the site keeps rate-limiting requests,
+stop and allow a cooldown rather than running multiple copies.
+
+To test a single event without waiting for the ZRS CSV:
+
+```powershell
+python tools\fetch_zwiftracing_results.py --event-id 5722198 --output race_data\velo_sample.csv
+```
+
+Repeat `--event-id` for multiple events. A live request returned HTTP 429 during
+development; extraction was validated using the supplied HTML structure and
+synthetic tests rather than a successful live download.
 
 ### Running tests
 

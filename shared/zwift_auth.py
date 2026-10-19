@@ -100,7 +100,7 @@ def refresh_access_token(refresh_token: str) -> ZwiftTokens:
         'refresh_token': refresh_token
     }
     
-    resp = requests.post(ZWIFT_TOKEN_URL, data=data)
+    resp = requests.post(ZWIFT_TOKEN_URL, data=data, timeout=30)
     resp.raise_for_status()
     
     token_data = resp.json()
@@ -134,7 +134,7 @@ def get_token_with_password(username: str, password: str) -> ZwiftTokens:
         'password': password
     }
     
-    resp = requests.post(ZWIFT_TOKEN_URL, data=data)
+    resp = requests.post(ZWIFT_TOKEN_URL, data=data, timeout=30)
     resp.raise_for_status()
     
     token_data = resp.json()
