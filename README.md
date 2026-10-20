@@ -50,7 +50,7 @@ unchanged.
 
 - Browse worlds and routes at `/surface-map`, with surface-colored elevation profiles
 - New York subway escalators are highlighted in gold, including repeated passages and lead-ins
-- Hover an escalator marker for its distance interval, game Bonus Watts parameter, and trainer-slope scale
+- Hover an escalator marker for its distance interval and trainer-slope scale
 - Markers come from directional subway bonus-power trigger volumes in the game's `entities.xml`, joined to route checkpoints by road ID, direction, and road time; they are not inferred from gradients or surface types
 - These are display annotations only: elevation samples and pacing physics are unchanged
 
@@ -190,8 +190,10 @@ email and password. Reuse an existing classification download:
 python tools\fetch_tour_of_watopia.py --classification-file race_data\tour_of_watopia_2026.json
 ```
 
-Without `--classification-file`, the script first downloads the classification
-and saves it to `race_data/tour_of_watopia_2026.json` (`--output` overrides this).
+Without `--classification-file`, the script reuses an existing
+`race_data/tour_of_watopia_2026.json` (`--output` overrides this), or downloads
+and saves the classification if that file is absent. Use
+`--refresh-classification` to explicitly download a fresh participant list.
 The script prompts for credentials (password input is hidden), or reads
 `ZWIFT_USERNAME` / `ZWIFT_PASSWORD` from the environment. It does not save
 credentials or tokens. Do not put credentials in source files or share them.
@@ -213,15 +215,34 @@ already retain `scoreHistory.newScore`; rerun with the same dates to regenerate
 the CSV without downloading completed rider histories again.
 
 Each unique classified rider's race history is paginated from **2026-10-01**
-through the API `to` date (default: tomorrow UTC). Override dates with
+through the API `to` date (initial default: tomorrow UTC). Override dates with
 `--since YYYY-MM-DD --until YYYY-MM-DD`. Completed rider histories, including
 unmodified API payloads, are cached under `race_data/tow_histories`
-(`--history-cache` overrides this). Rerunning with the same dates resumes from
-these caches; remove the specific history cache files if you want to refresh
-them. A different date range uses separate cache files.
+(`--history-cache` overrides this). The run's date range is saved in
+`download_state.json` inside that directory, so crossing midnight does not
+silently change the default end date on the next run. An explicit `--until`
+overrides the saved end date. Rerunning with the same dates resumes from these
+caches; cached progress lines are labeled `(cached)` and make no history
+requests. Remove specific rider cache files if you want to refresh them.
+A different date range uses separate cache files.
 
-After all histories are loaded, one POST to `events/bulk-fetch` requests every
-unique event ID. Only results whose event has the exact `tourofwatopia2026` tag
+For older downloads made before the saved run-date feature, select the
+original end date from the history filenames once. For example, files named
+`<profileId>_2026-10-01_2026-10-20.json` are reused by:
+
+```powershell
+python tools\fetch_tour_of_watopia.py --until 2026-10-20 --request-interval 0.5
+```
+
+This also saves that date for subsequent default reruns.
+
+After all histories are loaded, POST requests to `events/bulk-fetch` retrieve
+unique event IDs in batches of at most 50 (`--event-batch-size` overrides this).
+HTTP 400/413 batches are recursively split; a failing singleton is reported
+with its event ID rather than silently omitted. Validated event details are
+cached under `race_data/tow_events` (`--event-cache` overrides this), so a later
+failure does not require refetching completed event lookups.
+Only results whose event has the exact `tourofwatopia2026` tag
 are included (`--league` also sets the tag). All matching attempts are retained,
 not only each rider's best attempt. Scores and ranks are not clipped, and
 missing scores/ranks remain blank with a warning; neither score is substituted

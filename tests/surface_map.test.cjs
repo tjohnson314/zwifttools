@@ -45,7 +45,7 @@ test('escalator intervals and hover details render without changing elevation', 
     assert.equal(markers[0].yaxis, 'y2');
     assert.equal(markers[0].showlegend, true);
     assert.equal(markers[1].showlegend, false);
-    assert.match(markers[0].hovertemplate, /Bonus Watts parameter: 15/);
+    assert.doesNotMatch(markers[0].hovertemplate, /bonus watts/i);
     assert.match(markers[0].hovertemplate, /Trainer slope: 20%/);
     assert.equal(result.layout.shapes.filter(shape => shape.fillcolor === '#f4bd50').length, 2);
     // Clicking elevation must retain both sprint and escalator shading.

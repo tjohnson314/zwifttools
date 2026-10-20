@@ -396,7 +396,6 @@ function renderElevation(d) {
             line: { color: '#f4bd50', width: 6 }, marker: { symbol: 'triangle-up', size: 8 },
             name: 'Escalator', legendgroup: 'escalators', showlegend: index === 0,
             hovertemplate: `Escalator (${escalator.name})<br>${start.toFixed(2)}-${end.toFixed(2)} km`
-                + `<br>Bonus Watts parameter: ${escalator.bonus_watts}`
                 + `<br>Trainer slope: ${Math.round(escalator.trainer_slope_scale * 100)}%<extra></extra>`,
         });
     });
