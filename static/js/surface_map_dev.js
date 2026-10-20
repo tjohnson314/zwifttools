@@ -83,9 +83,6 @@ async function loadWorld(mapId) {
         state.world = data;
         buildLegend(data.colors);
         renderRoadList();
-        const b = data.bounds;
-        state.baseScale = Math.min(canvas.width / Math.max(b.max_x - b.min_x, 1),
-                                   canvas.height / Math.max(b.max_y - b.min_y, 1)) * 0.94;
         fitToBounds(data.bounds);
         loadBackground(data.background);
         document.getElementById('map-hint').style.display = 'none';
@@ -346,12 +343,15 @@ function renderBase() {
         g.drawImage(state.bgImage, p0.sx, p0.sy, p1.sx - p0.sx, p1.sy - p0.sy);
     }
 
+    const b = state.world.bounds;
+    state.baseScale = Math.min(canvas.width / Math.max(b.max_x - b.min_x, 1),
+                               canvas.height / Math.max(b.max_y - b.min_y, 1)) * 0.94;
     const zoomK = state.baseScale ? state.scale / state.baseScale : 1;
 
     // Faint full road network for context.
     if (state.showNetwork) {
         g.strokeStyle = 'rgba(150,160,175,0.35)';
-        g.lineWidth = Math.max(0.8, 1.6 * zoomK);
+        g.lineWidth = mapStrokeWidth(1.5, zoomK, state.dpr);
         state.world.roads.forEach(r => {
             if (r.id !== state.activeRoadId && r.x.length > 1) polyline(g, r.x, r.y);
         });
@@ -359,8 +359,8 @@ function renderBase() {
 
     // Selected road in orange with a dark casing.
     if (state.road && state.road.full && state.road.full.x.length > 1) {
-        const w = Math.max(2.5, 3.5 * zoomK);
-        g.lineWidth = w + 3;
+        const w = mapStrokeWidth(3.5, zoomK, state.dpr);
+        g.lineWidth = w + 2 * state.dpr;
         g.strokeStyle = 'rgba(0,0,0,0.55)';
         polyline(g, state.road.full.x, state.road.full.y);
         g.lineWidth = w;
@@ -370,8 +370,8 @@ function renderBase() {
 
     // Selected segment / marker highlight.
     if (state.highlight && state.highlight.x.length > 1) {
-        const w = Math.max(4, 6 * zoomK);
-        g.lineWidth = w + 4;
+        const w = mapStrokeWidth(6, zoomK, state.dpr);
+        g.lineWidth = w + 2 * state.dpr;
         g.strokeStyle = 'rgba(0,0,0,0.65)';
         polyline(g, state.highlight.x, state.highlight.y);
         g.lineWidth = w;

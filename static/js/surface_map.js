@@ -91,10 +91,6 @@ async function loadWorld(mapId, routeSlug = null) {
         state.world = data;
         buildLegend(data.colors);
         renderRouteList();
-        // Record the full-world fit scale for line-width scaling.
-        const b = data.bounds;
-        state.baseScale = Math.min(canvas.width / Math.max(b.max_x - b.min_x, 1),
-                                   canvas.height / Math.max(b.max_y - b.min_y, 1)) * 0.94;
         fitToBounds(data.bounds);
         loadBackground(data.background);
         document.getElementById('map-hint').style.display = 'none';
@@ -491,11 +487,14 @@ function renderBase() {
         g.drawImage(state.bgImage, p0.sx, p0.sy, p1.sx - p0.sx, p1.sy - p0.sy);
     }
 
-    // Line widths scale with zoom relative to the full-world fit.
+    // Recompute the full-world fit so resizing does not change relative widths.
+    const b = state.world.bounds;
+    state.baseScale = Math.min(canvas.width / Math.max(b.max_x - b.min_x, 1),
+                               canvas.height / Math.max(b.max_y - b.min_y, 1)) * 0.94;
     const zoomK = state.baseScale ? state.scale / state.baseScale : 1;
 
     if (state.showNetwork) {
-        const roadW = Math.max(1.1, 3.0 * zoomK);
+        const roadW = mapStrokeWidth(1.5, zoomK, state.dpr);
         const colors = state.world.colors;
         state.world.segments.forEach(seg => {
             g.strokeStyle = colors[seg.surface] || '#555a63';
@@ -519,13 +518,13 @@ function renderBase() {
 
 function drawRouteSegments(g, segments, zoomK) {
     if (!segments || !segments.length) return;
-    const radius = Math.max(4, 5 * (zoomK || 1));
+    const radius = Math.max(4 * state.dpr, mapStrokeWidth(4, zoomK, state.dpr));
     segments.forEach((segment, index) => {
         const path = segment.path.map(point => toScreen(point.x, point.y));
         const start = path[0];
         const end = path[path.length - 1];
         g.strokeStyle = segment.type === 'kom' ? '#e85d75' : '#2ec4ff';
-        g.lineWidth = Math.max(2, 2 * (zoomK || 1));
+        g.lineWidth = mapStrokeWidth(2, zoomK, state.dpr);
         g.setLineDash([5, 4]);
         g.beginPath();
         path.forEach((point, pointIndex) => {
@@ -540,24 +539,24 @@ function drawRouteSegments(g, segments, zoomK) {
             g.fillStyle = pointIndex === 0 ? '#fff' : g.strokeStyle;
             g.fill();
             g.strokeStyle = '#101820';
-            g.lineWidth = 2;
+            g.lineWidth = 2 * state.dpr;
             g.stroke();
         });
         g.font = `${Math.max(10, 11 * (state.dpr || 1))}px Segoe UI`;
         g.fillStyle = '#fff';
         g.strokeStyle = 'rgba(0,0,0,0.8)';
-        g.lineWidth = 3;
+        g.lineWidth = 3 * state.dpr;
         const label = `${segment.name}${segment.pass > 1 ? ` ${segment.pass}` : ''}`;
-        g.strokeText(label, start.sx + radius + 3, start.sy - radius - 2);
-        g.fillText(label, start.sx + radius + 3, start.sy - radius - 2);
+        g.strokeText(label, start.sx + radius + 3 * state.dpr, start.sy - radius - 2 * state.dpr);
+        g.fillText(label, start.sx + radius + 3 * state.dpr, start.sy - radius - 2 * state.dpr);
     });
 }
 
 function drawLeg(g, leg, color, baseWidth, dashed, zoomK) {
     if (!leg || !leg.x.length) return;
-    const w = Math.max(baseWidth, baseWidth * (zoomK || 1));
+    const w = mapStrokeWidth(baseWidth, zoomK, state.dpr);
     // Dark casing for contrast against same-coloured roads.
-    g.lineWidth = w + 3;
+    g.lineWidth = w + 2 * state.dpr;
     g.strokeStyle = 'rgba(0,0,0,0.55)';
     g.setLineDash([]);
     strokePath(g, leg);

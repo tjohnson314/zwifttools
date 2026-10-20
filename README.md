@@ -49,6 +49,7 @@ unchanged.
 ### Surface Map / Route Explorer
 
 - Browse worlds and routes at `/surface-map`, with surface-colored elevation profiles
+- Road overlays use thin, zoom-aware strokes (1.5 CSS pixels at world fit, growing gently up to 3 pixels); selected routes remain more prominent, including on high-DPI screens and after resizing
 - New York subway escalators are highlighted in gold, including repeated passages and lead-ins
 - Hover an escalator marker for its distance interval and trainer-slope scale
 - Markers come from directional subway bonus-power trigger volumes in the game's `entities.xml`, joined to route checkpoints by road ID, direction, and road time; they are not inferred from gradients or surface types
@@ -241,7 +242,30 @@ unique event IDs in batches of at most 50 (`--event-batch-size` overrides this).
 HTTP 400/413 batches are recursively split; a failing singleton is reported
 with its event ID rather than silently omitted. Validated event details are
 cached under `race_data/tow_events` (`--event-cache` overrides this), so a later
-failure does not require refetching completed event lookups.
+failure does not require refetching completed event lookups. Returned events
+are cached even when the bulk response omits other IDs. Omitted IDs are
+retried through `GET /events/{id}`; the individual response's `id` is
+normalized to `eventId`.
+
+If an event is also unavailable individually (HTTP 403/404/410), strict mode
+finishes caching available event details and then stops. To continue with an
+explicitly incomplete export instead, use:
+
+```powershell
+python tools\fetch_tour_of_watopia.py --until 2026-10-20 --request-interval 0.5 --skip-unavailable-events
+```
+
+This option warns and excludes results for unavailable events. It does **not**
+assume those events are unrelated to Tour of Watopia. The accompanying
+`race_data/tour_of_watopia_2026.excluded_events.json` lists the unresolved
+event IDs, HTTP statuses, reasons, and affected result counts. With a custom
+`--csv-output`, the report is next to that CSV with the
+`.excluded_events.json` suffix. An individual 403 means access is forbidden;
+it does not establish that the event is private or unrelated to the Tour.
+HTTP 400/401/429/5xx, malformed event data,
+and invalid/missing tags still stop the export. Unavailable events are not
+stored as negative cache entries and will be retried on the next run.
+
 Only results whose event has the exact `tourofwatopia2026` tag
 are included (`--league` also sets the tag). All matching attempts are retained,
 not only each rider's best attempt. Scores and ranks are not clipped, and
@@ -287,13 +311,40 @@ Zwift credentials.
 ### ZwiftRacing.app event-rating export
 
 After the ZRS export finishes, use its unique event IDs to download all riders
-from every pen of each event's public ZwiftRacing.app page:
+from every pen of each event's ZwiftRacing.app page. Install the optional
+browser dependencies once:
+
+```powershell
+python -m pip install -r requirements-scraping.txt
+python -m playwright install chromium
+python tools\fetch_zwiftracing_results.py --login
+```
+
+The script opens a dedicated Chromium window. Sign in to ZwiftRacing.app
+there using the site's normal login flow, open the requested event results,
+and press Enter in the terminal when they are visible. Do not type credentials
+into the terminal or share cookies/tokens. Subsequent runs reuse the session:
 
 ```powershell
 python tools\fetch_zwiftracing_results.py
 ```
 
-No Zwift credentials are used or sent to ZwiftRacing.app. The default input is
+Use `--login` again if sign-in expires. Requests are browser navigations in that
+same authenticated context, not cookie copies into a separate HTTP client.
+The browser stays visible during the export; do not navigate it away or close
+it until the script finishes. If all event details are already cached, no
+browser is needed unless `--login` or `--refresh` is used.
+
+By default the browser profile is stored at
+`~/.zwifttools/zwiftracing-browser` (on Windows, under your user directory),
+outside the repository. `--browser-profile` selects another dedicated profile.
+It contains sensitive authentication data: do not share it, check it into git,
+or point this option at your everyday browser profile. Only one script process
+may use a profile at a time.
+
+The script does not read `ZWIFT_USERNAME` / `ZWIFT_PASSWORD`; any sign-in
+credentials are entered only into the browser's normal login pages.
+The default input is
 `race_data/tour_of_watopia_2026.csv` (`--input` overrides this); only its
 `eventId` column is needed. Events are deduplicated, but riders are **not**
 restricted to those appearing in the input CSV. The input is assumed to have
@@ -317,7 +368,8 @@ These are the **top-level rider ratings**, not the different scale in
 ratings remain blank with a warning, and raw values are never clipped,
 rounded, or substituted from the nested ratings.
 
-The script parses the HTML's `__NEXT_DATA__` JSON without running JavaScript.
+The script parses the authenticated page's `__NEXT_DATA__` JSON; the browser
+runs JavaScript as part of the site's normal login and page navigation.
 Validated event details are cached under `race_data/zwiftracing_events`
 (`--cache-dir` overrides this). Rerunning reuses completed events; `--refresh`
 redownloads them. Unfinalized results are retained with a warning, so refresh
@@ -333,12 +385,14 @@ stop and allow a cooldown rather than running multiple copies.
 To test a single event without waiting for the ZRS CSV:
 
 ```powershell
-python tools\fetch_zwiftracing_results.py --event-id 5722198 --output race_data\velo_sample.csv
+python tools\fetch_zwiftracing_results.py --login --event-id 5722198 --output race_data\velo_sample.csv
 ```
 
-Repeat `--event-id` for multiple events. A live request returned HTTP 429 during
-development; extraction was validated using the supplied HTML structure and
-synthetic tests rather than a successful live download.
+Repeat `--event-id` for multiple events. Authentication does not guarantee
+that automated downloads are permitted or remove rate limits. A 429 still
+uses cooldowns and eventually stops; the script does not bypass verification
+challenges or access controls. Live account sign-in must be completed by the
+user; tests do not require real credentials.
 
 ### Running tests
 
