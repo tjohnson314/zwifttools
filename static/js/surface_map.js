@@ -377,6 +377,30 @@ function renderElevation(d) {
     combinedIdx = addLeg(d.leadin, 0, 'dot');
     combinedIdx = addLeg(d.route, d.leadin_distance_m || 0, 'solid');
 
+    (d.escalators || []).forEach((escalator, index) => {
+        const start = escalator.start_distance_m / 1000;
+        const end = escalator.end_distance_m / 1000;
+        const midpoint = (start + end) / 2;
+        let nearest = 0;
+        state.combined.forEach((point, i) => {
+            if (Math.abs(point.dist_m / 1000 - midpoint)
+                    < Math.abs(state.combined[nearest].dist_m / 1000 - midpoint)) nearest = i;
+        });
+        segmentShapes.push({
+            type: 'rect', x0: start, x1: end, y0: 0, y1: 1, yref: 'paper',
+            fillcolor: '#f4bd50', opacity: 0.2, line: { width: 0 },
+        });
+        traces.push({
+            x: [start, end], y: [0.04, 0.04], yaxis: 'y2',
+            customdata: [nearest, nearest], type: 'scatter', mode: 'lines+markers',
+            line: { color: '#f4bd50', width: 6 }, marker: { symbol: 'triangle-up', size: 8 },
+            name: 'Escalator', legendgroup: 'escalators', showlegend: index === 0,
+            hovertemplate: `Escalator (${escalator.name})<br>${start.toFixed(2)}-${end.toFixed(2)} km`
+                + `<br>Bonus Watts parameter: ${escalator.bonus_watts}`
+                + `<br>Trainer slope: ${Math.round(escalator.trainer_slope_scale * 100)}%<extra></extra>`,
+        });
+    });
+
     // Lead-in boundary; the pinned-point line is added on click via relayout.
     state.elevationLeadinKm = d.leadin_distance_m > 0 ? d.leadin_distance_m / 1000 : null;
 
@@ -387,6 +411,7 @@ function renderElevation(d) {
         font: { color: '#c8ccd2', size: 11 },
         xaxis: { title: 'Distance (km)', gridcolor: 'rgba(255,255,255,0.07)', zeroline: false },
         yaxis: { title: 'Elevation (m)', gridcolor: 'rgba(255,255,255,0.07)', zeroline: false },
+        yaxis2: { overlaying: 'y', range: [0, 1], visible: false, fixedrange: true },
         legend: { orientation: 'h', y: 1.12, font: { size: 10 } },
         shapes: [...elevationShapes(), ...segmentShapes],
         annotations: segmentAnnotations,

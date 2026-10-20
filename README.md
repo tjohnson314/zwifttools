@@ -46,6 +46,20 @@ unchanged.
 - Server-side caching for fast reloads
 - In-app FAQ panels for both Bike Comparison and Race Replay
 
+### Surface Map / Route Explorer
+
+- Browse worlds and routes at `/surface-map`, with surface-colored elevation profiles
+- New York subway escalators are highlighted in gold, including repeated passages and lead-ins
+- Hover an escalator marker for its distance interval, game Bonus Watts parameter, and trainer-slope scale
+- Markers come from directional subway bonus-power trigger volumes in the game's `entities.xml`, joined to route checkpoints by road ID, direction, and road time; they are not inferred from gradients or surface types
+- These are display annotations only: elevation samples and pacing physics are unchanged
+
+Refresh the cached New York profiles after updating the extractor or game client:
+
+```powershell
+python tools\extract_zwift_routes.py --world world4
+```
+
 ### Ride Compare
 
 - Compare multiple rides on the same route side-by-side (provide 2+ activity IDs)

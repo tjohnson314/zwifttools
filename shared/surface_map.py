@@ -552,6 +552,7 @@ def get_route(map_id: int, name_hash: int) -> dict | None:
         "leadin": leadin,
         "route": main,
         "segments": _route_segment_markers(map_id, route, leadin, main),
+        "escalators": route.get("escalators", []),
         "breakdown": breakdown_list,
         "bounds": bounds,
     }

@@ -455,6 +455,86 @@ def parse_segment_definitions(data: bytes) -> list[dict]:
     return definitions
 
 
+def parse_escalator_definitions(data: bytes) -> list[dict]:
+    """Read directional subway bonus-power volumes, not visual props."""
+    definitions = []
+    for entity in load_multiroot(data).iter("ent"):
+        attributes = entity.attrib
+        if attributes.get("type") != "ENTITY_TYPE_VOLUME_EVENTTRIGGER":
+            continue
+        responses = attributes.get("m_selectedResponsesForSave", "").split(";")
+        name = attributes.get("m_triggerTagName", "")
+        if not name.startswith("Subway") or "Set Bonus Watts" not in responses:
+            continue
+        parameters = attributes["m_selectedResponseParametersForSave"].split(";")
+        definitions.append({
+            "name": name,
+            "road_id": int(attributes.get("m_roadId", "0")),
+            "start_time": float(attributes["m_backRoadTime"]),
+            "end_time": float(attributes["m_frontRoadTime"]),
+            # Trigger 0/1 means forward/reverse; checkpoint dir 1/0 does.
+            "direction": (1 - int(attributes.get("m_triggerDir", "0"))
+                          if attributes.get("m_bDirectionalTrigger") == "1" else None),
+            "bonus_watts": float(parameters[responses.index("Set Bonus Watts")]),
+            "trainer_slope_scale": float(attributes["m_trainerSlopeScale"]),
+        })
+    return definitions
+
+
+def derive_escalator_passages(root: ET.Element, definitions: list[dict],
+                              leadin_distance_m: float) -> list[dict]:
+    """Intersect trigger road-time intervals with full-resolution route edges."""
+    passages = []
+    for leg_name, offset in (("leadinhighrescheckpoint", 0.0),
+                             ("highrescheckpoint", leadin_distance_m)):
+        leg = root.find(leg_name)
+        if leg is None:
+            continue
+        entries = leg.findall("entry")
+        points, road_times = _leg_points(leg)
+        if len(points) != len(entries):
+            raise ValueError("Cannot locate escalators on invalid route checkpoints")
+        distances = [value / UNITS_PER_METRE for value in _cumulative_planar(points)]
+        for definition in definitions:
+            low = min(definition["start_time"], definition["end_time"])
+            high = max(definition["start_time"], definition["end_time"])
+            current = None
+            for index in range(len(entries) - 1):
+                road0, time0 = road_times[index]
+                road1, time1 = road_times[index + 1]
+                direction = definition["direction"]
+                if (road0 != definition["road_id"] or road1 != road0 or time0 == time1
+                        or (direction is not None and (
+                            int(entries[index].get("dir", "0")) != direction
+                            or int(entries[index + 1].get("dir", "0")) != direction))):
+                    current = None
+                    continue
+                start = max(0.0, min((low - time0) / (time1 - time0),
+                                     (high - time0) / (time1 - time0)))
+                end = min(1.0, max((low - time0) / (time1 - time0),
+                                   (high - time0) / (time1 - time0)))
+                if end <= start:
+                    current = None
+                    continue
+                edge_distance = distances[index + 1] - distances[index]
+                start_distance = offset + distances[index] + start * edge_distance
+                end_distance = offset + distances[index] + end * edge_distance
+                if current is not None and math.isclose(
+                        current["end_distance_m"], start_distance, abs_tol=1e-6):
+                    current["end_distance_m"] = end_distance
+                else:
+                    current = {
+                        **definition, "leg": "leadin" if leg_name == "leadinhighrescheckpoint" else "route",
+                        "start_distance_m": start_distance, "end_distance_m": end_distance,
+                    }
+                    passages.append(current)
+    passages.sort(key=lambda passage: passage["start_distance_m"])
+    for passage in passages:
+        for key in ("start_distance_m", "end_distance_m"):
+            passage[key] = round(passage[key], 2)
+    return passages
+
+
 def derive_segment_data(root: ET.Element, definitions: list[dict]) -> list[dict]:
     """Derive segment passages from route checkpoints and timing-arch bounds."""
     legs = [root.find("leadinhighrescheckpoint"), root.find("highrescheckpoint")]
@@ -525,7 +605,8 @@ def parse_route(data: bytes, map_id: int, max_points: int,
                 roads: dict | None = None, styles: list[str] | None = None,
                 surface_map: dict | None = None,
                 segment_names: dict[int, str] | None = None,
-                segment_definitions: list[dict] | None = None) -> dict | None:
+                segment_definitions: list[dict] | None = None,
+                escalator_definitions: list[dict] | None = None) -> dict | None:
     root = load_multiroot(data)
     r = root.find("route")
     if r is None:
@@ -587,6 +668,8 @@ def parse_route(data: bytes, map_id: int, max_points: int,
         "route_checkpoint_count": len(main_pts),
         "segments": segment_entries,
         "segment_path": segment_path,
+        "escalators": derive_escalator_passages(root, escalator_definitions, leadin_distance_m)
+        if escalator_definitions else [],
     }
 
 
@@ -658,6 +741,7 @@ def main() -> int:
                      if k.lower().endswith("entities.xml")), None)
         segment_names = parse_segment_names(entity_bytes) if entity_bytes else {}
         segment_definitions = parse_segment_definitions(entity_bytes) if entity_bytes else []
+        escalator_definitions = parse_escalator_definitions(entity_bytes) if entity_bytes else []
 
         route_files = sorted(
             (nm for nm in entries if "/routes/" in nm and nm.endswith(".xml")),
@@ -671,7 +755,7 @@ def main() -> int:
             try:
                 route = parse_route(entries[nm], map_id, args.max_points,
                                     roads, styles, surface_map, segment_names,
-                                    segment_definitions)
+                                    segment_definitions, escalator_definitions)
             except Exception as exc:  # noqa: BLE001
                 print(f"  {world}/{nm}: parse error ({exc})", file=sys.stderr)
                 continue
