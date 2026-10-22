@@ -12,14 +12,14 @@
   "mapID": 1,
   "world": "world1",
   "file": "world_1.json",
-  "segments": 343,
+  "segments": 344,
   "surfaces": {
-   "Tarmac": 188,
+   "Tarmac": 190,
    "Cobbles": 10,
    "Wood": 45,
    "Dirt": 40,
    "Snow": 4,
-   "Sand": 48,
+   "Sand": 47,
    "Gravel": 8
   }
  },
