@@ -3873,6 +3873,55 @@ def api_race_load():
     if not race_id:
         return jsonify({'error': 'race_id required'}), 400
 
+    # Saved replays remain available offline; authenticated loads refresh the
+    # roster unless fetch_stream has just refreshed it in the same UI cycle.
+    headers = get_headers()
+    if headers and data.get('refresh_participants', True):
+        is_event = race_id.startswith('race_event_')
+        meta_name = 'event_manifest.json' if is_event else 'race_meta.json'
+        meta_path = Path('race_data') / race_id / meta_name
+        if not meta_path.exists() and blob_storage.race_exists_in_blob(race_id):
+            blob_storage.download_race_dir(race_id, meta_path.parent)
+        if is_event and meta_path.exists():
+            with open(meta_path) as f:
+                manifest = json.load(f)
+            subgroups = manifest.get('subgroups', [])
+            if subgroups:
+                meta_path = Path('race_data') / subgroups[0]['race_id'] / 'race_meta.json'
+                if not meta_path.exists():
+                    blob_storage.download_race_dir(subgroups[0]['race_id'], meta_path.parent)
+        if not meta_path.exists():
+            return jsonify({'error': 'Race metadata not found; fetch the race using an activity ID.'}), 404
+        with open(meta_path) as f:
+            meta = json.load(f)
+        source_activity_id = meta.get('source_activity_id')
+        if not source_activity_id:
+            return jsonify({'error': 'Source activity missing; fetch the race using an activity ID.'}), 400
+        if is_event:
+            from shared.data_fetcher import fetch_all_subgroups_from_activity
+            results, event_id, race_name, error = fetch_all_subgroups_from_activity(
+                source_activity_id, headers, output_base_dir='race_data',
+            )
+            if error:
+                return jsonify({'error': error}), 502
+            manifest = {
+                'event_id': event_id, 'race_name': race_name,
+                'subgroups': [
+                    {'race_id': Path(d).name, 'label': label, 'subgroup_id': sg_id}
+                    for d, label, sg_id in results
+                ],
+            }
+            with open(Path('race_data') / race_id / 'event_manifest.json', 'w') as f:
+                json.dump(manifest, f)
+        else:
+            output_dir, message = fetch_race_from_activity(
+                source_activity_id, headers, output_base_dir='race_data',
+                event_subgroup_id=meta.get('event_subgroup_id'),
+            )
+            if not output_dir:
+                return jsonify({'error': message}), 502
+        _race_data_cache.pop(race_id, None)
+
     # Multi-subgroup event (race_event_XXXX) — load each subgroup and merge
     if race_id.startswith('race_event_'):
         return _load_multi_subgroup_race(race_id)

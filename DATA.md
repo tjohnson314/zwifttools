@@ -337,18 +337,20 @@ Renders `race_replay.html`.
 
 **Purpose:** Fetch all race data from Zwift API given an activity URL or ID, streaming progress via **Server-Sent Events (SSE)**.
 
-**Params:** `activity_url` (required), `force_refresh` (optional, `1` to bypass cache and re-fetch from Zwift API)
+**Params:** `activity_id` (required, URL or ID), `all_subgroups` (optional, `1` for all categories), `force_refresh` (optional, `1` to re-download individual activities too)
 
 1. **Extract activity ID** from URL or raw ID
 2. **Get activity details** — `GET /api/activities/{id}` → extract `eventInfo.eventSubGroupId`
-3. **Check local cache** — does `race_data/race_data_{subgroup_id}/` exist?
-4. **Check blob storage** — `race_exists_in_blob(race_id)` → download if available
+3. **Index cached individual activities** in `race_data/race_data_{subgroup_id}/` by activity ID, not rank
+4. **Check blob storage** — download if unavailable locally, using it only to reuse individual activity data
 5. **Fetch event subgroup** — `GET /api/events/subgroups/{subgroupId}` → race name, start time, route ID, segment distance
-6. **Fetch race results** — `get_race_entries(subgroup_id, headers)`:
+6. **Always fetch fresh race results** — `get_race_entries(subgroup_id, headers)` (also for each category in all-subgroup mode):
    - Paginated `GET /api/race-results/entries?event_subgroup_id={id}&start={n}&limit=50`
    - Extract rank, name, activity_id, weight, player_id per participant
    - `deduplicate_ranks()` to fix duplicate rank numbers
 7. **Fetch all rider telemetry** — 5 concurrent threads, each calls:
+   - Reuse successful cached activity data when available; retry missing or previously failed downloads
+   - Use current results for rider membership, rank, and profile information; regenerate rank-keyed files if rank changed
    - `fetch_rider_telemetry(activity_id, headers)` → raw telemetry JSON
    - `convert_telemetry_to_dataframe(telem_data)` → DataFrame
    - `save_rider_data()` → writes `rank{n}_{activity_id}.csv` + `rank{n}_{activity_id}_raw.json`
@@ -377,6 +379,13 @@ Uses a background thread + `queue.Queue` to bridge `progress_callback` → SSE g
 ### `POST /api/race/load`
 
 **Purpose:** Load and clean a race data directory, returning metadata
+
+Authenticated loads refresh the participant list from Zwift using the saved source
+activity, while reusing successful individual activity downloads. The UI skips this
+extra refresh immediately after a successful `fetch_stream` call. Logged-out users
+can still open the saved replay snapshot without API access. Refresh failures are
+reported rather than silently showing an old roster. Cleaned caches are invalidated
+after fetching; old rider files outside the current successful results are ignored.
 
 **Pipeline:**
 

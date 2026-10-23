@@ -424,7 +424,7 @@ async function loadRaceById(raceId, internal = false) {
         const loadResp = await fetch('/api/race/load', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ race_id: raceId }),
+            body: JSON.stringify({ race_id: raceId, refresh_participants: !internal }),
         });
         if (!loadResp.ok) {
             let errMsg = `Server error: ${loadResp.status}`;

@@ -397,6 +397,61 @@ def save_rider_data(output_dir, rank, activity_id, df, telem_data, route_id=None
         json.dump(telem_data, f)
 
 
+def _load_cached_riders(output_dir, force_refresh):
+    """Index successful activity downloads, never the current race roster."""
+    if force_refresh:
+        return {}
+    summary_path = os.path.join(output_dir, "complete_race_summary.csv")
+    if not os.path.exists(summary_path):
+        race_id = os.path.basename(output_dir)
+        if blob_storage.race_exists_in_blob(race_id):
+            os.makedirs(output_dir, exist_ok=True)
+            blob_storage.download_race_dir(race_id, output_dir)
+    if not os.path.exists(summary_path):
+        return {}
+    try:
+        summary = pd.read_csv(summary_path, dtype={'activity_id': str})
+        return {
+            row['activity_id']: row
+            for row in summary.to_dict('records')
+            if row.get('status') == 'SUCCESS'
+        }
+    except (OSError, ValueError, KeyError) as exc:
+        logger.warning("Could not read activity cache %s: %s", summary_path, exc)
+        return {}
+
+
+def _reuse_cached_rider(participant, output_dir, cached_riders):
+    activity_id = participant['activity_id']
+    cached = cached_riders.get(activity_id)
+    if cached is None:
+        return None
+    old_rank = int(cached['rank'])
+    csv_path = os.path.join(output_dir, f"rank{old_rank}_{activity_id}.csv")
+    json_path = os.path.join(output_dir, f"rank{old_rank}_{activity_id}_raw.json")
+    if not os.path.exists(csv_path) or not os.path.exists(json_path):
+        return None
+    try:
+        df = pd.read_csv(csv_path)
+        with open(json_path) as f:
+            telemetry = json.load(f)
+    except (OSError, ValueError) as exc:
+        logger.warning("Could not reuse activity %s: %s", activity_id, exc)
+        return None
+    if old_rank != participant['rank']:
+        save_rider_data(
+            output_dir, participant['rank'], activity_id, df, telemetry,
+            telemetry.get('routeId'),
+        )
+    result = {**cached, **participant}
+    if 'elapsed_ms' not in participant:
+        result.pop('elapsed_ms', None)
+    # The activity's own segment distance is more complete than podium results.
+    if pd.notna(cached.get('segment_distance_cm')):
+        result['segment_distance_cm'] = cached['segment_distance_cm']
+    return result
+
+
 def get_event_subgroups(event_id, headers):
     """
     Fetch all subgroups for a Zwift event.
@@ -492,21 +547,9 @@ def fetch_all_subgroups_from_activity(activity_url_or_id, headers, output_base_d
                 progress_callback(cumulative_fetched + current, 0, f"[Cat {_label}] {name}")
 
         output_dir = os.path.join(output_base_dir, f"race_data_{sg_id}")
-        summary_path = os.path.join(output_dir, "complete_race_summary.csv")
         meta_path = os.path.join(output_dir, "race_meta.json")
 
-        # Check cache first
-        if not force_refresh and os.path.exists(summary_path):
-            try:
-                summary_df = pd.read_csv(summary_path)
-                success_count = int((summary_df['status'] == 'SUCCESS').sum())
-                results.append((output_dir, label, sg_id))
-                cumulative_fetched += success_count
-                if progress_callback:
-                    progress_callback(cumulative_fetched, 0, f"[Cat {label}] Cached ({success_count} riders)", type="status")
-                continue
-            except Exception:
-                pass
+        cached_riders = _load_cached_riders(output_dir, force_refresh)
 
         # Fetch participants for this subgroup
         participants, error = get_race_entries(sg_id, headers)
@@ -550,11 +593,15 @@ def fetch_all_subgroups_from_activity(activity_url_or_id, headers, output_base_d
 
         def fetch_one(p, _output_dir=output_dir):
             act_id = p['activity_id']
-            telem_data, act_data, err = fetch_rider_telemetry(act_id, headers)
+            cached = _reuse_cached_rider(p, _output_dir, cached_riders)
+            if cached is None:
+                telem_data, act_data, err = fetch_rider_telemetry(act_id, headers)
             with _progress_lock:
                 _progress_count[0] += 1
                 current = _progress_count[0]
             sg_progress(current, total_riders, p['name'])
+            if cached is not None:
+                return cached
             if err:
                 return {'rank': p['rank'], 'name': p['name'], 'activity_id': act_id,
                         'weight_kg': p.get('weight_kg', 75.0), 'player_id': p.get('player_id'), 'status': err}
@@ -616,7 +663,8 @@ def fetch_all_subgroups_from_activity(activity_url_or_id, headers, output_base_d
     return results, event_id, race_name, None
 
 
-def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", progress_callback=None, force_refresh=False):
+def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", progress_callback=None, force_refresh=False,
+                             event_subgroup_id=None):
     """
     Fetch race data from a Zwift activity URL or ID.
     
@@ -626,9 +674,9 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
     3. Downloading telemetry for each participant
     4. Saving all data to files
     
-    Results are cached by event_subgroup_id so that different activity IDs
-    from the same race reuse the same data.  Set force_refresh=True to
-    re-fetch even when cached data exists.
+    The participant list is always fetched from Zwift. Successful individual
+    activities are reused by activity ID within the event subgroup directory.
+    Set force_refresh=True to re-download those activities too.
     
     Args:
         activity_url_or_id: Zwift activity URL or activity ID
@@ -636,6 +684,7 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
         output_base_dir: Base directory for output files
         progress_callback: Optional callback(current, total, rider_name)
         force_refresh: If True, re-fetch even if data already exists
+        event_subgroup_id: Optional target subgroup within the source event
     
     Returns:
         tuple: (output_dir, message)
@@ -651,37 +700,17 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
     # Step 3: Get event info
     event_info = activity_data.get('eventInfo', {})
     race_name = event_info.get('name', 'Unknown Race')
-    event_subgroup_id = event_info.get('eventSubGroupId')
+    source_subgroup_id = event_info.get('eventSubGroupId')
+    event_subgroup_id = event_subgroup_id or source_subgroup_id
     
     if not event_subgroup_id:
         return None, "No event subgroup ID found. Is this a race activity?"
     
     # Step 4: Directory keyed by event_subgroup_id (so all riders map to same race)
     output_dir = os.path.join(output_base_dir, f"race_data_{event_subgroup_id}")
-    summary_path = os.path.join(output_dir, "complete_race_summary.csv")
     meta_path = os.path.join(output_dir, "race_meta.json")
     
-    # Check for existing cached data (local first, then blob storage)
-    if not force_refresh:
-        # If not on local disk, try downloading from blob storage
-        if not os.path.exists(summary_path):
-            race_dir_name = f"race_data_{event_subgroup_id}"
-            if blob_storage.race_exists_in_blob(race_dir_name):
-                os.makedirs(output_dir, exist_ok=True)
-                blob_storage.download_race_dir(race_dir_name, output_dir)
-
-        if os.path.exists(summary_path):
-            try:
-                summary_df = pd.read_csv(summary_path)
-                success_count = int((summary_df['status'] == 'SUCCESS').sum())
-                # Load race name from metadata if available
-                if os.path.exists(meta_path):
-                    with open(meta_path) as f:
-                        meta = json.load(f)
-                        race_name = meta.get('race_name', race_name)
-                return output_dir, f"Cached: {race_name} ({success_count} riders)"
-            except Exception:
-                pass  # Fall through to re-fetch
+    cached_riders = _load_cached_riders(output_dir, force_refresh)
     
     os.makedirs(output_dir, exist_ok=True)
     
@@ -701,7 +730,7 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
     
     # Extract segment distance from subgroupResults on the source activity
     segment_distance_cm = None
-    sgr = activity_data.get('subgroupResults', {})
+    sgr = activity_data.get('subgroupResults', {}) if event_subgroup_id == source_subgroup_id else {}
     top_results = sgr.get('topResults', [])
     # Per-rider segment distance keyed by profile id (same source as the race-wide value)
     segment_distance_by_profile = {}
@@ -791,8 +820,9 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
     def fetch_one(p):
         """Fetch a single rider's telemetry. Returns a summary dict."""
         act_id = p['activity_id']
-        
-        telem_data, act_data, error = fetch_rider_telemetry(act_id, headers)
+        cached = _reuse_cached_rider(p, output_dir, cached_riders)
+        if cached is None:
+            telem_data, act_data, error = fetch_rider_telemetry(act_id, headers)
         
         # Report progress
         with _progress_lock:
@@ -800,6 +830,8 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
             current = _progress_count[0]
         if progress_callback:
             progress_callback(current, total_riders, p['name'])
+        if cached is not None:
+            return cached
         
         if error:
             return {

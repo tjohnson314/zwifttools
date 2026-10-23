@@ -2371,12 +2371,19 @@ def clean_race_data(
     # Load summary
     summary_file = data_path / 'complete_race_summary.csv'
     if summary_file.exists():
-        summary = pd.read_csv(summary_file)
+        summary = pd.read_csv(summary_file, dtype={'activity_id': str})
     else:
         summary = None
     
     # Find all rider files
     csv_files = sorted(data_path.glob('rank*_*.csv'))
+    if summary is not None:
+        current_files = {
+            f"rank{int(row['rank'])}_{row['activity_id']}.csv"
+            for row in summary.to_dict('records')
+            if row.get('status', 'SUCCESS') == 'SUCCESS'
+        }
+        csv_files = [path for path in csv_files if path.name in current_files]
     total_steps = len(csv_files) + 3  # +3 for alignment, processing, elevation
     
     if progress_callback:
