@@ -1,8 +1,9 @@
 """
 World configuration for Zwift maps.
 
-Maps each Zwift world to its map image and GPS coordinate bounds
-(from zwift-data / ZwiftMap). The bounds define the image overlay:
+Maps each Zwift world to its map image and GPS coordinate bounds.
+Watopia's image is stitched from Zwift game PNGs; other images and the
+GPS bounds come from zwift-data / ZwiftMap. The bounds define the overlay:
   - lat_max / lng_min = NW corner (top-left of image)
   - lat_min / lng_max = SE corner (bottom-right of image)
 """

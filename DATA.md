@@ -733,6 +733,25 @@ CRR values:
 
 Static config for 12 Zwift worlds (Watopia, Richmond, London, New York, Innsbruck, Bologna, Yorkshire, Crit City, Makuri, France, Paris, Scotland): map image path, GPS bounding box (lat/lng min/max), background color. Used by the race replay map overlay.
 
+The Watopia background (`static/maps/watopia.png`) is a label-free
+4096 x 3072 composite of the installed Zwift game PNGs from
+`data/Noesis/Blend_Data/Resources/Worlds/world1`, refreshed on 2026-10-28.
+The main image and auxiliary tiles 01/02 were dated 2026-10-14.
+At a grid size of 1024 pixels, the layout is:
+
+```text
+mapaux02 | map.png (top-left)    | map.png (top-right)    | mapaux03
+mapaux01 | map.png (bottom-left) | map.png (bottom-right) | mapaux04
+mapaux08 | mapaux07              | mapaux06              | mapaux05
+```
+
+Use all nine PNGs without cropping. Keep `map.png` and auxiliary tiles
+01-05/08 at their original sizes; resize the 2048 x 2048 auxiliary tiles
+06/07 to 1024 x 1024 with Lanczos resampling before placing them.
+The composite covers the same geographic extent as the previous background,
+so the existing Watopia GPS bounds remain unchanged. Both race replay and
+the Surface Map / Route Explorer use this shared background and configuration.
+
 ### Blob Storage (`shared/blob_storage.py`)
 
 Azure Blob Storage wrapper — **no-op when `AZURE_STORAGE_CONNECTION_STRING` is not set**.
