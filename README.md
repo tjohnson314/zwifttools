@@ -199,6 +199,28 @@ The script prompts for credentials (password input is hidden), or reads
 `ZWIFT_USERNAME` / `ZWIFT_PASSWORD` from the environment. It does not save
 credentials or tokens. Do not put credentials in source files or share them.
 
+Both collectors and the prediction-analysis script automatically mirror Python
+stdout/stderr (progress, rate-limit warnings, errors, and unexpected tracebacks)
+to UTF-8 log files while still displaying them live in the terminal. Logs are
+flushed after every write, append across restarts, and include UTC start/end
+times and exit codes. Interactive login prompts and input are excluded from
+logging; password entry remains hidden. Do not wrap the commands in a
+PowerShell output pipeline such as `Tee-Object`, which can hide login prompts.
+
+Collectors default to the CSV output path with its suffix replaced by `.log`;
+`--classification-only` uses the classification JSON output path instead.
+Analysis defaults to `analysis.log` inside its output directory. All three
+scripts accept `--log-file PATH` to override the destination. For the full-run
+VS Code tasks (including **Zwift: resume full collection with logs**), these are:
+
+- `race_data/tour_of_watopia_2026_full_zrs.log`
+- `race_data/tour_of_watopia_2026_full_velo.log`
+- `race_data/prediction_analysis_full/analysis.log`
+
+These are Python-native logs, not the older `full_zrs_collection.log` pipeline
+log. A log cannot recover previous runs or record the cause of an abrupt
+process termination, but already-written progress remains on disk.
+
 The default table is `race_data/tour_of_watopia_2026.csv` (`--csv-output`
 overrides this), with exactly these columns:
 
@@ -308,6 +330,12 @@ array; bulk event details accept an event array or an object with an `events`
 array. Live history and bulk requests still require verification with your
 Zwift credentials.
 
+Classification rider IDs are deduplicated across pages before fetching
+histories. Entries without a profile ID are retained in the raw snapshot but
+excluded from history requests with an explicit warning; malformed nonempty
+IDs still stop the run. A live classification can change during pagination,
+so its reported total may differ slightly from the unique rider count.
+
 ### ZwiftRacing.app event-rating export
 
 After the ZRS export finishes, use its unique event IDs to download all riders
@@ -353,7 +381,7 @@ already been filtered to Tour of Watopia events.
 The default output is `race_data/tour_of_watopia_2026_velo.csv` (`--output`
 overrides this), with these columns:
 
-| Column | Embedded `props.pageProps.detail` source |
+| Column | Event detail source |
 |--------|-----------------------------------------|
 | `profileId` | `pens[].riders[].riderId` |
 | `eventId` | `eventId` |
@@ -367,13 +395,27 @@ These are the **top-level rider ratings**, not the different scale in
 `velo.elo.before/after` or `velo.seed.before/after`. Missing positions and
 ratings remain blank with a warning, and raw values are never clipped,
 rounded, or substituted from the nested ratings.
+Riders explicitly marked `didNotFinish: true` are excluded from missing
+`expectedPosition` warning counts, but their rows and blank cells are retained.
+Other missing-field warnings still include DNF riders.
+When ZwiftRacing omits a pen's subgroup ID, the script uses an exact pen-name
+to `subgroupLabel` match from the same event in `race_data/tow_events`
+(`--zwift-event-cache` overrides this directory). If no match exists, riders
+are retained with blank `eventSubgroupId` cells and a warning. Raw
+ZwiftRacing cache data is not changed by this recovery.
 
-The script parses the authenticated page's `__NEXT_DATA__` JSON; the browser
-runs JavaScript as part of the site's normal login and page navigation.
+The script reads the current page's decoded TanStack Router event loader data,
+waiting up to 15 seconds for it to be ready. Older pages containing
+`__NEXT_DATA__.props.pageProps.detail` remain supported. The browser runs
+JavaScript as part of the site's normal login and page navigation.
 Validated event details are cached under `race_data/zwiftracing_events`
 (`--cache-dir` overrides this). Rerunning reuses completed events; `--refresh`
 redownloads them. Unfinalized results are retained with a warning, so refresh
-them later if needed. Parsing, HTTP, and incomplete-rider-list errors stop the
+them later if needed. If a pen's reported rider count exceeds the supplied
+rider list, the script warns and exports all available riders with their
+original positions. Such datasets may be incomplete; no synthetic riders or
+renumbered positions are introduced. The raw discrepancy remains in the cache
+and is warned about again on reruns. Parsing and HTTP errors still stop the
 export without replacing the final CSV; completed caches remain available.
 
 Requests use the same pacing/backoff helper as the ZRS downloader: 2-second
@@ -393,6 +435,45 @@ that automated downloads are permitted or remove rate limits. A 429 still
 uses cooldowns and eventually stops; the script does not bypass verification
 challenges or access controls. Live account sign-in must be completed by the
 user; tests do not require real credentials.
+
+### Comparing ZRS and ZwiftRacing predictions
+
+After both downloads complete, run:
+
+```powershell
+python tools\analyze_racing_predictions.py
+```
+
+The script joins on profile, event, and subgroup IDs; loads DNF metadata from
+the ZwiftRacing cache; and evaluates the same matched finishers with complete
+predictors in subgroups containing at least three eligible riders. It compares
+pre-race ZRS, the exported ZwiftRacing `ratingBefore`, published
+`expectedPosition`, and nested `velo.elo.before` separately. Post-race scores
+are never used as predictors.
+
+Metrics include within-subgroup pairwise ordering accuracy (half credit for
+prediction ties), Spearman correlation, matched-subset rank error, and winner
+pick accuracy where the actual winner is present. Original source scores and
+positions are not clipped. Matched-subset ranks are derived analytical values,
+not replacements for the source positions. Paired event-level bootstrap
+intervals, larger-field sensitivity, alternate outcome rankings, and coverage
+counts are included. Repeat riders can still create dependence across events.
+
+Outputs under `race_data/prediction_analysis` are `summary.json`,
+`subgroup_metrics.csv`, and `matched_predictions.csv`. Use `--zrs`, `--velo`,
+`--cache`, and `--output-dir` to analyze separate downloads without replacing
+existing outputs. Missing join keys or ambiguous metadata cause an explicit
+error rather than silently changing the comparison cohort.
+
+The VS Code task **Zwift: full ratings collection and analysis** refreshes the
+classification, collects ZRS histories through the fixed `--until` date shown
+in the task, refreshes the corresponding ZwiftRacing event pages, and then
+runs this analysis. New files use the `tour_of_watopia_2026_full_` prefix,
+with analysis saved under `race_data/prediction_analysis_full`. Each stage
+starts only if the previous one succeeds. Completed history and event caches
+remain reusable if a stage fails; `--refresh` intentionally updates cached
+ZwiftRacing pages. Collection may take many hours and requires the interactive
+Zwift credential prompt and an available ZwiftRacing browser session.
 
 ### Running tests
 
@@ -429,3 +510,10 @@ Deployed to **Azure App Service** via GitHub Actions. The **Azure Function** (Zw
 Pushes to `main` trigger automatic deployment:
 - **Web app** changes → `deploy.yml` (ignores `azure_function/`)
 - **Azure Function** changes → `deploy-function.yml` (triggers on `azure_function/` changes only)
+
+## License
+
+ZwiftTools is licensed under the [MIT License](LICENSE), permitting personal and
+commercial use, modification, and redistribution subject to its terms.
+Third-party code, assets, and data remain subject to their respective licenses
+and terms.
