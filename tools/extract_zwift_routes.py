@@ -27,6 +27,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+from bisect import bisect_right
 import json
 import math
 import os
@@ -681,6 +682,167 @@ def _slug(name: str) -> str:
     return s or "route"
 
 
+VIDEO_ROUTES_MAP_ID = 1000
+_VIDEO_ROUTE_NAMES = {
+    "archesnp": "Arches National Park",
+    "benassynt": "Ben Assynt",
+    "bonette": "La Bonette",
+    "bonetteshort": "La Bonette (Short)",
+    "chapmans": "Chapman's Peak",
+    "clarencedrive": "Clarence Drive",
+    "dutoitskloof": "Du Toitskloof",
+    "eggum": "Eggum",
+    "etivedown": "Glen Etive",
+    "femenia": "Femenia",
+    "galibierlautaret": "Galibier from Lautaret",
+    "glencanyon": "Glen Canyon",
+    "glengarry": "Glengarry",
+    "hogsback": "Hogsback",
+    "lauvika": "Lauvika",
+    "nappvang": "Nappvang",
+    "sacalobrad1whisky": "Sa Calobra",
+    "teide": "Teide",
+    "threerivers": "Three Rivers",
+    "wellingrivier": "Wellingrivier",
+}
+
+
+def _video_road(element: ET.Element, cache_key: str) -> dict:
+    nodes = []
+    for entity in element.findall("ent"):
+        if entity.get("type") != "ENTITY_TYPE_ROADNODE":
+            continue
+        position = [float(value) / UNITS_PER_METRE
+                    for value in entity.attrib["m_pos"].strip("{}").split(",")]
+        nodes.append({
+            "x": position[0], "alt": position[1], "z": position[2],
+            "lat": float(entity.attrib["m_lat"]),
+            "lng": float(entity.attrib["m_lon"]),
+            "video_seconds": float(entity.attrib["m_videoSeconds"]),
+            "video_distance_m": float(entity.attrib["m_videoDist"]) / UNITS_PER_METRE,
+        })
+    if len(nodes) < 2:
+        raise ValueError("Video road needs at least two GPS/video nodes")
+    markers = []
+    for entity in element.findall("ent"):
+        if entity.get("type") != "ENTITY_TYPE_ROADMARKER":
+            continue
+        attributes = entity.attrib
+        if not ("m_roadTime1" in attributes or "m_roadTime2" in attributes):
+            continue
+        style = attributes.get("m_styleName")
+        if style is None and attributes.get("m_isInvisible") == "1":
+            continue
+        low, high = sorted((float(attributes.get("m_roadTime1", 0)),
+                            float(attributes.get("m_roadTime2", 1))))
+        markers.append((low, high, style or "NORMAL"))
+    return {
+        "id": int(element.findtext("id")),
+        "name": element.findtext("roadName") or "",
+        "style": element.findtext("defaultStyleName") or "UNKNOWN",
+        "markers": markers, "nodes": nodes, "cache_key": cache_key,
+    }
+
+
+def _video_style(road: dict, road_time: float) -> str:
+    style = road["style"]
+    for low, high, override in road["markers"]:
+        if low <= road_time <= high:
+            style = override
+    return style
+
+
+def _video_network(road: dict, surface_map: dict) -> list[dict]:
+    nodes = road["nodes"]
+    times = [index / (len(nodes) - 1) for index in range(len(nodes))]
+    boundaries = sorted({0.0, 1.0, *(
+        value for low, high, _ in road["markers"] for value in (low, high)
+        if 0 < value < 1
+    )})
+
+    def sample(road_time: float, key: str) -> float:
+        index = min(bisect_right(times, road_time) - 1, len(nodes) - 2)
+        fraction = (road_time - times[index]) / (times[index + 1] - times[index])
+        return nodes[index][key] + fraction * (nodes[index + 1][key] - nodes[index][key])
+
+    segments = []
+    for low, high in zip(boundaries, boundaries[1:]):
+        samples = [low, *(value for value in times if low < value < high), high]
+        style = _video_style(road, (low + high) / 2)
+        segments.append({
+            "road_id": road["id"], "style": style,
+            "surface": surface_map.get(style, "Unknown"),
+            "x": [sample(value, "x") for value in samples],
+            "z": [sample(value, "z") for value in samples],
+        })
+    return segments
+
+
+def extract_video_routes(cache_dir: str, out: str, out_surfaces: str) -> int:
+    """Publish locally cached Mochi route XML and GPS/video road nodes."""
+    route_sources = []
+    roads = {}
+    for filename in sorted(os.listdir(cache_dir)):
+        path = os.path.join(cache_dir, filename)
+        if not os.path.isfile(path):
+            continue
+        with open(path, "rb") as stream:
+            prefix = stream.read(64).lstrip()
+            if not prefix.startswith((b"<VERSION", b"<world")):
+                continue
+            stream.seek(0)
+            data = stream.read()
+        root = load_multiroot(data)
+        if root.find("route") is not None:
+            route_sources.append((filename, data, root))
+        for element in root.findall(".//road"):
+            road = _video_road(element, filename)
+            roads[road["id"]] = road
+
+    surface_map = _load_style_surface()
+    routes = []
+    used_roads = set()
+    for cache_key, data, root in route_sources:
+        point_count = max(len(_points(root.find(name))) for name in (
+            "leadinhighrescheckpoint", "highrescheckpoint"))
+        route = parse_route(data, VIDEO_ROUTES_MAP_ID, max(point_count, 2))
+        if not route or not route["route"]:
+            continue
+        route_road_ids = set()
+        for leg_name, xml_name in (("leadin", "leadinhighrescheckpoint"),
+                                   ("route", "highrescheckpoint")):
+            leg = route[leg_name]
+            if not leg:
+                continue
+            _, road_times = _leg_points(root.find(xml_name))
+            route_road_ids.update(road_id for road_id, _ in road_times)
+            leg["surface"] = [surface_map.get(_video_style(roads[road_id], time), "Unknown")
+                              for road_id, time in road_times]
+        source_name = route["name"]
+        route["source_name"] = source_name
+        route["name"] = _VIDEO_ROUTE_NAMES.get(source_name, source_name.replace("_", " ").title())
+        route["source_mapID"] = route["mapID"]
+        route["mapID"] = VIDEO_ROUTES_MAP_ID
+        route["cache_key"] = cache_key
+        route["road_nodes"] = [{"road_id": road_id, "nodes": roads[road_id]["nodes"]}
+                               for road_id in sorted(route_road_ids)]
+        routes.append(route)
+        used_roads.update(route_road_ids)
+    if not routes:
+        raise ValueError("No usable video routes found in the Mochi cache")
+    routes.sort(key=lambda route: route["name"].lower())
+    metadata = {"mapID": VIDEO_ROUTES_MAP_ID, "world": "Video Routes",
+                "source": "zwift_mochi_cache", "coordinate_system": "zwift_local_m"}
+    segments = [segment for road_id in sorted(used_roads)
+                for segment in _video_network(roads[road_id], surface_map)]
+    for directory, payload in ((out, {**metadata, "routes": routes}),
+                               (out_surfaces, {**metadata, "segments": segments})):
+        os.makedirs(directory, exist_ok=True)
+        with open(os.path.join(directory, "video_routes.json"), "w", encoding="utf-8") as stream:
+            json.dump(payload, stream, ensure_ascii=True, separators=(",", ":"), allow_nan=False)
+    return len(routes)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--zwift-dir", default=r"C:\Program Files (x86)\Zwift",
@@ -691,7 +853,16 @@ def main() -> int:
                     help="Max sample points per profile segment.")
     ap.add_argument("--world", default=None,
                     help="Extract only one world folder, e.g. world11.")
+    ap.add_argument("--video-cache", default=None,
+                    help="Export video routes only, from a local Zwift/mochi cache directory.")
+    ap.add_argument("--out-surfaces", default="zwift_surfaces",
+                    help="Surface output directory for video-cache extraction.")
     args = ap.parse_args()
+
+    if args.video_cache:
+        count = extract_video_routes(args.video_cache, args.out, args.out_surfaces)
+        print(f"Done: {count} video routes -> {args.out}/video_routes.json")
+        return 0
 
     worlds_dir = os.path.join(args.zwift_dir, "assets", "Worlds")
     if not os.path.isdir(worlds_dir):

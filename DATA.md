@@ -9,6 +9,7 @@ This document describes the complete data pipeline for every page and API endpoi
 - [Architecture Overview](#architecture-overview)
 - [Authentication](#authentication)
 - [Landing Page](#landing-page)
+- [Surface Map](#surface-map)
 - [My Activities](#my-activities)
 - [Workout Analysis](#workout-analysis)
 - [Bike Comparison](#bike-comparison)
@@ -72,6 +73,37 @@ Returns `{ authenticated: bool, method: 'oauth', expires_at: int }`.
 ### `GET /`
 
 Renders `landing.html`. Passes `logged_in = 'tokens' in session` to the template so it can show login/logout links. No data pipeline — purely static.
+
+---
+
+## Surface Map
+
+### Page: `GET /surface-map`
+
+The world selector includes **Video Routes**, a surface-map-only group with
+ID `1000`. Its data is published in `zwift_routes/video_routes.json` and
+`zwift_surfaces/video_routes.json`. These checked-in files work on production
+without a local Zwift install. The existing worlds, routes, and their IDs are
+unchanged; video routes retain their original IDs and source metadata.
+
+Video routes come from the downloaded Mochi cache, not the virtual-world WADs.
+Refresh the published files on a machine with downloaded video-route data:
+
+```powershell
+python tools/extract_zwift_routes.py --video-cache "$env:LOCALAPPDATA\Zwift\mochi"
+```
+
+The extractor retains every high-resolution route checkpoint, converts game
+centimetres to metres, and joins named surface markers by road ID and road time.
+Native road nodes retain latitude, longitude, elevation, video timestamps, and
+video distance. No physical-range clamping or virtual-world altitude scaling is
+applied. Readable route labels are separate from the original `source_name`.
+
+The existing `/api/surface_map/worlds`, `/api/surface_map/world/1000`, and
+`/api/surface_map/route/1000/<route_id>` endpoints serve the new group. Route
+detail includes native GPS/video data in `road_nodes`. The canvas uses the
+client's local route geometry without a virtual-world background image.
+Restart Flask after refreshing data to clear the cached world files.
 
 ---
 

@@ -58,3 +58,14 @@ test('profiles without escalator metadata retain existing traces', () => {
     assert.equal(result.traces.length, 1);
     assert.equal(result.layout.shapes.filter(shape => shape.type === 'rect').length, 1);
 });
+
+test('video routes only display their own independent road network', () => {
+    const context = vm.createContext({ document: { addEventListener() {} } });
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../static/js/surface_map.js'), 'utf8'), context);
+    const segments = [{ road_id: 27060 }, { road_id: 27061 }];
+    const world = { segments, disconnected_routes: true };
+    const route = { road_nodes: [{ road_id: 27060 }] };
+    assert.deepEqual(Array.from(context.networkSegments(world, route)), [segments[0]]);
+    assert.deepEqual(Array.from(context.networkSegments(world, null)), []);
+    assert.equal(context.networkSegments({ segments }, route), segments);
+});

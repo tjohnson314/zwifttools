@@ -99,6 +99,9 @@ async function loadWorld(mapId, routeSlug = null) {
         const route = routeSlug &&
             data.routes.find(r => matchesSlug(routeSlug, r.name, r.nameHash));
         if (route) await loadRoute(route.nameHash);
+        else if (data.disconnected_routes && data.routes.length) {
+            await loadRoute(data.routes[0].nameHash);
+        }
     } catch (e) {
         setStatus(e.message, true);
     }
@@ -472,6 +475,12 @@ function toWorld(sx, sy) {
     return { x: (sx - state.offsetX) / state.scale, y: (sy - state.offsetY) / state.scale };
 }
 
+function networkSegments(world, route) {
+    if (!world.disconnected_routes) return world.segments;
+    const roadIds = new Set((route?.road_nodes || []).map(road => road.road_id));
+    return world.segments.filter(segment => roadIds.has(segment.road_id));
+}
+
 function renderBase() {
     if (!state.world) return;
     const g = baseCtx;
@@ -496,7 +505,7 @@ function renderBase() {
     if (state.showNetwork) {
         const roadW = mapStrokeWidth(1.5, zoomK, state.dpr);
         const colors = state.world.colors;
-        state.world.segments.forEach(seg => {
+        networkSegments(state.world, state.route).forEach(seg => {
             g.strokeStyle = colors[seg.surface] || '#555a63';
             g.lineWidth = roadW;
             g.beginPath();

@@ -40,6 +40,9 @@ STYLE_MAP_FILE = SURFACE_DIR / "style_surface_map.json"
 WAD_SEGMENTS_FILE = _BASE / "zwift_route_segments_wad.json"
 ZRL_SEGMENTS_FILE = _BASE / "zrl_route_segments.json"
 
+VIDEO_ROUTES_MAP_ID = 1000
+_WORLD_NAMES = {**WORLD_NAMES, VIDEO_ROUTES_MAP_ID: "Video Routes"}
+
 # mapID -> human readable world name (WORLD_NAMES) and mapID -> WORLD_CONFIG key
 # (MAPID_TO_CONFIG) are imported from shared.world_config.
 
@@ -74,10 +77,14 @@ def _seg_surface(seg: dict) -> str:
 
 
 def _surface_path(map_id: int) -> Path:
+    if map_id == VIDEO_ROUTES_MAP_ID:
+        return SURFACE_DIR / "video_routes.json"
     return SURFACE_DIR / f"world_{map_id}.json"
 
 
 def _route_path(map_id: int) -> Path:
+    if map_id == VIDEO_ROUTES_MAP_ID:
+        return ROUTE_DIR / "video_routes.json"
     return ROUTE_DIR / f"world_{map_id}.json"
 
 
@@ -322,7 +329,7 @@ def _match_surfaces(map_id: int, xs, zs) -> list[str]:
 def list_worlds() -> list[dict]:
     """List worlds that have both surface and route data available."""
     worlds = []
-    for map_id, name in WORLD_NAMES.items():
+    for map_id, name in _WORLD_NAMES.items():
         if not _surface_path(map_id).exists() or not _route_path(map_id).exists():
             continue
         surf = _load_surface_world(map_id)
@@ -368,6 +375,7 @@ def get_world_surfaces(map_id: int) -> dict:
         X, Y = proj["project"](seg.get("x", []), seg.get("z", []))
         segments.append({
             "surface": _seg_surface(seg),
+            "road_id": seg.get("road_id"),
             "x": [round(float(v), 1) for v in X],
             "y": [round(float(v), 1) for v in Y],
         })
@@ -393,8 +401,9 @@ def get_world_surfaces(map_id: int) -> dict:
 
     return {
         "mapID": map_id,
-        "name": WORLD_NAMES.get(map_id, f"World {map_id}"),
+        "name": _WORLD_NAMES.get(map_id, f"World {map_id}"),
         "projection": proj["mode"],
+        "disconnected_routes": map_id == VIDEO_ROUTES_MAP_ID,
         "background": proj["background"],
         "bounds": proj["bounds"],
         "segments": segments,
@@ -540,7 +549,7 @@ def get_route(map_id: int, name_hash: int) -> dict | None:
 
     return {
         "mapID": map_id,
-        "world_name": WORLD_NAMES.get(map_id, f"World {map_id}"),
+        "world_name": _WORLD_NAMES.get(map_id, f"World {map_id}"),
         "nameHash": name_hash,
         "name": route.get("name", ""),
         "distance_m": route.get("distance_m", 0.0),
@@ -553,6 +562,7 @@ def get_route(map_id: int, name_hash: int) -> dict | None:
         "route": main,
         "segments": _route_segment_markers(map_id, route, leadin, main),
         "escalators": route.get("escalators", []),
+        "road_nodes": route.get("road_nodes", []),
         "breakdown": breakdown_list,
         "bounds": bounds,
     }

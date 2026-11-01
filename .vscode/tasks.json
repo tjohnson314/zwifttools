@@ -28,6 +28,58 @@
 			"options": {
 				"cwd": "${workspaceFolder}/azure_function"
 			}
+		},
+		{
+			"label": "ZwiftRacing: sign in and test event",
+			"type": "shell",
+			"command": "python",
+			"args": [
+				"tools\\fetch_zwiftracing_results.py",
+				"--login",
+				"--event-id",
+				"5722198",
+				"--output",
+				"race_data\\velo_sample.csv",
+				"--refresh"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Zwift: refresh classification snapshot",
+			"type": "shell",
+			"command": "python",
+			"args": [
+				"tools\\fetch_tour_of_watopia.py",
+				"--classification-only",
+				"--output",
+				"race_data\\tour_of_watopia_2026_classification_latest.json",
+				"--request-interval",
+				"0.5"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Zwift: full ratings collection and analysis",
+			"type": "shell",
+			"command": "python tools\\fetch_tour_of_watopia.py --refresh-classification --output race_data\\tour_of_watopia_2026_full_classification.json --csv-output race_data\\tour_of_watopia_2026_full_zrs.csv --since 2026-10-01 --until 2026-10-29 --request-interval 0.5 --skip-unavailable-events; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; python tools\\fetch_zwiftracing_results.py --input race_data\\tour_of_watopia_2026_full_zrs.csv --output race_data\\tour_of_watopia_2026_full_velo.csv --refresh; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; python tools\\analyze_racing_predictions.py --zrs race_data\\tour_of_watopia_2026_full_zrs.csv --velo race_data\\tour_of_watopia_2026_full_velo.csv --output-dir race_data\\prediction_analysis_full",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Zwift: resume full collection with logs",
+			"type": "shell",
+			"command": "python -u tools\\fetch_tour_of_watopia.py --classification-file race_data\\tour_of_watopia_2026_full_classification.json --csv-output race_data\\tour_of_watopia_2026_full_zrs.csv --since 2026-10-01 --until 2026-10-29 --request-interval 0.5 --skip-unavailable-events; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; python -u tools\\fetch_zwiftracing_results.py --input race_data\\tour_of_watopia_2026_full_zrs.csv --output race_data\\tour_of_watopia_2026_full_velo.csv --refresh; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; python -u tools\\analyze_racing_predictions.py --zrs race_data\\tour_of_watopia_2026_full_zrs.csv --velo race_data\\tour_of_watopia_2026_full_velo.csv --output-dir race_data\\prediction_analysis_full",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Zwift: resume extraction with visible prompts",
+			"type": "shell",
+			"command": "python -u tools\\fetch_tour_of_watopia.py --classification-file race_data\\tour_of_watopia_2026_full_classification.json --csv-output race_data\\tour_of_watopia_2026_full_zrs.csv --since 2026-10-01 --until 2026-10-29 --request-interval 0.5 --skip-unavailable-events; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; python -u tools\\fetch_zwiftracing_results.py --input race_data\\tour_of_watopia_2026_full_zrs.csv --output race_data\\tour_of_watopia_2026_full_velo.csv --refresh; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; python -u tools\\analyze_racing_predictions.py --zrs race_data\\tour_of_watopia_2026_full_zrs.csv --velo race_data\\tour_of_watopia_2026_full_velo.csv --output-dir race_data\\prediction_analysis_full",
+			"isBackground": false,
+			"problemMatcher": []
 		}
 	]
 }
