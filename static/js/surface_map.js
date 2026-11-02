@@ -25,9 +25,14 @@ const state = {
     hoverPoint: null,   // {x, y} in plot space, from elevation hover
     pinnedPoint: null,  // {x, y} in plot space, frozen on elevation click
     combined: [],       // [{dist_m, x, y}] leadin+route for hover linkage
+    satellite: null,
+    satelliteActive: false,
+    routeRequest: 0,
 };
 
 let canvas, ctx, baseCanvas, baseCtx;
+let googleMapsPromise;
+let googleMapsAuthFailed = false;
 
 document.addEventListener('DOMContentLoaded', () => {
     canvas = document.getElementById('map-canvas');
@@ -79,6 +84,8 @@ async function loadWorlds() {
 
 async function loadWorld(mapId, routeSlug = null) {
     setStatus('Loading world…');
+    state.routeRequest++;
+    hideSatellite();
     state.route = null;
     state.activeHash = null;
     state.hoverPoint = null;
@@ -122,9 +129,13 @@ function loadBackground(bg) {
 
 async function loadRoute(hash) {
     setStatus('Loading route…');
+    const request = ++state.routeRequest;
+    const world = state.world;
+    hideSatellite();
     try {
-        const res = await fetch(`/api/surface_map/route/${state.world.mapID}/${hash}`);
+        const res = await fetch(`/api/surface_map/route/${world.mapID}/${hash}`);
         const data = await res.json();
+        if (request !== state.routeRequest || state.world !== world) return;
         if (!res.ok) throw new Error(data.error || 'Failed to load route');
         state.route = data;
         state.activeHash = hash;
@@ -137,8 +148,204 @@ async function loadRoute(hash) {
         else renderBase();
         setStatus('');
         updateUrl();
+        if (world.disconnected_routes) await showSatellite(data);
     } catch (e) {
-        setStatus(e.message, true);
+        if (request === state.routeRequest) setStatus(e.message, true);
+    }
+}
+
+function videoGpsProjection(route) {
+    const segments = [];
+    for (const road of route.road_nodes || []) {
+        const nodes = road.nodes || [];
+        for (let index = 1; index < nodes.length; index++) {
+            const start = nodes[index - 1], end = nodes[index];
+            if (![start.x, start.z, start.lat, start.lng,
+                end.x, end.z, end.lat, end.lng].every(Number.isFinite)) continue;
+            const dx = end.x - start.x, dz = end.z - start.z;
+            const length2 = dx * dx + dz * dz;
+            if (!length2) continue;
+            const cosLat = Math.cos((start.lat + end.lat) * Math.PI / 360);
+            const east = (end.lng - start.lng) * cosLat;
+            const north = end.lat - start.lat;
+            segments.push({ start, dx, dz, length2, cosLat,
+                along: (east * dx + north * dz) / length2,
+                across: (north * dx - east * dz) / length2 });
+        }
+    }
+    if (!segments.length) return null;
+    const cache = new Map();
+    return (x, y) => {
+        const key = `${x},${y}`;
+        if (cache.has(key)) return cache.get(key);
+        let nearest, nearestDistance = Infinity;
+        for (const segment of segments) {
+            const dx = x - segment.start.x, dz = -y - segment.start.z;
+            const fraction = Math.max(0, Math.min(1,
+                (dx * segment.dx + dz * segment.dz) / segment.length2));
+            const distance = (dx - fraction * segment.dx) ** 2 +
+                (dz - fraction * segment.dz) ** 2;
+            if (distance < nearestDistance) {
+                nearestDistance = distance;
+                nearest = segment;
+            }
+        }
+        const dx = x - nearest.start.x, dz = -y - nearest.start.z;
+        const point = {
+            lat: nearest.start.lat + nearest.across * dx + nearest.along * dz,
+            lng: nearest.start.lng + (nearest.along * dx - nearest.across * dz) / nearest.cosLat,
+        };
+        cache.set(key, point);
+        return point;
+    };
+}
+
+function loadGoogleMaps(key) {
+    if (googleMapsAuthFailed) return Promise.reject(new Error('Google Maps authorization failed.'));
+    if (window.google?.maps?.Map) return Promise.resolve(window.google.maps);
+    if (!googleMapsPromise) {
+        googleMapsPromise = new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            const fail = message => {
+                script.remove();
+                googleMapsPromise = null;
+                reject(new Error(message));
+            };
+            window.initSurfaceSatelliteMaps = () => resolve(window.google.maps);
+            window.gm_authFailure = () => {
+                googleMapsAuthFailed = true;
+                fail('Google Maps authorization failed. Check the API key, billing and allowed websites.');
+                if (state.world?.disconnected_routes) {
+                    hideSatellite();
+                    renderBase();
+                    setStatus('Satellite imagery unavailable: Google Maps authorization failed.', true);
+                }
+            };
+            const url = new URL('https://maps.googleapis.com/maps/api/js');
+            url.search = new URLSearchParams({ key, callback: 'initSurfaceSatelliteMaps',
+                loading: 'async', v: 'quarterly' });
+            script.src = url.href;
+            script.async = true;
+            script.onerror = () => fail('Google Maps could not be loaded.');
+            document.head.appendChild(script);
+        });
+    }
+    return googleMapsPromise;
+}
+
+function hideSatellite() {
+    state.satelliteActive = false;
+    const element = document.getElementById('satellite-map');
+    if (element) element.hidden = true;
+    if (canvas) canvas.hidden = false;
+    if (!state.satellite) return;
+    for (const line of state.satellite.lines) line.setMap(null);
+    state.satellite.lines = [];
+    state.satellite.hover.setMap(null);
+    state.satellite.pinned.setMap(null);
+}
+
+async function showSatellite(route) {
+    const request = state.routeRequest;
+    const project = videoGpsProjection(route);
+    const key = document.querySelector('meta[name="google-maps-api-key"]')?.content;
+    if (!project || !key) {
+        setStatus(!key ? 'Satellite imagery unavailable: Google Maps API key is not configured.' :
+            'Satellite imagery unavailable: this route has no usable GPS coordinates.', true);
+        return;
+    }
+    setStatus('Loading satellite imagery...');
+    try {
+        const maps = await loadGoogleMaps(key);
+        if (state.route !== route || request !== state.routeRequest ||
+            !state.world?.disconnected_routes) return;
+        if (googleMapsAuthFailed) throw new Error('Google Maps authorization failed.');
+        const element = document.getElementById('satellite-map');
+        element.hidden = false;
+        if (!state.satellite) {
+            const map = new maps.Map(element, {
+                mapTypeId: 'satellite', tilt: 0, heading: 0,
+                mapTypeControl: false, streetViewControl: false,
+                rotateControl: false, fullscreenControl: true,
+                gestureHandling: 'greedy',
+            });
+            state.satellite = { map, lines: [],
+                hover: new maps.Circle({ clickable: false, zIndex: 5 }),
+                pinned: new maps.Circle({ clickable: false, zIndex: 4 }) };
+            map.addListener('zoom_changed', paintSatelliteMarkers);
+        }
+        state.satellite.project = project;
+        state.satelliteActive = true;
+        canvas.hidden = true;
+        maps.event.trigger(state.satellite.map, 'resize');
+        fitSatelliteRoute();
+        renderBase();
+        setStatus('');
+    } catch (error) {
+        if (state.route !== route || request !== state.routeRequest) return;
+        hideSatellite();
+        renderBase();
+        setStatus(`Satellite imagery unavailable: ${error.message}`, true);
+    }
+}
+
+function satellitePath(leg) {
+    if (!leg) return [];
+    return leg.x.map((x, index) => state.satellite.project(x, leg.y[index]));
+}
+
+function fitSatelliteRoute() {
+    if (!state.satelliteActive || !state.route) return;
+    const bounds = new window.google.maps.LatLngBounds();
+    for (const leg of [state.route.leadin, state.route.route]) {
+        for (const point of satellitePath(leg)) bounds.extend(point);
+    }
+    if (!bounds.isEmpty()) state.satellite.map.fitBounds(bounds, 40);
+}
+
+function renderSatellite() {
+    const satellite = state.satellite;
+    for (const line of satellite.lines) line.setMap(null);
+    satellite.lines = [];
+    const addLine = (path, color, weight, extra = {}) => {
+        satellite.lines.push(new window.google.maps.Polyline({
+            map: satellite.map, path, strokeColor: color, strokeWeight: weight,
+            clickable: false, ...extra,
+        }));
+    };
+    if (state.showNetwork) {
+        for (const segment of networkSegments(state.world, state.route)) {
+            addLine(satellitePath(segment), state.world.colors[segment.surface] || '#555a63', 3);
+        }
+    }
+    for (const leg of [state.route.leadin, state.route.route]) {
+        if (!leg) continue;
+        const path = satellitePath(leg);
+        addLine(path, '#101820', 6, { strokeOpacity: 0.7, zIndex: 1 });
+        if (leg === state.route.leadin) {
+            addLine(path, '#ffffff', 3, { strokeOpacity: 0, zIndex: 2, icons: [{
+                icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 2 },
+                offset: '0', repeat: '12px',
+            }] });
+        } else addLine(path, '#f7931e', 4, { zIndex: 2 });
+    }
+    paintSatelliteMarkers();
+}
+
+function paintSatelliteMarkers() {
+    if (!state.satelliteActive) return;
+    const satellite = state.satellite;
+    for (const [marker, point, color, filled] of [
+        [satellite.hover, state.hoverPoint, '#f7931e', false],
+        [satellite.pinned, state.pinnedPoint, '#2ec4ff', true],
+    ]) {
+        if (!point) { marker.setMap(null); continue; }
+        const center = satellite.project(point.x, point.y);
+        const metresPerPixel = 156543.03392 * Math.cos(center.lat * Math.PI / 180) /
+            2 ** (satellite.map.getZoom() || 0);
+        marker.setOptions({ map: satellite.map, center, radius: 7 * metresPerPixel,
+            fillColor: filled ? color : '#ffffff', fillOpacity: 1,
+            strokeColor: filled ? '#ffffff' : color, strokeWeight: 3 });
     }
 }
 
@@ -237,6 +444,8 @@ function renderRouteList() {
 }
 
 function clearRoute() {
+    state.routeRequest++;
+    hideSatellite();
     state.route = null;
     state.activeHash = null;
     state.hoverPoint = null;
@@ -444,7 +653,7 @@ function renderElevation(d) {
 /* --------------------------------------------------------------- canvas --- */
 
 function resizeCanvas() {
-    const rect = canvas.getBoundingClientRect();
+    const rect = canvas.parentElement.getBoundingClientRect();
     state.dpr = window.devicePixelRatio || 1;
     const w = Math.round(rect.width * state.dpr);
     const h = Math.round(rect.height * state.dpr);
@@ -457,6 +666,7 @@ function resizeCanvas() {
 }
 
 function fitToBounds(b, pad = 0.94) {
+    if (state.satelliteActive) { fitSatelliteRoute(); return; }
     const w = canvas.width, h = canvas.height;
     const bw = Math.max(b.max_x - b.min_x, 1);
     const bh = Math.max(b.max_y - b.min_y, 1);
@@ -483,6 +693,7 @@ function networkSegments(world, route) {
 
 function renderBase() {
     if (!state.world) return;
+    if (state.satelliteActive) { renderSatellite(); return; }
     const g = baseCtx;
     g.clearRect(0, 0, baseCanvas.width, baseCanvas.height);
     g.lineJoin = 'round';
@@ -586,6 +797,7 @@ function strokePath(g, leg) {
 }
 
 function paint() {
+    if (state.satelliteActive) { paintSatelliteMarkers(); return; }
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(baseCanvas, 0, 0);
     if (state.pinnedPoint) drawMarker(state.pinnedPoint, '#2ec4ff', true);

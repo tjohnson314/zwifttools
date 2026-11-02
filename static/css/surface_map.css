@@ -247,6 +247,8 @@ select option {
     cursor: grab;
 }
 #map-canvas:active { cursor: grabbing; }
+#map-canvas[hidden], #satellite-map[hidden] { display: none; }
+#satellite-map { position: absolute; inset: 0; }
 .map-hint {
     position: absolute;
     inset: 0;

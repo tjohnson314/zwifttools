@@ -495,7 +495,8 @@ def api_zrl_streams():
 @app.route('/surface-map')
 def surface_map():
     """Surface map / route explorer tool."""
-    return render_template('surface_map.html')
+    return render_template('surface_map.html',
+                           google_maps_api_key=os.environ.get('GOOGLE_MAPS_API_KEY', ''))
 
 
 @app.route('/api/surface_map/worlds')

@@ -6,6 +6,19 @@ from shared import surface_map
 from tools.extract_zwift_routes import extract_video_routes
 
 
+@pytest.mark.parametrize("key", ["", 'test<&"key'])
+def test_surface_map_page_passes_an_escaped_browser_api_key(monkeypatch, key):
+    from app import app
+    from markupsafe import escape
+
+    monkeypatch.setenv("GOOGLE_MAPS_API_KEY", key)
+    with app.test_client() as client:
+        response = client.get("/surface-map")
+    assert response.status_code == 200
+    assert f'name="google-maps-api-key" content="{escape(key)}"' in response.get_data(as_text=True)
+    assert 'id="satellite-map"' in response.get_data(as_text=True)
+
+
 @pytest.fixture
 def video_world(tmp_path, monkeypatch):
     monkeypatch.setattr(surface_map, "SURFACE_DIR", tmp_path / "surfaces")

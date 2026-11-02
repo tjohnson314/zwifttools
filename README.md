@@ -55,6 +55,25 @@ unchanged.
 - Markers come from directional subway bonus-power trigger volumes in the game's `entities.xml`, joined to route checkpoints by road ID, direction, and road time; they are not inferred from gradients or surface types
 - These are display annotations only: elevation samples and pacing physics are unchanged
 
+Video routes can use Google Maps satellite imagery beneath their route and surface
+overlays, aligned using the latitude/longitude on their native road nodes. Virtual
+worlds keep their existing map images.
+
+To enable satellite imagery, enable **Maps JavaScript API** in a billing-enabled
+Google Cloud project, then set `GOOGLE_MAPS_API_KEY` in the Flask server's environment
+(or the Azure App Service application settings) and restart the app. For local use:
+
+```powershell
+$env:GOOGLE_MAPS_API_KEY = '<your-browser-api-key>'
+python app.py
+```
+
+This is a browser API key, so it is visible to visitors. Restrict it to Maps
+JavaScript API and your allowed website referrers, including localhost if needed.
+Configure usage quotas and billing alerts in Google Cloud; map loads can incur
+charges. Google attribution and controls remain visible. Without a configured key,
+or if Google Maps fails to load, the existing route-only map remains available.
+
 Refresh the cached New York profiles after updating the extractor or game client:
 
 ```powershell

@@ -3,11 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="google-maps-api-key" content="{{ google_maps_api_key }}">
     <link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
     <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
     <title>Surface Map - Zwift Tools</title>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-    <link rel="stylesheet" href="/static/css/surface_map.css?v=5">
+    <link rel="stylesheet" href="/static/css/surface_map.css?v=6">
 </head>
 <body>
     <div class="header-bar">
@@ -51,6 +52,7 @@
                     </div>
                 </div>
                 <div class="canvas-wrap">
+                    <div id="satellite-map" role="region" aria-label="Satellite map of the selected video route" hidden></div>
                     <canvas id="map-canvas"></canvas>
                     <div id="map-hint" class="map-hint">Select a world, then pick a route.</div>
                 </div>
@@ -71,6 +73,6 @@
     </div>
 
     <script src="/static/js/map_canvas.js?v=1"></script>
-    <script src="/static/js/surface_map.js?v=12"></script>
+    <script src="/static/js/surface_map.js?v=13"></script>
 </body>
 </html>
