@@ -1,6 +1,7 @@
 import * as Common from '/pages/src/common.mjs';
 import { bucketSpans, spanIndexAt, BucketAverage, paceStatus } from './bucket-tracker.mjs';
 import { DETAIL_DEFAULTS, detailHideClasses } from './details.mjs';
+import { parseReferenceCsv, csvCourseId, isWrongCourse, courseName, routeLabel } from './reference.mjs';
 
 Common.enableSentry();
 
@@ -14,6 +15,7 @@ let refSpeeds = null;
 let refWeightKg = null;
 let refName = '';
 let refRouteName = '';
+let refCourseId = null;      // Sauce courseId of the reference ride, if known
 
 // Bucketed TT plans: bucket spans from the CSV and the rider's running average
 let refBucketSpans = [];
@@ -41,63 +43,6 @@ const bucketInfoEl = gapDisplay.querySelector('.bucket-info');
 const resetBtn = document.getElementById('reset-btn');
 const changeBtn = document.getElementById('change-btn');
 
-// ---------------------------------------------------------------------------
-// CSV parsing
-// ---------------------------------------------------------------------------
-function parseCSV(text) {
-    const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
-    while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
-
-    if (lines.length < 5) {
-        throw new Error('File too short — need metadata header, values, data header, and data rows.');
-    }
-
-    const metaKeys = lines[0].split(',').map(s => s.trim());
-    const metaVals = lines[1].split(',').map(s => s.trim());
-    const meta = {};
-    for (let i = 0; i < metaKeys.length; i++) meta[metaKeys[i]] = metaVals[i] ?? '';
-
-    const dataHeader = lines[2].split(',').map(s => s.trim().toLowerCase());
-    const timeIdx = dataHeader.indexOf('time_sec');
-    const distIdx = dataHeader.indexOf('distance_m');
-    const pwrIdx  = dataHeader.indexOf('power_watts');
-    const spdIdx  = dataHeader.indexOf('speed_kmh');
-    const bktIdx  = dataHeader.indexOf('bucket');
-    if (timeIdx === -1) throw new Error('Missing column: time_sec');
-    if (distIdx === -1) throw new Error('Missing column: distance_m');
-
-    const times = [];
-    const distances = [];
-    const powers = pwrIdx !== -1 ? [] : null;
-    const speeds = spdIdx !== -1 ? [] : null;
-    const buckets = bktIdx !== -1 ? [] : null;
-    for (let i = 3; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-        const cols = line.split(',');
-        const t = parseFloat(cols[timeIdx]);
-        const d = parseFloat(cols[distIdx]);
-        if (isNaN(t) || isNaN(d)) throw new Error(`Bad data on line ${i + 1}`);
-        times.push(t);
-        distances.push(d);
-        if (powers !== null) {
-            const p = parseFloat(cols[pwrIdx]);
-            powers.push(isNaN(p) ? null : p);
-        }
-        if (speeds !== null) {
-            const s = parseFloat(cols[spdIdx]);
-            speeds.push(isNaN(s) ? null : s);
-        }
-        if (buckets !== null) {
-            const b = parseInt(cols[bktIdx], 10);
-            buckets.push(isNaN(b) ? null : b);
-        }
-    }
-
-    if (times.length < 2) throw new Error('Need at least 2 data rows.');
-    return { meta, times, distances, powers, speeds, buckets };
-}
-
 function onFileSelected(ev) {
     const file = ev.target.files[0];
     if (!file) return;
@@ -106,7 +51,7 @@ function onFileSelected(ev) {
     const reader = new FileReader();
     reader.onload = e => {
         try {
-            const { meta, times, distances, powers, speeds, buckets } = parseCSV(e.target.result);
+            const { meta, times, distances, powers, speeds, buckets } = parseReferenceCsv(e.target.result);
             // Shift distances so the first data point is 0
             const d0 = distances[0] || 0;
             if (d0 !== 0) {
@@ -121,9 +66,8 @@ function onFileSelected(ev) {
             clearBucketLine();
             refWeightKg = meta.weight_kg ? parseFloat(meta.weight_kg) : null;
             refName = meta.name || file.name;
-            refRouteName = meta.route_id
-                ? meta.route_id.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-                : '';
+            refRouteName = routeLabel(meta);
+            refCourseId = csvCourseId(meta);
 
             showGapPanel();
             routeNameEl.textContent = refRouteName;
@@ -147,6 +91,7 @@ function showFilePanel() {
     refSpeeds = null;
     refWeightKg = null;
     refRouteName = '';
+    refCourseId = null;
     refBucketSpans = [];
     bucketAvg.reset();
     clearBucketLine();
@@ -257,15 +202,6 @@ function formatGap(seconds) {
 // ---------------------------------------------------------------------------
 // Athlete data handler
 // ---------------------------------------------------------------------------
-// Zwift course ID → world name (matches Sauce's state.courseId values)
-const COURSE_NAMES = {
-    1: 'Watopia', 2: 'Richmond', 3: 'London', 4: 'New York',
-    5: 'Innsbruck', 6: 'Bologna', 7: 'Yorkshire', 8: 'Crit City',
-    9: 'Makuri Islands', 10: 'France', 11: 'Paris', 13: 'Scotland',
-    14: 'Gravel Mountain',
-};
-function courseName(id) { return COURSE_NAMES[id] ? `${COURSE_NAMES[id]} (${id})` : `course ${id}`; }
-
 function getRawDistance(state) {
     // Prefer routeDistance (distance along the selected route from 0),
     // then eventDistance (race/event distance), then session distance.
@@ -279,6 +215,11 @@ function onAthleteData(data) {
 
     const state = data?.state;
     if (!state) { setWaiting('waiting for athlete data…'); return; }
+
+    if (isWrongCourse(refCourseId, state.courseId)) {
+        setWaiting(`wrong course — plan is ${courseName(refCourseId)}`);
+        return;
+    }
 
     const rawDistanceM = getRawDistance(state);
 
