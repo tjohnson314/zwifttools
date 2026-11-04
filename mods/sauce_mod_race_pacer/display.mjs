@@ -1,4 +1,6 @@
 import * as Common from '/pages/src/common.mjs';
+import { bucketSpans, spanIndexAt, BucketAverage, paceStatus } from './bucket-tracker.mjs';
+import { DETAIL_DEFAULTS, detailHideClasses } from './details.mjs';
 
 Common.enableSentry();
 
@@ -12,6 +14,10 @@ let refSpeeds = null;
 let refWeightKg = null;
 let refName = '';
 let refRouteName = '';
+
+// Bucketed TT plans: bucket spans from the CSV and the rider's running average
+let refBucketSpans = [];
+const bucketAvg = new BucketAverage();
 
 // Anchor point set by the user (or auto-set on race start)
 let anchorDistanceM = null;  // raw distance value at t=0
@@ -30,6 +36,8 @@ const gapLabelEl = gapDisplay.querySelector('.gap-label');
 const refPowerEl = gapDisplay.querySelector('.ref-power');
 const refSpeedEl = gapDisplay.querySelector('.ref-speed');
 const rideNameEl = gapDisplay.querySelector('.ride-name');
+const bucketAvgEl = gapDisplay.querySelector('.bucket-avg');
+const bucketInfoEl = gapDisplay.querySelector('.bucket-info');
 const resetBtn = document.getElementById('reset-btn');
 const changeBtn = document.getElementById('change-btn');
 
@@ -54,6 +62,7 @@ function parseCSV(text) {
     const distIdx = dataHeader.indexOf('distance_m');
     const pwrIdx  = dataHeader.indexOf('power_watts');
     const spdIdx  = dataHeader.indexOf('speed_kmh');
+    const bktIdx  = dataHeader.indexOf('bucket');
     if (timeIdx === -1) throw new Error('Missing column: time_sec');
     if (distIdx === -1) throw new Error('Missing column: distance_m');
 
@@ -61,6 +70,7 @@ function parseCSV(text) {
     const distances = [];
     const powers = pwrIdx !== -1 ? [] : null;
     const speeds = spdIdx !== -1 ? [] : null;
+    const buckets = bktIdx !== -1 ? [] : null;
     for (let i = 3; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line) continue;
@@ -78,10 +88,14 @@ function parseCSV(text) {
             const s = parseFloat(cols[spdIdx]);
             speeds.push(isNaN(s) ? null : s);
         }
+        if (buckets !== null) {
+            const b = parseInt(cols[bktIdx], 10);
+            buckets.push(isNaN(b) ? null : b);
+        }
     }
 
     if (times.length < 2) throw new Error('Need at least 2 data rows.');
-    return { meta, times, distances, powers, speeds };
+    return { meta, times, distances, powers, speeds, buckets };
 }
 
 function onFileSelected(ev) {
@@ -92,7 +106,7 @@ function onFileSelected(ev) {
     const reader = new FileReader();
     reader.onload = e => {
         try {
-            const { meta, times, distances, powers, speeds } = parseCSV(e.target.result);
+            const { meta, times, distances, powers, speeds, buckets } = parseCSV(e.target.result);
             // Shift distances so the first data point is 0
             const d0 = distances[0] || 0;
             if (d0 !== 0) {
@@ -102,6 +116,9 @@ function onFileSelected(ev) {
             refDistances = distances;
             refPowers = powers;
             refSpeeds = speeds;
+            refBucketSpans = bucketSpans(distances, buckets, powers);
+            bucketAvg.reset();
+            clearBucketLine();
             refWeightKg = meta.weight_kg ? parseFloat(meta.weight_kg) : null;
             refName = meta.name || file.name;
             refRouteName = meta.route_id
@@ -130,6 +147,9 @@ function showFilePanel() {
     refSpeeds = null;
     refWeightKg = null;
     refRouteName = '';
+    refBucketSpans = [];
+    bucketAvg.reset();
+    clearBucketLine();
     anchorDistanceM = null;
     anchorMs = null;
     csvFileInput.value = '';
@@ -150,6 +170,36 @@ function setWaiting(msg) {
     gapTimeEl.textContent = '—';
     gapLabelEl.textContent = msg;
     gapDisplay.className = 'waiting';
+    clearBucketLine();
+}
+
+function clearBucketLine() {
+    bucketAvgEl.textContent = '';
+    bucketAvgEl.className = 'bucket-avg';
+    bucketInfoEl.textContent = '';
+}
+
+/** Update the running bucket average and show it against the bucket's target. */
+function updateBucketLine(distanceM, timeSec, powerW) {
+    const idx = spanIndexAt(refBucketSpans, distanceM);
+    if (idx === -1) { clearBucketLine(); return; }
+    const span = refBucketSpans[idx];
+    bucketAvg.update(span.bucket, timeSec, powerW);
+
+    const avg = bucketAvg.average;
+    const status = paceStatus(avg, span.target);
+    if (avg == null) {
+        bucketAvgEl.textContent = 'avg —';
+    } else {
+        const diff = span.target != null ? Math.round(avg - span.target) : null;
+        const diffText = diff == null ? '' : ` (${diff > 0 ? '+' : diff < 0 ? '−' : '±'}${Math.abs(diff)})`;
+        bucketAvgEl.textContent = `avg ${Math.round(avg)} W` +
+            (span.target != null ? ` / ${Math.round(span.target)} W${diffText}` : '');
+    }
+    bucketAvgEl.className = status ? `bucket-avg ${status}` : 'bucket-avg';
+
+    const leftKm = Math.max(0, span.end - distanceM) / 1000;
+    bucketInfoEl.textContent = `bucket ${idx + 1}/${refBucketSpans.length} · ${leftKm.toFixed(1)} km left`;
 }
 
 /** Binary search: largest index i where arr[i] <= value */
@@ -174,15 +224,15 @@ function refTimeAtDistance(distanceM) {
     return t0 + (distanceM - d0) / (d1 - d0) * (t1 - t0);
 }
 
+/**
+ * Power is held from the last row at or before the distance (not interpolated),
+ * so targets from a bucketed TT plan step cleanly at bucket boundaries.
+ */
 function refPowerAtDistance(distanceM) {
     if (!refPowers || refDistances.length < 2) return null;
     if (distanceM < refDistances[0] || distanceM > refDistances[refDistances.length - 1]) return null;
     const i = searchSorted(refDistances, distanceM);
-    const p0 = refPowers[i], p1 = refPowers[i + 1];
-    if (p0 == null || p1 == null) return p0 ?? p1 ?? null;
-    const d0 = refDistances[i], d1 = refDistances[i + 1];
-    if (d1 === d0) return p0;
-    return p0 + (distanceM - d0) / (d1 - d0) * (p1 - p0);
+    return refPowers[i] ?? refPowers[i + 1] ?? null;
 }
 
 function refSpeedAtDistance(distanceM) {
@@ -285,16 +335,30 @@ function onAthleteData(data) {
     const refSpd = refSpeedAtDistance(distanceM);
     refSpeedEl.textContent = refSpd != null ? `${refSpd.toFixed(1)} km/h` : '';
 
+    if (refBucketSpans.length) updateBucketLine(distanceM, currentTimeSec, Number(state.power ?? NaN));
+
     rideNameEl.textContent = refName;
 }
 
 // Store last known state so the reset button can anchor immediately
 let lastState = null;
 
+// Hide the detail lines switched off in display-settings.html (see display.css).
+function applyDetailSettings() {
+    const hide = detailHideClasses(key => Common.settingsStore.get(key));
+    for (const [cls, on] of Object.entries(hide)) {
+        document.documentElement.classList.toggle(cls, on);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
 export function main() {
+    Common.initInteractionListeners();
+    Common.settingsStore.setDefault({...DETAIL_DEFAULTS});
+    applyDetailSettings();
+    Common.settingsStore.addEventListener('changed', applyDetailSettings);
     csvFileInput.addEventListener('change', onFileSelected);
     changeBtn.addEventListener('click', showFilePanel);
     resetBtn.addEventListener('click', () => {
@@ -303,6 +367,8 @@ export function main() {
             anchorDistanceM = getRawDistance(lastState);
             anchorMs = Date.now();
         }
+        bucketAvg.reset();
+        clearBucketLine();
     });
     Common.subscribe('athlete/watching', data => {
         lastState = data?.state ?? null;
