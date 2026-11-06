@@ -513,14 +513,16 @@ def get_route(map_id: int, name_hash: int) -> dict | None:
     if route is None:
         return None
 
-    leadin = _pack_leg(map_id, route.get("leadin"))
+    raw_leadin = _pack_leg(map_id, route.get("leadin"))
+    leadin_view = route.get("leadin_view")
+    leadin = _pack_leg(map_id, leadin_view["profile"]) if leadin_view else raw_leadin
     main = _pack_leg(map_id, route.get("route"))
 
     # Scale each leg's altitude to physical metres by this world's stored
     # WAD->physical factor so the elevation profile and gradients are correct
     # (WAD vertical geometry is not always physical — see helper).
     world_scale = get_world_altitude_scale(map_id)
-    anchor_leg = leadin if leadin and leadin.get("alt") else main
+    anchor_leg = raw_leadin if raw_leadin and raw_leadin.get("alt") else main
     if anchor_leg and anchor_leg.get("alt"):
         anchor_alt = anchor_leg["alt"][0]
         _anchor_leg_alt(leadin, world_scale, anchor_alt)
@@ -547,6 +549,17 @@ def get_route(map_id: int, name_hash: int) -> dict | None:
         key=lambda e: -e["distance_m"],
     )
 
+    segments = _route_segment_markers(map_id, route, raw_leadin, main)
+    escalators = route.get("escalators", [])
+    if leadin_view:
+        escalators = [dict(passage) for passage in escalators]
+        shifted_markers = segments + [passage for passage in escalators
+                                      if passage.get("leg") == "leadin"]
+        for marker in shifted_markers:
+            for key in ("start_distance_m", "end_distance_m"):
+                if marker.get(key) is not None:
+                    marker[key] = round(marker[key] - leadin_view["paddock_distance_m"], 2)
+
     return {
         "mapID": map_id,
         "world_name": _WORLD_NAMES.get(map_id, f"World {map_id}"),
@@ -560,8 +573,8 @@ def get_route(map_id: int, name_hash: int) -> dict | None:
         "event_only": route.get("event_only", False),
         "leadin": leadin,
         "route": main,
-        "segments": _route_segment_markers(map_id, route, leadin, main),
-        "escalators": route.get("escalators", []),
+        "segments": segments,
+        "escalators": escalators,
         "road_nodes": route.get("road_nodes", []),
         "breakdown": breakdown_list,
         "bounds": bounds,

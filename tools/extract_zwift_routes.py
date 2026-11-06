@@ -226,6 +226,58 @@ def load_multiroot(data: bytes) -> ET.Element:
     return ET.fromstring("<root>" + txt + "</root>")
 
 
+def parse_paddock_roads(road_data: bytes, entity_data: bytes | None = None) -> list[dict]:
+    """Read marked pen roads in local metres without guessing route paddock IDs."""
+    spawn_markers: dict[int, list[dict]] = {}
+    if entity_data:
+        for entity in load_multiroot(entity_data).iter("ent"):
+            if entity.get("type") != "ENTITY_TYPE_SPAWNMARKER":
+                continue
+            if entity.get("m_roadId") is None or entity.get("m_roadTime") is None:
+                continue
+            spawn_markers.setdefault(int(entity.get("m_roadId")), []).append({
+                "name": entity.get("m_Name") or "",
+                "road_time": float(entity.get("m_roadTime")),
+            })
+
+    def vector(entity: ET.Element, attribute: str) -> list[float] | None:
+        value = entity.get(attribute)
+        if value is None:
+            return None
+        values = [float(component) / UNITS_PER_METRE
+                  for component in value.strip("{} ").split(",")]
+        if len(values) != 3:
+            raise ValueError(f"Invalid {attribute} vector: {value}")
+        return values
+
+    paddocks = []
+    for road in load_multiroot(road_data).iter("road"):
+        if (road.findtext("roadIsPaddock") or "").strip().lower() not in ("true", "1"):
+            continue
+        road_id = int(road.findtext("id"))
+        nodes = []
+        for entity in road.findall("ent"):
+            if entity.get("type") != "ENTITY_TYPE_ROADNODE":
+                continue
+            position = vector(entity, "m_pos")
+            if position is None:
+                continue
+            nodes.append({
+                "x": position[0], "alt": position[1], "z": position[2],
+                "tangent_in": vector(entity, "m_tangentIn"),
+                "tangent_out": vector(entity, "m_tangentOut"),
+            })
+        exit_time = road.findtext("paddockExitRoadTime")
+        paddocks.append({
+            "road_id": road_id,
+            "name": road.findtext("roadName") or "",
+            "paddock_exit_road_time": float(exit_time) if exit_time is not None else None,
+            "nodes": nodes,
+            "spawn_markers": spawn_markers.get(road_id, []),
+        })
+    return paddocks
+
+
 def _points(el: ET.Element | None) -> list[tuple[float, float, float]]:
     if el is None:
         return []
@@ -602,12 +654,48 @@ def derive_segment_data(root: ET.Element, definitions: list[dict]) -> list[dict]
     return derived
 
 
+def build_leadin_view(pts, road_times, main_pts, published_distance_m,
+                      paddock_road_ids, max_points, surfaces=None) -> dict | None:
+    """Omit a paddock prefix only when header error falls from >50 m to <10 m."""
+    if not pts or not main_pts or not paddock_road_ids:
+        return None
+    first_regular = next((index for index, (road_id, _) in enumerate(road_times)
+                          if road_id not in paddock_road_ids), len(pts))
+    if not first_regular or first_regular == len(pts):
+        return None
+    if any(road_id in paddock_road_ids for road_id, _ in road_times[first_regular:]):
+        return None
+    distances = _cumulative_planar(pts + [main_pts[0]])
+    full_distance = distances[-1] / UNITS_PER_METRE
+    paddock_distance = distances[first_regular] / UNITS_PER_METRE
+    remaining_distance = full_distance - paddock_distance
+    error_before = abs(full_distance - published_distance_m)
+    error_after = abs(remaining_distance - published_distance_m)
+    if not (error_before > 50 and error_after < 10):
+        return None
+    profile = build_profile(pts[first_regular:], max_points,
+                            surfaces[first_regular:] if surfaces is not None else None)
+    if profile is None:
+        return None
+    return {
+        "profile": profile,
+        "full_distance_m": full_distance,
+        "distance_m": remaining_distance,
+        "paddock_distance_m": paddock_distance,
+        "error_before_m": error_before,
+        "error_after_m": error_after,
+        "excluded_checkpoint_count": first_regular,
+        "paddock_road_ids": sorted({road_id for road_id, _ in road_times[:first_regular]}),
+    }
+
+
 def parse_route(data: bytes, map_id: int, max_points: int,
                 roads: dict | None = None, styles: list[str] | None = None,
                 surface_map: dict | None = None,
                 segment_names: dict[int, str] | None = None,
                 segment_definitions: list[dict] | None = None,
-                escalator_definitions: list[dict] | None = None) -> dict | None:
+                escalator_definitions: list[dict] | None = None,
+                paddock_road_ids: set[int] | None = None) -> dict | None:
     root = load_multiroot(data)
     r = root.find("route")
     if r is None:
@@ -628,7 +716,12 @@ def parse_route(data: bytes, map_id: int, max_points: int,
                 for rid, t in rt]
 
     route_profile = build_profile(main_pts, max_points, _surfaces(main_rt))
-    leadin_profile = build_profile(leadin_pts, max_points, _surfaces(leadin_rt))
+    leadin_surfaces = _surfaces(leadin_rt)
+    leadin_profile = build_profile(leadin_pts, max_points, leadin_surfaces)
+    leadin_view = build_leadin_view(
+        leadin_pts, leadin_rt, main_pts, leadin_distance_m,
+        paddock_road_ids, max_points, leadin_surfaces,
+    ) if r.get("leadinDistanceInMeters") is not None else None
     segment_entries = parse_segment_data(root)
     if not segment_entries and segment_definitions:
         segment_entries = derive_segment_data(root, segment_definitions)
@@ -663,7 +756,12 @@ def parse_route(data: bytes, map_id: int, max_points: int,
         "sport_type": _i(r, "sportType"),
         "event_only": _i(r, "eventOnly") == 1,
         "supported_laps": _i(r, "supportedLaps"),
+        "event_paddocks": [int(value) for value in (r.get("eventPaddocks") or "").split(",")
+                   if value.strip()],
+        "alternate_event_ramp": _i(r, "useAlternateEventRamp")
+        if r.get("useAlternateEventRamp") is not None else None,
         "leadin": leadin_profile,
+        **({"leadin_view": leadin_view} if leadin_view is not None else {}),
         "route": route_profile,
         "leadin_checkpoint_count": len(leadin_pts),
         "route_checkpoint_count": len(main_pts),
@@ -910,6 +1008,7 @@ def main() -> int:
         styles = parse_roadstyles(style_bytes) if style_bytes else []
         entity_bytes = next((v for k, v in entries.items()
                      if k.lower().endswith("entities.xml")), None)
+        paddock_roads = parse_paddock_roads(road_bytes, entity_bytes) if road_bytes else []
         segment_names = parse_segment_names(entity_bytes) if entity_bytes else {}
         segment_definitions = parse_segment_definitions(entity_bytes) if entity_bytes else []
         escalator_definitions = parse_escalator_definitions(entity_bytes) if entity_bytes else []
@@ -926,7 +1025,8 @@ def main() -> int:
             try:
                 route = parse_route(entries[nm], map_id, args.max_points,
                                     roads, styles, surface_map, segment_names,
-                                    segment_definitions, escalator_definitions)
+                                    segment_definitions, escalator_definitions,
+                                    {road["road_id"] for road in paddock_roads})
             except Exception as exc:  # noqa: BLE001
                 print(f"  {world}/{nm}: parse error ({exc})", file=sys.stderr)
                 continue
@@ -939,7 +1039,8 @@ def main() -> int:
         out_file = f"world_{map_id}.json"
         with open(os.path.join(args.out, out_file), "w", encoding="utf-8") as f:
             json.dump({"mapID": map_id, "world": world,
-                       "coordinate_system": "zwift_local_m", "routes": routes},
+                       "coordinate_system": "zwift_local_m",
+                       "paddock_roads": paddock_roads, "routes": routes},
                       f, ensure_ascii=False, separators=(",", ":"))
         print(f"  {world} (map {map_id}): {len(routes)} routes -> {out_file}")
 
@@ -956,6 +1057,8 @@ def main() -> int:
                 "leadin_ascent_m": route["leadin_ascent_m"],
                 "sport_type": route["sport_type"],
                 "event_only": route["event_only"],
+                "event_paddocks": route["event_paddocks"],
+                "alternate_event_ramp": route["alternate_event_ramp"],
                 "has_leadin": route["leadin"] is not None,
                 "has_route": route["route"] is not None,
                 "file": out_file,

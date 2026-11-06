@@ -78,6 +78,49 @@ Renders `landing.html`. Passes `logged_in = 'tokens' in session` to the template
 
 ## Surface Map
 
+### Route Paddocks
+
+`tools/extract_zwift_routes.py` retains `event_paddocks` (the ordered numeric
+references from `eventPaddocks`) and `alternate_event_ramp` (the numeric
+`useAlternateEventRamp` value, or null when absent) in each virtual route and
+the route index. An empty paddock list means the route header declares none;
+it does not imply the route cannot be used for events.
+
+Each virtual-world route file also contains `paddock_roads`, extracted from
+roads explicitly marked `roadIsPaddock` in the client's road XML. Each record
+retains its `road_id`, name, optional `paddock_exit_road_time`, and ordered
+`nodes` with local-metre `x`, `alt`, `z`, `tangent_in`, and `tangent_out`.
+Missing spline handles remain null. These are source spline control nodes,
+not an interpolated elevation profile; altitude retains the raw game datum.
+Associated `spawn_markers` retain their source names and native `road_time`.
+A spawn marker is not assumed to be a race start line.
+
+Route paddock references and road IDs are separate namespaces. The extraction
+does not guess their mapping from proximity or ordering, and does not prepend
+pen roads to the existing lead-in checkpoints. For example, Elevation
+Evaluation references paddocks 21–25 and alternate-ramp mode 2, while its dense
+lead-in checkpoints still measure 2,599.65 m versus the 3,089.79 m header.
+
+Routes optionally contain `leadin_view` when removing a marked paddock prefix
+reduces the absolute lead-in discrepancy from strictly **over 50 m** to strictly
+**under 10 m**. The comparison uses the original high-resolution planar
+checkpoint intervals plus the final gap to the main-route start. The interval
+from a paddock checkpoint to the first ordinary-road checkpoint belongs to the
+paddock. No non-prefix sections are joined, and no distances are stretched.
+
+`leadin_view.profile` contains the remaining checkpoints, rebased to distance
+zero before the usual resampling. Its `full_distance_m`, `distance_m`,
+`paddock_distance_m`, `error_before_m`, and `error_after_m` retain the unrounded
+measurements; `paddock_road_ids` and `excluded_checkpoint_count` identify the
+omitted prefix. The raw `leadin`, published distances, main route, and index
+remain unchanged. The Surface Map uses this optional profile, preserves the
+original altitude anchor, and shifts checkpoint-based segment distances and
+lead-in escalators by the omitted distance. All other routes keep their view.
+
+Run `python -m tools.analyze_route_paddock_leadins` to regenerate the complete
+analysis and `race_data/paddock_leadin_adjustments.md`, which lists every
+qualifying route with its before/after distances and absolute discrepancies.
+
 ### Page: `GET /surface-map`
 
 The world selector includes **Video Routes**, a surface-map-only group with
@@ -92,6 +135,15 @@ Refresh the published files on a machine with downloaded video-route data:
 ```powershell
 python tools/extract_zwift_routes.py --video-cache "$env:LOCALAPPDATA\Zwift\mochi"
 ```
+
+The main `tools/regenerate_zwift_data.py` pipeline also refreshes video routes
+and their road network from `%LOCALAPPDATA%\Zwift\mochi`, honoring both
+`--out-routes` and `--out-surfaces`. Use `--video-cache PATH` to select another
+cache. A missing default cache is reported and skipped, leaving existing video
+exports untouched; an explicitly supplied missing directory is an error.
+Video extraction shares the normal client-version check, so use `--force` when
+only the downloaded cache has changed. No video assets are downloaded by this
+pipeline; errors extracting an available cache stop regeneration.
 
 The extractor retains every high-resolution route checkpoint, converts game
 centimetres to metres, and joins named surface markers by road ID and road time.

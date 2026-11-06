@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import csv
 from datetime import date, datetime, timedelta, timezone
 import getpass
@@ -24,6 +25,7 @@ from shared.zwift_auth import (  # noqa: E402
     refresh_access_token,
 )
 from shared.http_pacing import RequestPacer  # noqa: E402
+from shared.console_log import run_logged, terminal_only  # noqa: E402
 
 BASE_URL = "https://us-or-rly101.zwift.com/api"
 # Match the curly quotes in the supplied classification URL.
@@ -140,9 +142,29 @@ def identifier(value, label: str) -> int:
 
 def participant_ids(classification: dict) -> list[int]:
     ids = set()
+    unidentified = duplicates = 0
     for page in classification["pages"]:
         for entry in page_entries(page):
-            ids.add(identifier(entry["profileId"], "profileId"))
+            profile_id = entry.get("profileId")
+            if profile_id is None or profile_id == "":
+                unidentified += 1
+                continue
+            profile_id = identifier(profile_id, "profileId")
+            duplicates += profile_id in ids
+            ids.add(profile_id)
+    if unidentified:
+        print(
+            f"Warning: classification contains {unidentified} entries without profileId; "
+            "cannot fetch their histories. Raw entries remain in the classification snapshot.",
+            file=sys.stderr,
+        )
+    if duplicates:
+        print(
+            f"Classification: deduplicated {duplicates} repeated rider entries.",
+            file=sys.stderr,
+        )
+    if not ids:
+        raise ValueError("Classification contains no identifiable riders.")
     return sorted(ids)
 
 
@@ -169,7 +191,8 @@ def collect_histories(
     records = []
     for index, profile_id in enumerate(profiles, 1):
         path = cache_dir / f"{profile_id}_{since}_{until}.json"
-        if path.exists():
+        was_cached = path.exists()
+        if was_cached:
             cached = json.loads(path.read_text(encoding="utf-8"))
             if (
                 cached.get("profileId") != profile_id
@@ -190,42 +213,177 @@ def collect_histories(
                     raise ValueError(f"History profile mismatch for rider {profile_id}.")
                 identifier(entry["eventId"], "eventId")
                 rider_records.append(entry)
-        if not path.exists():
+        if not was_cached:
             write_json(path, {
                 "profileId": profile_id, "from": since, "to": until, "pages": pages
             })
         records.extend(rider_records)
         print(
             f"History {index}/{len(profiles)}: rider {profile_id}, "
-            f"{len(rider_records)} results.",
+            f"{len(rider_records)} results ({'cached' if was_cached else 'downloaded'}).",
             file=sys.stderr,
         )
     return records
 
 
-def fetch_events(client: ZwiftClient, records: list[dict]) -> dict[int, dict]:
+def fetch_events(
+    client: ZwiftClient, records: list[dict], batch_size: int = 50,
+    cache_dir: Path | None = None,
+    *, skip_unavailable: bool = False, report_path: Path | None = None,
+) -> dict[int, dict]:
+    if batch_size <= 0:
+        raise ValueError("Event batch size must be positive.")
+    if skip_unavailable and report_path is None:
+        raise ValueError("Skipping unavailable events requires an excluded-events report path.")
     ids = sorted({identifier(entry["eventId"], "eventId") for entry in records})
-    if not ids:
-        return {}
-    payload = client.request(
-        "POST", "events/bulk-fetch", json=[{"eventId": event_id} for event_id in ids]
-    )
-    events = payload.get("events") if isinstance(payload, dict) else payload
-    if not isinstance(events, list) or any(not isinstance(e, dict) for e in events):
-        raise ValueError("Unexpected bulk-fetch schema: expected an array of events.")
     by_id = {}
-    for event in events:
+    unavailable = {}
+
+    def validate_event(event: dict, expected_id: int | None = None) -> int:
         event_id = identifier(event["eventId"], "eventId")
+        if expected_id is not None and event_id != expected_id:
+            raise ValueError(f"Event cache metadata mismatch for event {expected_id}.")
         if not isinstance(event.get("tags"), list):
             raise ValueError(f"Missing or invalid tags for event {event_id}.")
+        return event_id
+
+    def save_event(event: dict, event_id: int) -> None:
+        if cache_dir is not None:
+            write_json(cache_dir / f"{event_id}.json", event)
         by_id[event_id] = event
-    missing = set(ids) - by_id.keys()
-    if missing:
-        raise ValueError(
-            f"Bulk-fetch omitted {len(missing)} events; cannot safely filter results. "
-            f"First missing event: {min(missing)}."
+
+    def fetch_individual(event_id: int) -> None:
+        try:
+            event = client.request("GET", f"events/{event_id}")
+        except requests.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else None
+            if status not in (403, 404, 410):
+                raise requests.HTTPError(
+                    f"Individual lookup for event {event_id} failed (HTTP {status}).",
+                    response=exc.response, request=exc.request,
+                ) from exc
+            unavailable[event_id] = status
+            print(
+                f"Warning: event {event_id} omitted by bulk-fetch and unavailable "
+                f"from individual lookup (HTTP {status}); Tour membership is unknown.",
+                file=sys.stderr,
+            )
+            return
+        if not isinstance(event, dict):
+            raise ValueError(f"Unexpected individual-event schema for event {event_id}.")
+        # The individual endpoint uses id; the bulk endpoint uses eventId.
+        event = {**event, "eventId": event.get("eventId", event.get("id"))}
+        validate_event(event, event_id)
+        if "id" in event and identifier(event["id"], "id") != event_id:
+            raise ValueError(f"Individual lookup returned the wrong ID for event {event_id}.")
+        save_event(event, event_id)
+
+    def fetch_batch(batch: list[int]) -> None:
+        try:
+            payload = client.request(
+                "POST", "events/bulk-fetch", json=[{"eventId": event_id} for event_id in batch]
+            )
+        except requests.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else None
+            if status in (400, 413) and len(batch) > 1:
+                print(
+                    f"HTTP {status} from events/bulk-fetch for {len(batch)} events; "
+                    "splitting into smaller batches.",
+                    file=sys.stderr,
+                )
+                middle = len(batch) // 2
+                fetch_batch(batch[:middle])
+                fetch_batch(batch[middle:])
+                return
+            raise requests.HTTPError(
+                f"events/bulk-fetch failed for {len(batch)} events "
+                f"(first event {batch[0]}, HTTP {status}).",
+                response=exc.response, request=exc.request,
+            ) from exc
+        events = payload.get("events") if isinstance(payload, dict) else payload
+        if not isinstance(events, list) or any(not isinstance(e, dict) for e in events):
+            raise ValueError("Unexpected bulk-fetch schema: expected an array of events.")
+        fetched = {validate_event(event): event for event in events}
+        unexpected = fetched.keys() - set(batch)
+        if unexpected:
+            raise ValueError(f"Bulk-fetch returned an unrequested event: {min(unexpected)}.")
+        for event_id, event in fetched.items():
+            save_event(event, event_id)
+        missing = set(batch) - fetched.keys()
+        if missing:
+            print(
+                f"Bulk-fetch omitted {len(missing)} events; trying individual lookups.",
+                file=sys.stderr,
+            )
+            for event_id in sorted(missing):
+                fetch_individual(event_id)
+        print(f"Event details: {len(by_id)}/{len(ids)} loaded.", file=sys.stderr)
+
+    pending = []
+    for event_id in ids:
+        path = cache_dir / f"{event_id}.json" if cache_dir is not None else None
+        if path is not None and path.exists():
+            event = json.loads(path.read_text(encoding="utf-8"))
+            validate_event(event, event_id)
+            by_id[event_id] = event
+        else:
+            pending.append(event_id)
+    if ids:
+        print(
+            f"Event details: {len(by_id)} cached, {len(pending)} to fetch "
+            f"in batches of at most {batch_size}.",
+            file=sys.stderr,
+        )
+    for start in range(0, len(pending), batch_size):
+        fetch_batch(pending[start:start + batch_size])
+    counts = Counter(identifier(entry["eventId"], "eventId") for entry in records)
+    excluded_rows = sum(counts[event_id] for event_id in unavailable)
+    if report_path is not None:
+        write_json(report_path, {
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "excludedResultCount": excluded_rows,
+            "unavailableEvents": [
+                {
+                    "eventId": event_id, "httpStatus": status,
+                    "affectedResults": counts[event_id],
+                    "reason": "Omitted by bulk-fetch and unavailable individually; Tour membership unknown.",
+                }
+                for event_id, status in sorted(unavailable.items())
+            ],
+        })
+    if unavailable:
+        if not skip_unavailable:
+            raise ValueError(
+                f"{len(unavailable)} events unavailable from both endpoints "
+                f"(first event {min(unavailable)}). Valid event details are cached. "
+                "Use --skip-unavailable-events to export available results with an exclusions report."
+            )
+        print(
+            f"Warning: excluding {excluded_rows} race results across {len(unavailable)} "
+            f"unavailable events; the export may be incomplete. Report: {report_path}",
+            file=sys.stderr,
         )
     return by_id
+
+
+def resolve_until(
+    cache_dir: Path, league: str, classification: str, since: date,
+    requested: date | None,
+) -> date:
+    if requested is not None:
+        return requested
+    path = cache_dir / "download_state.json"
+    if path.exists():
+        state = json.loads(path.read_text(encoding="utf-8"))
+        if (
+            state["league"] == league
+            and state["classification"] == classification
+            and state["from"] == since.isoformat()
+        ):
+            until = date.fromisoformat(state["to"])
+            print(f"Resuming saved history date range: {since} to {until}.", file=sys.stderr)
+            return until
+    return datetime.now(timezone.utc).date() + timedelta(days=1)
 
 
 def race_rows(records: list[dict], events: dict[int, dict], tag: str) -> list[dict]:
@@ -313,34 +471,68 @@ def main(argv: list[str] | None = None) -> int:
         "--classification-only", action="store_true",
         help="Only download classification JSON (the original script behavior).",
     )
+    parser.add_argument(
+        "--refresh-classification", action="store_true",
+        help="Redownload classification instead of reusing an existing --output file.",
+    )
     parser.add_argument("--since", type=date.fromisoformat, default=date(2026, 10, 1))
     parser.add_argument(
         "--until", type=date.fromisoformat,
-        default=datetime.now(timezone.utc).date() + timedelta(days=1),
-        help="API 'to' date (default: tomorrow UTC).",
+        help="API 'to' date (default: saved run date, or tomorrow UTC for a new run).",
     )
     parser.add_argument(
         "--history-cache", type=Path, default=Path("race_data") / "tow_histories"
     )
     parser.add_argument(
+        "--event-cache", type=Path, default=Path("race_data") / "tow_events"
+    )
+    parser.add_argument("--event-batch-size", type=positive_int, default=50)
+    parser.add_argument(
+        "--skip-unavailable-events", action="store_true",
+        help="Exclude events returning 403/404/410 individually, with warnings and a JSON report.",
+    )
+    parser.add_argument(
         "--csv-output", type=Path, default=Path("race_data") / "tour_of_watopia_2026.csv"
     )
+    parser.add_argument(
+        "--log-file", type=Path,
+        help="Append terminal output to this file (default: output path with .log suffix).",
+    )
     args = parser.parse_args(argv)
-    if args.since > args.until:
+    if args.until is not None and args.since > args.until:
         parser.error("--since must not be after --until")
+    output = args.output if args.classification_only else args.csv_output
+    return run_logged(args.log_file or output.with_suffix(".log"), lambda: run(args))
 
+
+def run(args: argparse.Namespace) -> int:
+    phase = "loading saved data"
     try:
         classification = None
-        if args.classification_file:
-            classification = json.loads(args.classification_file.read_text(encoding="utf-8"))
+        classification_path = args.classification_file
+        if (
+            classification_path is None and not args.classification_only
+            and not args.refresh_classification and args.output.exists()
+        ):
+            classification_path = args.output
+        if classification_path is not None:
+            classification = json.loads(classification_path.read_text(encoding="utf-8"))
             if (
                 classification["league"] != args.league
                 or classification["classification"] != args.classification
             ):
                 raise ValueError("Classification file does not match --league/--classification.")
             participant_ids(classification)
-        username = os.environ.get("ZWIFT_USERNAME") or input("Zwift email: ").strip()
-        password = os.environ.get("ZWIFT_PASSWORD") or getpass.getpass("Zwift password: ")
+            print(f"Using saved classification: {classification_path}.", file=sys.stderr)
+        until = resolve_until(
+            args.history_cache, args.league, args.classification, args.since, args.until
+        ) if not args.classification_only else args.until
+        if until is not None and args.since > until:
+            raise ValueError("--since must not be after the saved --until date.")
+        phase = "authentication"
+        with terminal_only():
+            username = os.environ.get("ZWIFT_USERNAME") or input("Zwift email: ").strip()
+            password = os.environ.get("ZWIFT_PASSWORD") or getpass.getpass("Zwift password: ")
         if not username.strip() or not password:
             raise ValueError("Zwift email and password must not be empty.")
         tokens = get_token_with_password(username, password)
@@ -348,6 +540,7 @@ def main(argv: list[str] | None = None) -> int:
         with requests.Session() as session:
             client = ZwiftClient(session, tokens, args.request_interval)
             if classification is None:
+                phase = "classification download"
                 pages = fetch_classification(
                     session, tokens, args.league, args.classification, args.page_size,
                     client=client,
@@ -361,13 +554,34 @@ def main(argv: list[str] | None = None) -> int:
                 write_json(args.output, classification)
                 print(f"Saved {len(pages)} classification pages to {args.output}.")
             if not args.classification_only:
+                assert until is not None
+                write_json(args.history_cache / "download_state.json", {
+                    "league": args.league, "classification": args.classification,
+                    "from": args.since.isoformat(), "to": until.isoformat(),
+                })
                 profiles = participant_ids(classification)
-                print(f"Collecting histories for {len(profiles)} riders.", file=sys.stderr)
+                print(
+                    f"Loading histories for {len(profiles)} riders, "
+                    f"{args.since} to {until}; completed caches will be reused.",
+                    file=sys.stderr,
+                )
+                phase = "rider history download"
                 records = collect_histories(
-                    client, profiles, args.since.isoformat(), args.until.isoformat(),
+                    client, profiles, args.since.isoformat(), until.isoformat(),
                     args.page_size, args.history_cache,
                 )
-                events = fetch_events(client, records)
+                phase = "event detail lookup (events/bulk-fetch)"
+                events = fetch_events(
+                    client, records, batch_size=args.event_batch_size, cache_dir=args.event_cache,
+                    skip_unavailable=args.skip_unavailable_events,
+                    report_path=args.csv_output.with_suffix(".excluded_events.json"),
+                )
+                phase = "CSV export"
+                if args.skip_unavailable_events:
+                    records = [
+                        entry for entry in records
+                        if identifier(entry["eventId"], "eventId") in events
+                    ]
                 rows = race_rows(records, events, args.league)
                 write_csv(args.csv_output, rows)
                 print(f"Saved {len(rows)} race results to {args.csv_output}.")
@@ -382,16 +596,18 @@ def main(argv: list[str] | None = None) -> int:
             )
         else:
             print(
-                f"Zwift request failed (HTTP {status}). Check credentials, permissions, "
-                "and the exact league/classification identifier.",
+                f"Zwift request failed during {phase} (HTTP {status}): {exc}",
                 file=sys.stderr,
             )
         return 1
     except requests.exceptions.JSONDecodeError:
         print("Zwift returned invalid JSON; no final CSV was written.", file=sys.stderr)
         return 1
-    except requests.RequestException:
-        print("Could not connect to Zwift; check your connection and retry.", file=sys.stderr)
+    except requests.RequestException as exc:
+        print(
+            f"Zwift request failed during {phase}: {exc}. Check your connection and retry.",
+            file=sys.stderr,
+        )
         return 1
     except (ValueError, KeyError, OSError, EOFError) as exc:
         print(f"Download failed: {exc}", file=sys.stderr)

@@ -102,8 +102,10 @@ def _nodes_full(block: str):
 
     ``m_tangentIn`` / ``m_tangentOut`` are cubic-Bezier control-point offsets
     (per-node incoming/outgoing handles), not raw Hermite tangents. Missing or
-    absent handles default to zero (straight segment)."""
+    absent handles default to zero. ``m_bStraight`` overrides both handles of
+    the node's outgoing segment, including a loop's closing segment."""
     out = []
+    straight = []
     for m in _NODE_RE.finditer(block):
         tag = m.group(0)
         pos = _vec_xz(tag, "m_pos")
@@ -112,6 +114,15 @@ def _nodes_full(block: str):
         ti = _vec_xz(tag, "m_tangentIn") or (0.0, 0.0)
         to = _vec_xz(tag, "m_tangentOut") or (0.0, 0.0)
         out.append((pos, ti, to))
+        straight.append(re.search(r'\bm_bStraight="(?:1|true)"', tag, re.I) is not None)
+    for index, is_straight in enumerate(straight):
+        if not is_straight:
+            continue
+        pos, ti, _ = out[index]
+        out[index] = (pos, ti, (0.0, 0.0))
+        next_index = (index + 1) % len(out)
+        pos, _, to = out[next_index]
+        out[next_index] = (pos, (0.0, 0.0), to)
     return out
 
 
