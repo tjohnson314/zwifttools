@@ -21,6 +21,24 @@ def test_segment_hashes_survive_json_as_exact_strings():
     assert tchou["wad_hash"] == "-9223372035804541048"
 
 
+def test_adaptive_segment_paths_retain_checkpoint_fraction_matching(tmp_path, monkeypatch):
+    from shared import zrl_leaderboard
+
+    route_file = tmp_path / "routes.json"
+    calibration_file = tmp_path / "calibration.json"
+    route_file.write_text(json.dumps({"routes": [{"name": "Montmartre Mixer", "segment_path": {
+        "d": [0, 1, 2, 4], "x": [0, 100, 100, 300], "z": [0, 0, 100, 100],
+    }}]}), encoding="utf-8")
+    calibration_file.write_text(json.dumps({"11": {"coef": [[1, 0], [0, 1], [0, 0]]}}), encoding="utf-8")
+    monkeypatch.setattr(zrl_leaderboard, "ROUTE_FILE", route_file)
+    monkeypatch.setattr(zrl_leaderboard, "CALIBRATION_FILE", calibration_file)
+
+    route, positions = _load_calibrated_route_boundaries()
+
+    np.testing.assert_array_equal(positions, [0, 1, 2, 3, 4])
+    np.testing.assert_allclose(route, [[0, 0], [100, 0], [100, 100], [200, 100], [300, 100]])
+
+
 def test_route_matcher_keeps_early_pass_at_overlapping_geometry():
     first_pass = np.column_stack([
         48.0 + np.arange(30) * 0.0001,

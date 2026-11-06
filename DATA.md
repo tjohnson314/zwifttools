@@ -78,6 +78,22 @@ Renders `landing.html`. Passes `logged_in = 'tokens' in session` to the template
 
 ## Surface Map
 
+### Route Sampling
+
+Regenerated virtual-route profiles use `--max-points` (default 600) as an
+initial sampling target, not a hard cap. Additional samples preserve segment
+boundaries, surface transitions, and bends or elevation changes until the
+three-dimensional interpolation error against original checkpoints is at most
+1 m before coordinate rounding. Published distances and full-resolution
+cumulative distances are not rescaled or recomputed from simplified chords.
+
+Segment boundaries are inserted into both physical-distance profiles and
+`segment_path`. The latter's `d` array stores original checkpoint-index
+positions, which are nonuniform after refinement; consumers must interpolate
+through these values rather than treating array indices as route percentages.
+All 389 cached virtual routes across 13 worlds have been refreshed with this
+sampling. Video routes already retain every original checkpoint and are unchanged.
+
 ### Route Paddocks
 
 `tools/extract_zwift_routes.py` retains `event_paddocks` (the ordered numeric

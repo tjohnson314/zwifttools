@@ -220,16 +220,17 @@ def _load_segment_names() -> dict[int, str]:
     return names
 
 
-def _path_slice(points, start_fraction, end_fraction):
+def _path_slice(points, start_fraction, end_fraction, positions=None):
     """Return the route polyline between normalized WAD checkpoint positions."""
     if len(points) < 2:
         return []
     points = np.asarray(points, dtype=float)
-    start = start_fraction * (len(points) - 1)
-    end = end_fraction * (len(points) - 1)
-    interior = points[(np.arange(len(points)) > start) & (np.arange(len(points)) < end)]
+    positions = np.asarray(positions if positions is not None else np.arange(len(points)), dtype=float)
+    start = start_fraction * positions[-1]
+    end = end_fraction * positions[-1]
+    interior = points[(positions > start) & (positions < end)]
     samples = [
-        [float(np.interp(position, np.arange(len(points)), points[:, i])) for i in range(2)]
+        [float(np.interp(position, positions, points[:, i])) for i in range(2)]
         for position in (start, end)
     ]
     return [samples[0], *interior.tolist(), samples[1]]
@@ -240,7 +241,7 @@ def _route_path_slice(route, leadin, main, start_fraction, end_fraction):
     segment_path = route.get("segment_path")
     if segment_path and segment_path.get("x") and segment_path.get("z"):
         points = list(zip(segment_path["x"], segment_path["z"]))
-        return _path_slice(points, start_fraction, end_fraction)
+        return _path_slice(points, start_fraction, end_fraction, segment_path.get("d"))
     lead_points = list(zip(leadin.get("local_x", []), leadin.get("local_z", []))) if leadin else []
     main_points = list(zip(main.get("local_x", []), main.get("local_z", []))) if main else []
     lead_count = max(int(route.get("leadin_checkpoint_count", len(lead_points))), 1)

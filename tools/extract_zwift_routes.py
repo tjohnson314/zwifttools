@@ -27,7 +27,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
-from bisect import bisect_right
+from bisect import bisect_left, bisect_right
 import json
 import math
 import os
@@ -325,8 +325,10 @@ def _cumulative_planar(pts: list[tuple[float, float, float]]) -> list[float]:
 
 
 def _resample(dist_m: list[float], pts: list[tuple[float, float, float]], n: int,
-              surfaces: list[str] | None = None) -> dict[str, list]:
-    """Uniformly resample distance and local-world geometry to at most ``n`` points.
+              surfaces: list[str] | None = None,
+              preserve_positions: list[float] | None = None,
+              position_precision: int = 2) -> dict[str, list]:
+    """Refine an initial ``n`` samples to retain boundaries and <=1 m 3D error.
 
     ``surfaces`` (one label per source point) is resampled as a step function:
     each output point takes the surface of the nearer bracketing source point, so
@@ -335,9 +337,9 @@ def _resample(dist_m: list[float], pts: list[tuple[float, float, float]], n: int
     x_m = [p[0] / UNITS_PER_METRE for p in pts]
     alt_m = [p[1] / UNITS_PER_METRE for p in pts]
     z_m = [p[2] / UNITS_PER_METRE for p in pts]
-    if len(dist_m) <= n or len(dist_m) < 2:
+    if (len(dist_m) <= n and not preserve_positions) or len(dist_m) < 2:
         out: dict[str, list] = {
-            "d": [round(d, 2) for d in dist_m],
+            "d": [round(d, position_precision) for d in dist_m],
             "alt": [round(a, 3) for a in alt_m],
             "x": [round(x, 3) for x in x_m],
             "z": [round(z, 3) for z in z_m],
@@ -346,11 +348,42 @@ def _resample(dist_m: list[float], pts: list[tuple[float, float, float]], n: int
             out["surface"] = list(surfaces)
         return out
     total = dist_m[-1]
+    targets = set(dist_m if len(dist_m) <= n else
+                  (total * index / (n - 1) for index in range(n)))
+    targets.update(position for position in (preserve_positions or [])
+                   if dist_m[0] <= position <= total)
+    if surfaces is not None:
+        for index in range(1, len(surfaces)):
+            if surfaces[index] != surfaces[index - 1]:
+                targets.update((dist_m[index - 1], dist_m[index]))
+
+    def sample(target):
+        index = max(0, min(bisect_right(dist_m, target) - 1, len(dist_m) - 2))
+        span = dist_m[index + 1] - dist_m[index]
+        weight = (target - dist_m[index]) / span if span else 0.0
+        return tuple(values[index] + weight * (values[index + 1] - values[index])
+                     for values in (x_m, alt_m, z_m))
+
+    ordered = sorted(targets)
+    pending = list(zip(ordered, ordered[1:]))
+    while pending:
+        start, end = pending.pop()
+        first, last = sample(start), sample(end)
+        worst_error, worst_position = 1.0, None
+        for index in range(bisect_right(dist_m, start), bisect_left(dist_m, end)):
+            weight = (dist_m[index] - start) / (end - start)
+            error = sum((values[index] - (initial + weight * (final - initial))) ** 2
+                        for values, initial, final in zip((x_m, alt_m, z_m), first, last))
+            if error > worst_error:
+                worst_error, worst_position = error, dist_m[index]
+        if worst_position is not None:
+            targets.add(worst_position)
+            pending.extend(((start, worst_position), (worst_position, end)))
+
     out_d, out_a, out_x, out_z = [], [], [], []
     out_s: list[str] = []
     j = 0
-    for k in range(n):
-        target = total * k / (n - 1)
+    for target in sorted(targets):
         while j < len(dist_m) - 2 and dist_m[j + 1] < target:
             j += 1
         d0, d1 = dist_m[j], dist_m[j + 1]
@@ -358,7 +391,7 @@ def _resample(dist_m: list[float], pts: list[tuple[float, float, float]], n: int
         alt = alt_m[j] + frac * (alt_m[j + 1] - alt_m[j])
         x = x_m[j] + frac * (x_m[j + 1] - x_m[j])
         z = z_m[j] + frac * (z_m[j + 1] - z_m[j])
-        out_d.append(round(target, 2))
+        out_d.append(round(target, position_precision))
         out_a.append(round(alt, 3))
         out_x.append(round(x, 3))
         out_z.append(round(z, 3))
@@ -371,7 +404,8 @@ def _resample(dist_m: list[float], pts: list[tuple[float, float, float]], n: int
 
 
 def build_profile(pts: list[tuple[float, float, float]],
-                  max_points: int, surfaces: list[str] | None = None) -> dict | None:
+                  max_points: int, surfaces: list[str] | None = None,
+                  preserve_distances: list[float] | None = None) -> dict | None:
     """Convert a checkpoint polyline into a metre-based route geometry profile.
 
     Distance is summed from the actual checkpoint geometry (game units -> metres)
@@ -385,14 +419,16 @@ def build_profile(pts: list[tuple[float, float, float]],
     if raw_total <= 0:
         return None
     dist_m = [u / UNITS_PER_METRE for u in cum]
-    return _resample(dist_m, pts, max_points, surfaces)
+    return _resample(dist_m, pts, max_points, surfaces, preserve_distances)
 
 
-def build_segment_path(pts: list[tuple[float, float, float]], max_points: int) -> dict | None:
-    """Build a path resampled by WAD checkpoint index for segment percentages."""
+def build_segment_path(pts: list[tuple[float, float, float]], max_points: int,
+                       preserve_positions: list[float] | None = None) -> dict | None:
+    """Build an adaptive path whose ``d`` retains original WAD checkpoint indices."""
     if len(pts) < 2:
         return None
-    return _resample([float(i) for i in range(len(pts))], pts, max_points)
+    return _resample([float(i) for i in range(len(pts))], pts, max_points,
+                     preserve_positions=preserve_positions, position_precision=9)
 
 
 def _f(el: ET.Element, attr: str, default: float = 0.0) -> float:
@@ -655,7 +691,8 @@ def derive_segment_data(root: ET.Element, definitions: list[dict]) -> list[dict]
 
 
 def build_leadin_view(pts, road_times, main_pts, published_distance_m,
-                      paddock_road_ids, max_points, surfaces=None) -> dict | None:
+                      paddock_road_ids, max_points, surfaces=None,
+                      preserve_distances=None) -> dict | None:
     """Omit a paddock prefix only when header error falls from >50 m to <10 m."""
     if not pts or not main_pts or not paddock_road_ids:
         return None
@@ -674,7 +711,9 @@ def build_leadin_view(pts, road_times, main_pts, published_distance_m,
     if not (error_before > 50 and error_after < 10):
         return None
     profile = build_profile(pts[first_regular:], max_points,
-                            surfaces[first_regular:] if surfaces is not None else None)
+                            surfaces[first_regular:] if surfaces is not None else None,
+                            [distance - paddock_distance for distance in (preserve_distances or [])
+                             if distance >= paddock_distance])
     if profile is None:
         return None
     return {
@@ -715,16 +754,10 @@ def parse_route(data: bytes, map_id: int, max_points: int,
         return [surface_map.get(_resolve_style_name(rid, t, roads, styles), "Unknown")
                 for rid, t in rt]
 
-    route_profile = build_profile(main_pts, max_points, _surfaces(main_rt))
-    leadin_surfaces = _surfaces(leadin_rt)
-    leadin_profile = build_profile(leadin_pts, max_points, leadin_surfaces)
-    leadin_view = build_leadin_view(
-        leadin_pts, leadin_rt, main_pts, leadin_distance_m,
-        paddock_road_ids, max_points, leadin_surfaces,
-    ) if r.get("leadinDistanceInMeters") is not None else None
     segment_entries = parse_segment_data(root)
     if not segment_entries and segment_definitions:
         segment_entries = derive_segment_data(root, segment_definitions)
+    segment_positions, leadin_boundaries, main_boundaries = [], [], []
     if segment_entries:
         combined_points = leadin_pts + main_pts
         physical_distance = [value / UNITS_PER_METRE for value in _cumulative_planar(combined_points)]
@@ -734,15 +767,26 @@ def parse_route(data: bytes, map_id: int, max_points: int,
             fraction = position - index
             return physical_distance[index] + fraction * (physical_distance[index + 1] - physical_distance[index])
         for segment in segment_entries:
-            segment["start_distance_m"] = round(
-                _distance_at(segment["percent_start"] * checkpoint_positions[-1]), 2
-            )
-            segment["end_distance_m"] = round(
-                _distance_at(segment["percent_end"] * checkpoint_positions[-1]), 2
-            )
+            for boundary in ("start", "end"):
+                position = segment[f"percent_{boundary}"] * checkpoint_positions[-1]
+                distance = _distance_at(position)
+                segment_positions.append(position)
+                segment[f"{boundary}_distance_m"] = round(distance, 2)
+                if position <= len(leadin_pts) - 1:
+                    leadin_boundaries.append(distance)
+                if position >= len(leadin_pts) and main_pts:
+                    main_boundaries.append(distance - physical_distance[len(leadin_pts)])
             if segment_names and segment["hash"] in segment_names:
                 segment["name"] = segment_names[segment["hash"]]
-    segment_path = build_segment_path(leadin_pts + main_pts, max_points * 2) if segment_entries else None
+    route_profile = build_profile(main_pts, max_points, _surfaces(main_rt), main_boundaries)
+    leadin_surfaces = _surfaces(leadin_rt)
+    leadin_profile = build_profile(leadin_pts, max_points, leadin_surfaces, leadin_boundaries)
+    leadin_view = build_leadin_view(
+        leadin_pts, leadin_rt, main_pts, leadin_distance_m,
+        paddock_road_ids, max_points, leadin_surfaces, leadin_boundaries,
+    ) if r.get("leadinDistanceInMeters") is not None else None
+    segment_path = build_segment_path(leadin_pts + main_pts, max_points * 2,
+                                      segment_positions) if segment_entries else None
 
     return {
         "name": name,
@@ -948,7 +992,7 @@ def main() -> int:
     ap.add_argument("--out", default="zwift_routes",
                     help="Output directory for the cached route profiles.")
     ap.add_argument("--max-points", type=int, default=600,
-                    help="Max sample points per profile segment.")
+                    help="Initial samples per profile; boundaries and <=1 m error may add points.")
     ap.add_argument("--world", default=None,
                     help="Extract only one world folder, e.g. world11.")
     ap.add_argument("--video-cache", default=None,

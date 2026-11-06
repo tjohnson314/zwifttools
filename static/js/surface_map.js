@@ -526,7 +526,7 @@ function buildCombinedPath(d) {
         }
     };
     push(d.leadin, 0);
-    push(d.route, d.leadin_distance_m || 0);
+    push(d.route, d.leadin?.d?.length ? d.leadin_distance_m || 0 : 0);
     state.combined = combined;
 }
 
@@ -583,7 +583,7 @@ function renderElevation(d) {
     };
 
     combinedIdx = addLeg(d.leadin, 0, 'dot');
-    combinedIdx = addLeg(d.route, d.leadin_distance_m || 0, 'solid');
+    combinedIdx = addLeg(d.route, d.leadin?.d?.length ? d.leadin_distance_m || 0 : 0, 'solid');
 
     (d.escalators || []).forEach((escalator, index) => {
         const start = escalator.start_distance_m / 1000;
@@ -609,7 +609,8 @@ function renderElevation(d) {
     });
 
     // Lead-in boundary; the pinned-point line is added on click via relayout.
-    state.elevationLeadinKm = d.leadin_distance_m > 0 ? d.leadin_distance_m / 1000 : null;
+    state.elevationLeadinKm = d.leadin?.d?.length && d.leadin_distance_m > 0
+        ? d.leadin_distance_m / 1000 : null;
 
     const layout = {
         margin: { l: 48, r: 12, t: 10, b: 40 },

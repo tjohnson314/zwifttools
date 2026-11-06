@@ -1,9 +1,93 @@
 import json
+import math
+from bisect import bisect_right
 
 import pytest
 
 from tools import extract_zwift_routes
 from tools.extract_zwift_routes import build_leadin_view, parse_paddock_roads, parse_route
+
+
+def test_route_sampling_retains_bends_beyond_the_initial_point_budget():
+    profile = extract_zwift_routes.build_profile(
+        [(0, 0, 0), (10000, 5000, 10000), (20000, 0, 0)], 2,
+    )
+
+    assert profile["x"] == [0, 100, 200]
+    assert profile["z"] == [0, 100, 0]
+    assert profile["alt"] == [0, 50, 0]
+    assert profile["d"][-1] == pytest.approx(282.84)
+
+
+def test_route_sampling_preserves_exact_fractional_boundary_distances():
+    profile = extract_zwift_routes.build_profile(
+        [(0, 0, 0), (10000, 0, 0), (20000, 0, 0)], 2,
+        preserve_distances=[75.25],
+    )
+
+    assert profile["d"] == [0, 75.25, 200]
+    assert profile["x"] == [0, 75.25, 200]
+
+
+def test_route_sampling_retains_segment_boundaries_in_profiles_and_map_paths():
+        from shared.surface_map import _route_path_slice
+
+        source = b'''<route name="Bends" distanceInMeters="400" />
+            <highrescheckpoint>
+                <entry x="0" y="0" z="0" />
+                <entry x="10000" y="0" z="0" />
+                <entry x="10000" y="0" z="10000" />
+                <entry x="20000" y="0" z="10000" />
+                <entry x="30000" y="0" z="10000" />
+            </highrescheckpoint>
+            <segment_data><entry hash="7" percentStart="0.375" percentEnd="0.875" /></segment_data>'''
+        route = parse_route(source, 13, 2)
+
+        assert 150 in route["route"]["d"]
+        assert 350 in route["route"]["d"]
+        assert 1.5 in route["segment_path"]["d"]
+        assert 3.5 in route["segment_path"]["d"]
+        segment = route["segments"][0]
+        assert segment["start_distance_m"] == 150
+        assert segment["end_distance_m"] == 350
+        segment_path = _route_path_slice(route, None, None, 0.375, 0.875)
+        assert segment_path[0] == [100, 50]
+        assert segment_path[-1] == [250, 100]
+
+
+def test_route_sampling_bounds_position_and_altitude_error_without_clamping():
+        points = [(index * 1000, math.sin(index / 5) * 3000, math.cos(index / 10) * 4000)
+                            for index in range(100)]
+        profile = extract_zwift_routes.build_profile(points, 4)
+        distances = [distance / 100 for distance in extract_zwift_routes._cumulative_planar(points)]
+
+        assert min(profile["alt"]) < 0
+        assert profile["d"][-1] == round(distances[-1], 2)
+        for distance, source in zip(distances, points):
+                index = max(0, min(bisect_right(profile["d"], distance) - 1, len(profile["d"]) - 2))
+                weight = (distance - profile["d"][index]) / (profile["d"][index + 1] - profile["d"][index])
+                sampled = [profile[key][index] + weight * (profile[key][index + 1] - profile[key][index])
+                                     for key in ("x", "alt", "z")]
+                assert math.dist(sampled, [value / 100 for value in source]) <= 1.02
+
+
+def test_route_sampling_preserves_boundaries_in_trimmed_paddock_profiles():
+        source = b'''<route name="Pen" leadinDistanceInMeters="105" />
+            <leadinhighrescheckpoint>
+                <entry x="0" y="0" z="0" road="11" />
+                <entry x="10000" y="0" z="0" road="9" />
+                <entry x="20000" y="0" z="0" road="9" />
+            </leadinhighrescheckpoint>
+            <highrescheckpoint>
+                <entry x="20500" y="0" z="0" road="9" />
+                <entry x="30500" y="0" z="0" road="9" />
+            </highrescheckpoint>
+            <segment_data><entry hash="7" percentStart="0.375" percentEnd="0.75" /></segment_data>'''
+        route = parse_route(source, 13, 2, paddock_road_ids={11})
+
+        assert route["leadin_view"]["paddock_distance_m"] == 100
+        assert 50 in route["leadin_view"]["profile"]["d"]
+        assert route["segments"][0]["start_distance_m"] == 150
 
 
 @pytest.mark.parametrize("published, expected", [
