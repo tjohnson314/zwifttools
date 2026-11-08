@@ -88,6 +88,21 @@ python tools\extract_zwift_routes.py --world world4
 - SSE progress streaming while fetching activities
 - Shareable URLs via `?activity_ids=` parameter
 
+### Segment PRs
+
+- Open `/segment-prs` while logged in to progressively analyze all activities from the past 90 days
+- Detect complete, forward traversals against the calibrated segment paths and timing boundaries used by Surface Map; repeated passes in a ride are separate attempts
+- A nearby road can cross a segment's finish-line plane before the true finish (for example Dos d'Âne Sprint Reverse on Croissant); later crossings are checked until one satisfies the recorded-distance and ordered-path checks, without relaxing those checks
+- Search segment names and paginate the fastest attempt per segment, or select a segment to see its fastest attempt from each ride, ranked by duration by default; all traversals remain recorded in the activity cache
+- Forward and reverse segments retain their distinct IDs; when both directions share a catalog name, their dashboard labels explicitly distinguish Forward and Reverse
+- Click any data-column heading to sort all results before pagination, then click again to reverse the order; missing metrics stay last in either direction
+- Record interpolated entry/finish time, recorded distance, net elevation change, time-weighted average power, normalized power, estimated draft watts, and entry speed
+- Draft uses the current user's height and weight with a level 5 Tarmac SL9 / Princeton Wake 6560 setup; missing measurements leave draft unavailable, and estimates are never clipped
+- Browser caching is scoped to the current user and activity; changes to rider measurements, activity summary, or segment geometry invalidate cached results
+- Analyze any attempt via Bike Comparison or Race Replay (for races); the Analyze column uses the same bike, flag, and Zwift-logo icon links as My Activities, with tooltips and accessible labels
+- Missing GPS, unavailable telemetry, and failed requests are explicitly reported and can be retried; incomplete segments and wrong-direction passes are excluded
+- Video-route activity world IDs are resolved to the separate Video Routes catalog. These routes currently have no cataloged timed segments, so their activities report segment data as unavailable rather than failing or inventing segment PRs; video catalog updates invalidate cached results
+
 ### Workout Analysis
 
 - Open `/workout-analysis`, or use an activity's Workout Analysis link in My Activities

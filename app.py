@@ -55,6 +55,7 @@ from shared.data_fetcher import (
 )
 from shared.route_lookup import get_route_info
 from shared import blob_storage
+from shared.segment_prs import catalog_version, segment_map_id, world_segments, find_traversals
 from shared.workouts import load_workouts, workout_index, power_telemetry, parse_workout, MAX_WORKOUT_BYTES
 from shared.zwift_auth import exchange_code_for_tokens, refresh_access_token, ZwiftTokens, get_token_with_password
 
@@ -722,6 +723,76 @@ def power_dashboard():
     return render_template('power_dashboard.html')
 
 
+@app.route('/segment-prs')
+def segment_prs():
+    if 'tokens' not in session:
+        return redirect(url_for('auth_login', next=url_for('segment_prs')))
+    return render_template('segment_prs.html')
+
+
+@app.route('/api/segment_prs/activity/<activity_id>')
+def api_segment_prs_activity(activity_id):
+    headers = get_headers()
+    if not headers:
+        return jsonify({'error': 'Not authenticated'}), 401
+    if not activity_id.isascii() or not activity_id.isdigit():
+        return jsonify({'error': 'Activity ID must be numeric'}), 400
+    try:
+        response = _request_with_retry('GET', f'{BASE_URL}/profiles/me', headers=headers, timeout=15)
+        if response.status_code != 200:
+            return jsonify({'error': 'Failed to fetch current rider profile'}), response.status_code
+        profile = response.json()
+        telemetry, activity, error = fetch_rider_telemetry(activity_id, headers)
+        if error:
+            return jsonify({'error': error}), 502
+        owner_id = (activity or {}).get('profileId') or ((activity or {}).get('profile') or {}).get('id')
+        if str(owner_id) != str(profile.get('id')):
+            return jsonify({'error': 'Activity does not belong to the current user'}), 403
+        if not telemetry:
+            return jsonify({'error': 'No activity telemetry available'}), 422
+        version = catalog_version()
+        map_id = segment_map_id(activity or {})
+        segments = world_segments(map_id, version)
+        from shared.surface_map import VIDEO_ROUTES_MAP_ID
+        unavailable = map_id == VIDEO_ROUTES_MAP_ID and not segments
+        weight_kg, height_cm = _ttt_profile_measurements(profile)
+        warning = None
+        if unavailable:
+            rows = []
+            warning = 'No timed segments are currently available in the catalog for video routes.'
+            logger.info("Segment data unavailable for video activity %s: no timed segments in catalog", activity_id)
+        else:
+            setup = _get_efficiency_setup()
+            if setup is None:
+                return jsonify({'error': 'Reference all-rounder bike configuration unavailable'}), 503
+            prepared = dict(telemetry)
+            sample_count = len(prepared.get('timeInSec') or [])
+            for field in ('powerInWatts', 'heartRate', 'cadencePerMin', 'speedInCmPerSec', 'altitudeInCm'):
+                if not prepared.get(field):
+                    prepared[field] = [np.nan] * sample_count
+            rows = find_traversals(
+                convert_telemetry_to_dataframe(prepared), segments,
+                weight_kg, height_cm, setup,
+            )
+            if weight_kg is None or height_cm is None:
+                warning = 'Draft unavailable: current height or weight is missing.'
+        event = (activity or {}).get('eventInfo') or {}
+        return jsonify({
+            'activity_id': activity_id, 'profile_id': str(profile['id']),
+            'weight_kg': weight_kg, 'height_cm': height_cm, 'catalog_version': version,
+            'is_race': bool(event.get('eventSubGroupId') or event.get('eventSubgroupId')),
+            'traversals': rows,
+            'segment_status': 'unavailable' if unavailable else 'analyzed',
+            'warning': warning,
+        })
+    except (ValueError, KeyError) as error:
+        logger.warning("Cannot match segments for activity %s: %s", activity_id, error)
+        return jsonify({'error': str(error)}), 422
+    except (OSError, requests.RequestException):
+        logger.exception("Could not load segment data for activity %s", activity_id)
+        return jsonify({'error': 'Could not load segment data. Please try again.'}), 502
+
+
 @app.route('/api/my_activities')
 def api_my_activities():
     """Fetch the logged-in user's recent activities from the Zwift API."""
@@ -1089,6 +1160,7 @@ def _profile_weight_kg(profile):
 
 
 @app.route('/api/power_dashboard/activities')
+@app.route('/api/segment_prs/activities')
 def api_power_dashboard_activities():
     """List recent activities (last 90 days) for the progressive power dashboard.
 
@@ -1124,7 +1196,15 @@ def api_power_dashboard_activities():
         recent = sorted(recent, key=lambda a: a['start_dt'], reverse=True)
 
         intervals = _build_power_intervals_seconds()
+        segment_context = {}
+        if request.path == '/api/segment_prs/activities':
+            weight_kg, height_cm = _ttt_profile_measurements(profile)
+            segment_context = {
+                'profile_id': str(profile_id), 'weight_kg': weight_kg,
+                'height_cm': height_cm, 'catalog_version': catalog_version(),
+            }
         return jsonify({
+            **segment_context,
             'durations_sec': intervals,
             'durations_label': [_format_interval_label(s) for s in intervals],
             'lookback_days': lookback_days,

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
+    <title>Segment PRs - Zwift Tools</title>
+    <link rel="stylesheet" href="/static/css/power_dashboard.css">
+    <link rel="stylesheet" href="/static/css/segment_prs.css">
+</head>
+<body>
+    <div class="page-shell">
+        <header class="page-header">
+            <div>
+                <a href="/" class="back-link">&#8592; Back to Tools</a>
+                <h1>Segment PRs</h1>
+                <p class="subtitle">Your fastest complete segment traversals in the past 90 days. Only the best attempt per segment per ride is shown.</p>
+            </div>
+        </header>
+        <div id="loadStatus" class="state-card" role="status" aria-live="polite">Fetching your recent activities...</div>
+        <div id="errorState" class="state-card error" role="alert" hidden></div>
+        <div id="cacheWarning" class="state-card error" role="status" hidden></div>
+        <main id="dashboard" class="panel" hidden>
+            <div class="segment-controls">
+                <label>Search segments <input id="segmentSearch" type="search" placeholder="Segment name"></label>
+                <label>View <select id="segmentSelect"><option value="">Best time for each segment</option></select></label>
+                <button id="refreshBtn" class="range-btn" type="button">Refresh activities</button>
+                <button id="clearCacheBtn" class="range-btn" type="button">Clear cache and reload</button>
+                <button id="retryBtn" class="range-btn" type="button" hidden>Retry failed activities</button>
+            </div>
+            <h2 id="tableTitle">Best times by segment</h2>
+            <p class="subtitle">Draft is estimated in watts using your current height and weight and a level 5 Tarmac SL9 with Princeton Wake 6560 wheels. Elevation change is finish minus start.</p>
+            <div class="activity-table-wrap">
+                <table class="activity-table">
+                    <thead><tr>
+                        <th data-segment-sort="segment_name" aria-sort="ascending"><button type="button" class="sort-button">Segment <span class="sort-indicator" aria-hidden="true">&#8593;</span></button></th>
+                        <th data-segment-sort="start_date" aria-sort="none"><button type="button" class="sort-button">Date / Ride <span class="sort-indicator" aria-hidden="true">&#8597;</span></button></th>
+                        <th class="num" data-segment-sort="total_time_sec" aria-sort="none"><button type="button" class="sort-button">Duration <span class="sort-indicator" aria-hidden="true">&#8597;</span></button></th>
+                        <th class="num" data-segment-sort="distance_m" aria-sort="none"><button type="button" class="sort-button">Distance <span class="sort-indicator" aria-hidden="true">&#8597;</span></button></th>
+                        <th class="num" data-segment-sort="elevation_change_m" aria-sort="none"><button type="button" class="sort-button">Elevation change <span class="sort-indicator" aria-hidden="true">&#8597;</span></button></th>
+                        <th class="num" data-segment-sort="avg_power" aria-sort="none"><button type="button" class="sort-button">Avg power <span class="sort-indicator" aria-hidden="true">&#8597;</span></button></th>
+                        <th class="num" data-segment-sort="normalized_power" aria-sort="none"><button type="button" class="sort-button">NP <span class="sort-indicator" aria-hidden="true">&#8597;</span></button></th>
+                        <th class="num" data-segment-sort="avg_draft_watts" aria-sort="none"><button type="button" class="sort-button">Avg draft <span class="sort-indicator" aria-hidden="true">&#8597;</span></button></th>
+                        <th class="num" data-segment-sort="initial_speed_kmh" aria-sort="none"><button type="button" class="sort-button">Entry speed <span class="sort-indicator" aria-hidden="true">&#8597;</span></button></th>
+                        <th>Analyze</th>
+                    </tr></thead>
+                    <tbody id="segmentRows"></tbody>
+                </table>
+            </div>
+            <nav class="segment-pagination" aria-label="Segment table pagination">
+                <button id="previousBtn" class="range-btn" type="button">Previous</button>
+                <span id="pageStatus"></span>
+                <button id="nextBtn" class="range-btn" type="button">Next</button>
+            </nav>
+            <details id="failureDetails" hidden><summary>Activities that could not be analyzed</summary><ul id="failureList"></ul></details>
+        </main>
+    </div>
+    <script src="/static/js/segment_prs.js"></script>
+</body>
+</html>
