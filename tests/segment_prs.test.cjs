@@ -97,12 +97,23 @@ test('rendering paginates segments and drills into repeated attempts with ride a
     assert.equal(body.children.length, 1);
     assert.equal(body.children[0].children[0].colSpan, 10);
     state.selectSegment('00');
-    assert.equal(body.children.length, 1);
+    assert.equal(body.children.length, 2);
     assert.equal(body.children[0].children[2].textContent, '0:40.00');
+    assert.equal(body.children[1].children[2].textContent, '0:50.00');
+    assert.equal(elements.get('tableTitle').textContent, 'All attempts: Segment 00');
     assert.equal(state.allSegmentRows().length, 26);
     vm.runInContext('segmentActivities[0].data.is_race = false;', state);
     state.renderSegmentTable();
     assert.equal(body.children[0].children[9].children.length, 2);
+    state.allAttempts = payload(Array.from({length:26}, (_, index) => row('00', 50 + index, index * 100)));
+    vm.runInContext('segmentActivities[0].data = allAttempts;', state);
+    state.renderSegmentTable();
+    assert.equal(body.children.length, 20);
+    assert.equal(elements.get('pageStatus').textContent, '26 results \u00b7 Page 1 of 2');
+    vm.runInContext('segmentPage = 1;', state);
+    state.renderSegmentTable();
+    assert.equal(body.children.length, 6);
+    assert.equal(body.children[0].children[2].textContent, '1:10.00');
 });
 
 test('table includes duration but no entry-time column', () => {
@@ -213,16 +224,16 @@ test('best table chooses fastest traversal, including repeat attempts in one act
     assert.equal(rows[0].avg_draft_watts, -900);
 });
 
-test('single-segment drilldown retains only each ride best attempt and search is case-insensitive', () => {
+test('single-segment drilldown retains every attempt from every ride and search is case-insensitive', () => {
     const { state } = context();
     state.data = payload([row('B', 25), row('A', 20), row('A', 15, 50)]);
     vm.runInContext('segmentActivities[0].data = data; selectedSegment = "A";', state);
     state.secondData = {...payload([row('A', 18), row('A', 12, 50)]), activity_id:'12'};
     vm.runInContext('segmentActivities.push({activity_id:"12",start_date:"2026-11-02",data:secondData});', state);
-    assert.deepEqual(Array.from(state.segmentTableRows(), item => item.total_time_sec), [12, 15]);
+    assert.deepEqual(Array.from(state.segmentTableRows(), item => item.total_time_sec), [12, 15, 18, 20]);
     assert.equal(state.allSegmentRows().length, 5);
     vm.runInContext('segmentQuery = "sEgMeNt a";', state);
-    assert.equal(state.segmentTableRows().length, 2);
+    assert.equal(state.segmentTableRows().length, 4);
     vm.runInContext('segmentQuery = "unknown";', state);
     assert.equal(state.segmentTableRows().length, 0);
 });
@@ -238,13 +249,14 @@ test('distinct directional IDs are not merged even with identical display names'
     assert.equal(state.segmentTableRows().length, 2);
     vm.runInContext('selectedSegment = "13:18228230436";', state);
     const rows = state.segmentTableRows();
-    assert.equal(rows.length, 1);
+    assert.equal(rows.length, 2);
     assert.equal(rows[0].total_time_sec, 44.76);
+    assert.equal(rows[1].total_time_sec, 55);
     assert.equal(rows[0].distance_m, 399.5);
     assert.equal(state.allSegmentRows().length, 3);
 });
 
-test('per-ride best selection precedes metric sorting and resolves tied times consistently', () => {
+test('drilldown metric sorting retains all attempts and resolves tied durations consistently', () => {
     const { state } = context();
     state.data = payload([
         {...row('A', 40, 100), avg_power:300},
@@ -253,10 +265,9 @@ test('per-ride best selection precedes metric sorting and resolves tied times co
     ]);
     vm.runInContext('segmentActivities[0].data = data; selectedSegment = "A"; segmentSortKey = "avg_power"; segmentSortDirection = -1;', state);
     const rows = state.segmentTableRows();
-    assert.equal(rows.length, 1);
-    assert.equal(rows[0].total_time_sec, 40);
-    assert.equal(rows[0].avg_power, 200);
-    assert.equal(rows[0].start_time_sec, 50);
+    assert.deepEqual(Array.from(rows, item => item.avg_power), [9000, 300, 200]);
+    vm.runInContext('segmentSortKey = "total_time_sec"; segmentSortDirection = 1;', state);
+    assert.deepEqual(Array.from(state.segmentTableRows(), item => item.start_time_sec), [50, 100, 0]);
 });
 
 test('per-activity cache is scoped to user, profile measurements, geometry and ride summary', () => {

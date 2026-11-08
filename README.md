@@ -93,7 +93,7 @@ python tools\extract_zwift_routes.py --world world4
 - Open `/segment-prs` while logged in to progressively analyze all activities from the past 90 days
 - Detect complete, forward traversals against the calibrated segment paths and timing boundaries used by Surface Map; repeated passes in a ride are separate attempts
 - A nearby road can cross a segment's finish-line plane before the true finish (for example Dos d'Âne Sprint Reverse on Croissant); later crossings are checked until one satisfies the recorded-distance and ordered-path checks, without relaxing those checks
-- Search segment names and paginate the fastest attempt per segment, or select a segment to see its fastest attempt from each ride, ranked by duration by default; all traversals remain recorded in the activity cache
+- Search segment names and paginate the fastest attempt per segment, or select a segment to see all attempts, including repeated passes within a ride, ranked by duration by default; all traversals remain recorded in the activity cache
 - Forward and reverse segments retain their distinct IDs; when both directions share a catalog name, their dashboard labels explicitly distinguish Forward and Reverse
 - Click any data-column heading to sort all results before pagination, then click again to reverse the order; missing metrics stay last in either direction
 - Record interpolated entry/finish time, recorded distance, net elevation change, time-weighted average power, normalized power, estimated draft watts, and entry speed

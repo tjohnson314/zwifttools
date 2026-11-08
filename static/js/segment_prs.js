@@ -94,16 +94,7 @@ function allSegmentRows() {
 }
 
 function segmentTableRows() {
-    const bestPerRide = new Map();
-    for (const row of allSegmentRows()) {
-        const key = JSON.stringify([String(row.activity.activity_id), row.segment_id]);
-        const previous = bestPerRide.get(key);
-        if (!previous || row.total_time_sec < previous.total_time_sec ||
-                (row.total_time_sec === previous.total_time_sec && row.start_time_sec < previous.start_time_sec)) {
-            bestPerRide.set(key, row);
-        }
-    }
-    let rows = [...bestPerRide.values()];
+    let rows = allSegmentRows();
     if (selectedSegment) {
         rows = rows.filter(row => row.segment_id === selectedSegment);
     } else {
@@ -195,7 +186,7 @@ function renderSegmentTable() {
     if (selectedSegment && !names.has(selectedSegment)) select.add(new Option('Selected segment (no loaded attempts)', selectedSegment));
     select.value = selectedSegment;
     document.getElementById('tableTitle').textContent = selectedSegment
-        ? `Best attempt per ride: ${names.get(selectedSegment) || 'selected segment'}` : 'Best times by segment';
+        ? `All attempts: ${names.get(selectedSegment) || 'selected segment'}` : 'Best times by segment';
     const rows = segmentTableRows();
     const pageCount = Math.max(1, Math.ceil(rows.length / SEGMENT_PAGE_SIZE));
     segmentPage = Math.min(segmentPage, pageCount - 1);
