@@ -569,37 +569,89 @@ function displayResults(data, isBuild = false) {
     document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
+/**
+ * Build the Race Pacer CSV for a pacing plan, or return null when the plan has
+ * no usable profile.  Rows carry the planned time, distance, GPS, target power
+ * and speed.  Bucketed plans get an extra row exactly at each divider so the
+ * overlay (which holds power until the next row) switches target on the boundary.
+ */
+function buildSaucePlanCsv(plan, { courseId = '', routeId = '', name = '', date = '',
+                                   weightKg = null, gpsAt = () => null } = {}) {
+    const profile = plan.profile || {};
+    const distances = profile.distance_km || [];
+    const speeds = profile.speed_kph || [];
+    const powers = profile.power_w || [];
+    if (distances.length < 2 || speeds.length !== distances.length) return null;
+
+    // Timed points: a start row at 0 m, then one per profile point.
+    const points = [{ d: 0, t: 0, s: Number(speeds[0]), p: powers[0] }];
+    let elapsed = 0;
+    let previousDistance = 0;
+    for (let i = 0; i < distances.length; i++) {
+        const d = Math.max(0, distances[i] * 1000);
+        const speedMps = Math.max(0.1, Number(speeds[i]) / 3.6);
+        elapsed += Math.max(0, d - previousDistance) / speedMps;
+        points.push({ d, t: elapsed, s: Number(speeds[i]), p: powers[i] });
+        previousDistance = d;
+    }
+
+    // Divider rows, with time and speed interpolated between their neighbours.
+    const dividersM = (plan.bucketed ? plan.dividers_km || [] : [])
+        .map(km => km * 1000)
+        .filter(d => d > 0 && d < points[points.length - 1].d)
+        .sort((a, b) => a - b);
+    for (const d of dividersM) {
+        const j = points.findIndex(pt => pt.d >= d);
+        if (points[j].d === d) continue;
+        const a = points[j - 1], b = points[j];
+        const f = (d - a.d) / (b.d - a.d);
+        points.splice(j, 0, { d, t: a.t + f * (b.t - a.t), s: a.s + f * (b.s - a.s), p: b.p });
+    }
+
+    // Bucketed plans: take power from the bucket each row starts in, so a row at
+    // a divider already carries the next bucket's target.  The 1-based bucket
+    // number is exported too, so the overlay can average the rider's power per bucket.
+    const sections = plan.sections || [];
+    if (plan.bucketed && sections.length === dividersM.length + 1) {
+        for (const pt of points) {
+            const bucket = dividersM.filter(d => d <= pt.d).length;
+            pt.p = sections[bucket].power_w;
+            pt.b = bucket + 1;
+        }
+    }
+
+    const fmt = (v, digits) => (v != null && Number.isFinite(Number(v)) ? Number(v).toFixed(digits) : '');
+    const weight = weightKg != null && Number.isFinite(weightKg) && weightKg > 0 ? weightKg.toFixed(1) : '';
+    const rows = [
+        'course_id,route_id,name,date,weight_kg',
+        `${courseId},${routeId},${String(name).replace(/,/g, ' ')},${date},${weight}`,
+        'time_sec,distance_m,lat,lng,power_watts,speed_kmh,bucket',
+    ];
+    for (const pt of points) {
+        const gps = pt.d > 0 ? gpsAt(pt.d) : null;
+        rows.push([fmt(pt.t, 3), fmt(pt.d, 3), gps ? fmt(gps[0], 6) : '', gps ? fmt(gps[1], 6) : '',
+                   fmt(pt.p, 0), fmt(pt.s, 2), pt.b ?? ''].join(','));
+    }
+    return rows.join('\n');
+}
+
 async function exportSaucePlan() {
     if (!lastPlanData || !selectedRoute) return;
     if (!routeGeometry) await loadRouteMap();
-    const profile = lastPlanData.profile;
-    const distances = profile.distance_km || [];
-    const speeds = profile.speed_kph || [];
-    if (distances.length < 2 || speeds.length !== distances.length) {
+    const csv = buildSaucePlanCsv(lastPlanData, {
+        courseId: selectedRoute.course_id || '',
+        routeId: selectedRoute.id || '',
+        name: lastPlanData.route_name || selectedRoute.name || '',
+        date: new Date().toISOString().substring(0, 10),
+        weightKg: getWeightKg(),
+        gpsAt: interpolateRouteGps,
+    });
+    if (!csv) {
         showError('The pacing plan has no exportable route profile.');
         return;
     }
 
-    const planName = (lastPlanData.route_name || selectedRoute.name || '').replace(/,/g, ' ');
-    const rows = ['course_id,route_id,name,date',
-        `${selectedRoute.course_id || ''},${selectedRoute.id || ''},${planName},${new Date().toISOString().substring(0, 10)}`,
-        'time_sec,distance_m,lat,lng'];
-    let elapsed = 0;
-    let previousDistance = 0;
-    rows.push('0.000,0.000,,');
-    for (let i = 0; i < distances.length; i++) {
-        const distanceM = Math.max(0, distances[i] * 1000);
-        const deltaM = Math.max(0, distanceM - previousDistance);
-        const speedMps = Math.max(0.1, Number(speeds[i]) / 3.6);
-        elapsed += deltaM / speedMps;
-        const gps = interpolateRouteGps(distanceM);
-        const lat = gps ? gps[0].toFixed(6) : '';
-        const lng = gps ? gps[1].toFixed(6) : '';
-        rows.push(`${elapsed.toFixed(3)},${distanceM.toFixed(3)},${lat},${lng}`);
-        previousDistance = distanceM;
-    }
-
-    const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+    const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
