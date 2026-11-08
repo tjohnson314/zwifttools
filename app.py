@@ -526,9 +526,12 @@ def api_surface_map_world(map_id):
 @app.route('/api/surface_map/route/<int:map_id>/<int:name_hash>')
 def api_surface_map_route(map_id, name_hash):
     """Return one route's geometry, elevation, and per-point surface."""
+    mode = request.args.get('mode')
+    if mode not in (None, 'race', 'free_ride'):
+        return jsonify({'error': 'Unknown route mode'}), 400
     try:
         from shared.surface_map import get_route
-        data = get_route(map_id, name_hash)
+        data = get_route(map_id, name_hash, mode=mode)
         if data is None:
             return jsonify({'error': 'Route not found'}), 404
         return jsonify(data)
@@ -583,6 +586,20 @@ def api_surface_map_dev_roads(map_id):
         return jsonify({'error': f'No data for world {map_id}'}), 404
     except Exception as e:
         logger.exception("Error loading surface-map-dev roads for world %s", map_id)
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/surface_map_dev/world/<int:map_id>/timing-arches')
+def api_surface_map_dev_timing_arches(map_id):
+    if not _surface_map_dev_available():
+        return jsonify({'error': 'Not available'}), 404
+    try:
+        from shared import surface_map_dev
+        return jsonify(surface_map_dev.get_world_timing_arches(map_id))
+    except FileNotFoundError:
+        return jsonify({'error': f'No data for world {map_id}'}), 404
+    except Exception as e:
+        logger.exception("Error loading surface-map-dev timing arches for world %s", map_id)
         return jsonify({'error': str(e)}), 500
 
 

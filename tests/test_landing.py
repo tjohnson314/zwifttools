@@ -64,3 +64,18 @@ def test_archived_zrl_page_keeps_existing_url_and_controls(monkeypatch):
     assert 'id="subgroup-input" value="7354731"' in html
     assert 'id="load-btn"' in html
     assert 'id="refetch-btn"' in html
+
+
+@pytest.mark.parametrize("available", [False, True])
+def test_dev_timing_arch_endpoint_keeps_local_gate_and_exact_hash_strings(monkeypatch, available):
+    from shared import surface_map_dev
+
+    payload = {"mapID": 9, "arches": [{"hash": "-9223372036854775807"}]}
+    monkeypatch.setattr(app_module, "_surface_map_dev_available", lambda: available)
+    monkeypatch.setattr(surface_map_dev, "get_world_timing_arches", lambda _: payload)
+
+    response = app_module.app.test_client().get("/api/surface_map_dev/world/9/timing-arches")
+
+    assert response.status_code == (200 if available else 404)
+    if available:
+        assert response.get_json() == payload

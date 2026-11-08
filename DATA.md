@@ -78,6 +78,105 @@ Renders `landing.html`. Passes `logged_in = 'tokens' in session` to the template
 
 ## Surface Map
 
+### Road Splines
+
+The main map's surface road layer and the local-only road inspector sample
+cubic Bezier road geometry. When a `ROADNODE` omits its tangent handles, both
+derive uniform Catmull-Rom
+handles from neighboring nodes instead of drawing straight chords. Looped
+roads use wrapped neighbors; open roads keep their endpoint positions.
+Explicit handles (including zero) and `m_bStraight` segments are preserved.
+The dev overview, selected road, node segments, and spawn road anchors share
+this geometry. The main map's generated surface exports use the same handles,
+resampled at the existing 8 m spacing. Raw XML, route exports, and GPS calibration
+are unchanged. Regenerate the surface exports with
+`python -m tools.extract_zwift_surfaces`.
+
+### Road-to-Route Selection
+
+The main map snaps the click to a native road and matches routes at that position,
+not elsewhere on the same road. Per-road checkpoint paths use a small fixed
+geometry tolerance that does not grow when zooming out. A point with no known
+traversing routes leaves the view unchanged; one match loads that route; multiple
+matches open a searchable route
+picker. The picker includes all matching routes independently of sidebar filters,
+supports keyboard dismissal, and keeps loading/error feedback beside the choice.
+Dragging still pans rather than selecting.
+
+Surface segments retain `road_id`. Route versions retain `road_ids` for the course
+and that version's native approach, plus per-road `road_paths` derived from native
+checkpoint geometry. World API summaries project these paths by `race` / `free_ride`
+mode and expose `road_match_tolerance`. Free-ride paths preserve the interpolated
+spawn-range midpoint. Inferred paddock fallback roads are not treated as observed
+traversals. Legacy video routes use their existing road membership and route paths.
+
+### Dev Timing-Arch Inspector
+
+The local-only `/surface-map-dev` page has a **Timing Arches** tab and a
+toggleable start/finish overlay. Search by name, exact hash, or road ID;
+select a list entry or marker to inspect its directional definition, raw
+road-time values, declared length, coordinates, and serialized source entity
+XML. A direct link can specify `?world=9&arch=44010445334`.
+
+Definitions come from `ENTITY_TYPE_TIMINGARCH` entries in installed world
+`entities.xml`. Positions interpolate the narrowest bracketing native route
+checkpoint interval on the same road, with the source route exposed for each
+boundary. They are not independent in-game observations. Missing coverage
+remains explicitly unlocated rather than clamped or guessed; hashes remain
+strings to preserve 64-bit precision, and declared lengths are not corrected.
+Shared F/R finishes are drawn once without a direction suffix; start markers
+remain directional. The inspector itself remains read-only.
+
+### Dev Spawn Markers
+
+The local-only map also has a **Spawn Markers** tab, searchable by source name,
+label, or road ID, and a toggleable blue marker/name overlay. Selecting a
+marker shows its raw road time, position source, and entity XML, with a link
+to inspect its associated road. A direct link can specify
+`?world=1&spawn=AdZ_Paddock`.
+
+Spawn entities come from `ENTITY_TYPE_SPAWNMARKER` in installed `entities.xml`.
+Where native checkpoints bracket their road time, the same interpolation as
+the timing inspector supplies their position. Otherwise a hollow marker and
+name label use the road geometry midpoint, explicitly identified as a **road
+anchor**, not an exact spawn position. Missing roads stay unlocated. Raw names
+and road times are preserved; no paddock IDs or race start lines are inferred.
+`AdZ_Paddock` belongs to road 130 near the Alpe summit, not Road to Sky's start.
+
+### Route Start Versions
+
+The route browser offers **Free Ride** and **Race**, preserved in shared links
+with `mode=free_ride` or `mode=race`. The route API accepts the same parameter;
+omitting it preserves the previous display behavior for other consumers.
+
+Race mode restores the raw native lead-in, including recorded paddock sections
+that the legacy display can omit. Free Ride uses the midpoint of the source
+`spawn_area` road-time range, followed along native checkpoints to the main
+route start. A same-world reference path supplies missing approach coverage
+only if it reaches the same road/time start within 2 m. These representative
+spawn positions are not observations of an individual rider's actual spawn.
+Declared mode distances stay separate from measured geometry; no rescaling
+or plausible-range clipping is applied. Course segment distances are rebased
+to the selected measured start offset; race-only approach segments are omitted
+from free-ride views. Missing start geometry is explicitly indicated, and
+routes without a free-ride definition disable that option.
+
+All 389 numeric-world definitions retain their existing course and raw lead-in
+data. There are 307 available free-ride definitions, with native approach
+coverage for 300; seven have unlocated approach geometry. Race metadata also
+records the longest sampled road in the associated paddock group as an
+inferred fallback, breaking exact length ties by lower road ID. It does not
+replace a native reference approach or invent unverified paddock connections.
+
+Refresh only start metadata and profiles without regenerating existing routes:
+
+```powershell
+python -m tools.extract_zwift_routes --refresh-route-versions
+```
+
+An optional `--source-cache-dir` accepts trusted local per-world WAD pickle
+snapshots. Normal extraction also produces the mode metadata and profiles.
+
 ### Route Sampling
 
 Regenerated virtual-route profiles use `--max-points` (default 600) as an
@@ -93,6 +192,292 @@ positions, which are nonuniform after refinement; consumers must interpolate
 through these values rather than treating array indices as route percentages.
 All 389 cached virtual routes across 13 worlds have been refreshed with this
 sampling. Video routes already retain every original checkpoint and are unchanged.
+
+The route profile's main leg uses the measured `route_offset_m`, including
+the native lead-in/main connector and subtracting any omitted paddock prefix.
+Elevation traces, hover/click positions, and the lead-in marker share this
+axis with timing-derived segment distances. Published `leadin_distance_m`
+remains metadata, not a profile offset; absent lead-in geometry adds no offset.
+
+Segment names retain the source label for direction `F`. Direction `R` appends
+`Reverse` unless the source label already contains that word. Direction comes
+from the timing entity's explicit F/R hash fields, not the hash sign; hashes,
+segment boundaries, and geometry are unchanged by this naming rule.
+These are XML road directions, not guaranteed public forward/reverse names:
+Alley Sprint's XML `F` traversal corresponds to the publicly named reverse
+segment. Its raw timing-to-timing lengths are about 386.5 m (`F`) and 414.6 m
+(`R`), consistent with the user-checked Strava figures of 0.38 km reverse and
+0.41 km forward. The entity's declared 482.8020036 m for both directions is
+retained separately rather than used to stretch the geometry.
+
+### Sprint List Accuracy
+
+[Zwift Insider's sprint list](https://zwiftinsider.com/sprints/) mostly uses
+in-game values and explicitly warns that some are incorrect. Its public
+forward/reverse labels must be matched to route associations, not assumed
+to follow XML `F`/`R`. A length discrepancy is a review finding, not permission
+to rescale geometry or overwrite source declarations.
+
+Alley Sprint's listed 480 m disagrees with the approximately 414.6 m raw
+passage and the user-checked 0.41 km Strava segment. Alley Sprint Reverse's
+listed 380 m is consistent with the approximately 386.5 m raw passage and
+0.38 km Strava display. The source entity declares 482.8020036 m for both.
+
+The complete 71-entry audit is recorded in
+[`race_data/zwift_sprint_accuracy_audit.csv`](race_data/zwift_sprint_accuracy_audit.csv).
+It compares the public list and all 71 linked detail pages with complete
+timing-to-timing passages in the cached native route data. World, source names,
+and route associations determine identity, never distance agreement. All 71
+entries have distinct directional hashes. Bell Lap's Prime is distinguished
+from the Crit City lap entity by its friendly name; Manhattan Reverse and
+Monument Ave Reverse are paired with the same-road entity of their uniquely
+matched opposite public direction, using different hashes.
+
+A review flag requires a median difference greater than both 10 m and 5% of
+the listed length. Eleven entries meet that heuristic; the remaining 60 are
+within it, not certified accurate. The CSV retains the full observed minimum,
+maximum, median, uncorrected declared distance, signed difference, public
+gradient, matching evidence, and correction notes for every entry. Hashes
+must be imported as text in spreadsheet software to retain 64-bit precision.
+
+| Public Sprint | Listed Length (m) | Native Passage Median (m) | Assessment |
+| --- | ---: | ---: | --- |
+| Alley Sprint | 480 | 414.56 | Discrepancy corroborated by user-checked Strava 0.41 km |
+| Castle Park Sprint | 220 | 207.09 | Approximate published estimate; review, not a proven error |
+| Innsbruck Sprint | 300 | 275.12 | Geometry-based review candidate |
+| Innsbruck Sprint Reverse | 200 | 154.06 | Geometry-based review candidate |
+| Lutece Reverse Sprint | 220 | 231.51 | Geometry-based review candidate |
+| Railway Sprint | 640 | 491.20 | Geometry-based review candidate |
+| Shisa Sprint Reverse | 280 | 265.02 | Geometry-based review candidate |
+| Sprinteur Sprint Reverse | 250 | 234.72 | Geometry-based review candidate |
+| Sunset Sprint | 4000 | 257.73 | Strong discrepancy; source entity declares 250 m |
+| Sunset Sprint Reverse | 4000 | 257.57 | Strong discrepancy; source entity declares 250 m |
+| Tower Sprint Reverse | 320 | 287.36 | Geometry-based review candidate |
+
+Both Sunset detail pages also state 4 km, so this is not just a table-parsing
+error. Repeated route measurements are consistent, but they share native
+source geometry: they do not independently validate in-game line placement.
+Except for the user's Alley Strava check, these measurements are not a
+separate rider-odometer or Strava distance audit.
+
+The detail articles explicitly document these **in-game errors already
+corrected in the master list**:
+
+- Alley Sprint Reverse: 480 m in-game versus about 380 m actual.
+- Castle Park Sprint: 320 m in-game versus an estimated 220 m actual.
+- Castle Park Sprint Reverse: 320 m in-game versus an estimated 210 m actual.
+- Sprinteur Sprint Reverse: -1.8% in-game versus a flat 0% actual gradient.
+
+Castle Park's articles expressly say their lengths are approximate because
+Strava's minimum segment length prevents precise measurement. Other listed
+gradients were captured but not independently audited. No source declarations,
+raw lengths, or route geometry were changed by this audit.
+
+### KOM List Accuracy
+
+[Zwift Insider's KOM list](https://zwiftinsider.com/koms/) contains 49 entries.
+Its master table omits the metric length for Sgurr Summit South, showing only
+0.6 miles, and leaves length, elevation gain, and gradient blank for The Hill
+KOM Reverse. These are missing-data findings, not numerical comparisons;
+detail-page values and native measurements must remain separate sources.
+As with sprints, public direction names are not necessarily XML `F`/`R`.
+
+The full 49-entry audit, including published elevation and gradient fields,
+is in
+[`race_data/zwift_kom_accuracy_audit.csv`](race_data/zwift_kom_accuracy_audit.csv).
+World, public/in-game name families, and unique route-name overlap identify
+48 distinct native hashes without using distance to select a match. Mostly
+Ventoux remains unmatched. Of the 48 matched entries, 44 are within the sprint
+audit's review threshold, two have length discrepancies, and two lack a listed
+metric length. Within the threshold does not mean independently verified.
+
+| Public KOM | Listed Length (m) | Native Passage Median (m) | Native Range (m) | Declared Length (m) |
+| --- | ---: | ---: | --- | ---: |
+| Castle KOM | 2500 | 2688.04 | 2688.00-2688.05 | 2494.48 |
+| 23rd St. KOM | 260 | 282.64 | 282.60-282.65 | 275.00 |
+
+Both differences exceed 10 m and 5% of the listed length. Their detail pages
+repeat the master values, with no explicit correction note. These are
+**geometry-based review candidates**, not independently proven public-list
+errors; repeated native measurements share the same underlying source.
+Full-precision measurements and declarations remain in the CSV.
+
+The incomplete or unverified cases are kept separate:
+
+- **Sgurr Summit South:** the detail page supplies 1 km, consistent with the
+   993.20 m native median. The missing master metric value remains blank in
+   the CSV rather than being filled from the detail page or rounded miles.
+- **The Hill KOM Reverse:** both master and detail omit length, elevation,
+   and gradient; the detail still says more information is coming on
+   October 27, 2025. Its raw native passages measure 11.89-11.92 m, median
+   11.90 m, with a declared 9.9898148 m. These surprisingly short values are
+   preserved, not treated as independently verified replacement figures.
+- **Mostly Ventoux:** no matching complete cached native passage was found.
+   The article describes a hidden start at marker #2, distinct from the full
+   Ventoux KOM start, and the same summit finish. The live France timing-arch
+   lookup timed out; the listed 17.1 km remains unverified, not marked wrong
+   or compared to the full Ventoux measurement.
+
+Apart from Sgurr Summit South's missing metric length, the extracted numeric
+values agree between the master and detail pages, including missing fields.
+Published elevation gain and gradients were captured and cross-checked
+between pages, not independently measured. Article remarks about steeper
+uphill portions do not contradict averages over a full segment containing
+flat or downhill sections. No raw geometry or declared lengths were changed.
+Import the CSV's hashes as text to preserve exact 64-bit identifiers.
+
+### Master Route Accuracy
+
+The complete [Zwift Insider master route list](https://zwiftinsider.com/routes/)
+audit visits all 339 linked detail pages, including running and event-only
+routes. Both modern Leaderboard Segments and older Sprint & KQOM Segments
+tables are parsed. Six verified native name/identifier aliases produce 337
+cached route matches; the two older Gravel Mountain routes remain uncached
+and are not conflated with modern Red Rock Loop definitions.
+
+The full comparison is in
+[race_data/zwift_route_accuracy_audit.csv](race_data/zwift_route_accuracy_audit.csv),
+with every significant row tabulated in
+[race_data/zwift_route_accuracy_audit.md](race_data/zwift_route_accuracy_audit.md).
+The reproducible reader is
+[tools/audit_zwiftinsider_routes.py](tools/audit_zwiftinsider_routes.py).
+Run `python tools/audit_zwiftinsider_routes.py` to rebuild from its local
+snapshot, or add `--collect --limit 0` to fetch all remaining detail pages.
+Sources, exact segment identities, structured results and cache checksums
+are stored under `race_data/zwift_route_master_audit_sources/`.
+
+Review thresholds are greater than 100 m for route length and 50 m for
+lead-in length, also requiring a difference outside the published metric
+rounding interval; an explicit zero/no lead-in is exact. Header distances and
+measured planar geometry are separate;
+lead-in geometry includes its final connector and subtracts only an existing
+display paddock prefix. Missing geometry remains blank, never zero. On 53
+pages with no detail lead-in value, the master's explicit zero is retained
+as a separately identified reference rather than invented detail metadata.
+
+The snapshot has 276 rows with at least one review flag, **not 276 proven
+incorrect routes**: 63 have header-distance flags, 86 measured-distance flags,
+118 header lead-in flags, 165 measured lead-in flags, 90 direction-label flags,
+27 missing displayed-segment sets and 37 extra sets. Categories overlap.
+Event pens, free-ride starts and public main-route versus lead-in scope can
+explain some differences. Four public segment identities remain explicitly
+unresolved; missing native passages are not silently inferred or extended.
+Segment matching reuses verified sprint/KOM hashes and source-name/route
+associations, never distance. Existing partial-passage display filtering is
+distinguished from missing extraction, and lead-in-only extras are labeled.
+
+The largest numeric cases include Red Rock Loop variants (published 2.6 km,
+cached headers about 5.183 km and measured profiles about 5.171 km), That's
+Amore Reverse (7.4 km versus 5.829 km header / 5.554 km geometry), and Epic
+Run's lead-in (master zero versus 4.121 km header / 4.234 km geometry). These
+are comparison findings, not independent in-game accuracy certification.
+Jungle Loop's public labels remain inverted relative to the cache's XML-derived
+labels, while traversal and hash identity remain correct. No route geometry,
+metadata, names or app behavior are changed by this audit.
+
+### Segment Percentages
+
+Virtual-world segment boundaries now come from directional timing arches,
+not native route percentages. The extractor finds start and finish road-time
+crossings on original same-road, same-direction checkpoint edges and
+interpolates their exact checkpoint positions and physical distances. Ordinary
+passages require both crossings. Partial traversals, unmatched directions, and
+missing boundary coverage do not produce a complete passage. Road wraps and
+lead-in/main joins are not interpolated as ordinary edges, but exact native
+endpoints remain usable, including a finish at a road wrap. Exactly closed,
+lap-enabled main paths may establish cyclic completion as described below.
+
+Literal-crossing passages record `boundary_source: "timing_arch"`, `start_checkpoint`,
+`end_checkpoint`, direction, road ID, source road times, and the uncorrected
+`declared_distance_m`. Display geometry prefers explicit checkpoint positions;
+sampling preserves these interpolated boundaries. Declared length is not
+used to reject or resize an otherwise complete passage. Derived
+`percent_start` and `percent_end` remain as compatibility fields only.
+Original native entries are preserved separately in `native_segments`.
+The existing named leaderboard-definition filter is retained; the dev
+inspector still exposes unnamed or incomplete timing entities as raw data.
+
+#### Near-Coincident Lap Arches
+
+Near-coincident start/finish fields are treated as a lap only when the source
+marks the entity as a lap arch (`m_telemetryArchType: 4`, a LapArch model, or
+`m_bStopwatchRequiresAllCheckpoints: 1`). Proximity is a circular road-time
+difference of at most 0.0001, not a minimum physical segment length. Nearby
+non-lap fields retain ordinary segment matching.
+
+A lap starts at an observed arch crossing, must subsequently cross its
+directional `m_beginTimerSplineTime`, and finishes on a later return to the
+arch. Without a timer field, a direction-compatible road wrap arms the lap.
+Either near-coincident source boundary can identify the observed arch; raw
+`start_time`, `end_time`, and declared distance are retained alongside
+`effective_start_time`, `effective_end_time`, `is_loop`,
+`begin_timer_time`, and `lap_armed_checkpoint`. A different road or direction
+interrupts the matching sequence; it is not bridged into an inferred lap.
+
+If no literal return crossing exists, an exactly closed, lap-enabled main
+path can establish completion: its first and last checkpoints have identical
+coordinates, road, direction, and road time; every main edge matches the lap's
+road and direction; its first edge crosses the arch and a later edge arms the
+lap. These passages record `boundary_source: "closed_route_lap"` and use the
+full measured native main extent for their profile span. The interpolated
+arch is retained separately as `timing_arch_checkpoint` and
+`timing_arch_distance_m`; the map overlay is rotated around that checkpoint
+so both pins remain on the actual timing arch. No route coordinates are
+changed or extrapolated, and declared distance does not determine lap length.
+This handles cycling Volcano routes whose closed native lap starts just
+before the arch, whereas the running variants start exactly on it.
+
+The installed-source audit across all 13 cached worlds is recorded in
+[`race_data/zwift_loop_accuracy_audit.csv`](race_data/zwift_loop_accuracy_audit.csv).
+All 40 near-coincident named definitions were checked: 36 laps and four
+non-lap reverse markers (Itza KOM, Mayan Mountainside KOM, Rooftop KOM, and
+Railway Sprint). Of the laps, 27 have complete measured passages, totaling
+130 exported occurrences: 122 literal crossings and eight closed native
+laps. Nine lack a complete matching sequence; this
+does not certify that the corresponding leaderboard or course is invalid.
+London Loop and Central Park Loop have original native associations but
+unresolved timing coverage. Missing
+start/finish samples and interrupted road coverage are not repaired with
+percentage estimates, extrapolation, or geometry stretching.
+
+The initial refresh touched 120 routes in seven world caches. Hilly Loop Reverse's
+false 0.08-0.09 m passages, including Volcano Circuit Run, are removed;
+complete passages on Hilly Route Reverse and its running variant measure
+9165.79-9165.88 m. The closed-lap follow-up adds eight passages in five world
+caches, including Volcano Circuit (4095.31 m) and Volcano Circuit CCW
+(4095.29 m). These measured values are not forced to the source declarations. Non-lap
+segment entries, original native associations, route metadata, index, video,
+and altitude-scale files are unchanged by these refreshes. The follow-up also
+preserves every native profile and pre-existing measured passage, while
+refreshing per-hash maxima to include the new observations. Import audit hashes
+as text to preserve their exact 64-bit values; missing distances are blank.
+
+XML `percentStart` and `percentEnd` describe positions in the concatenated
+lead-in and main-route high-resolution checkpoint sequence. They are not
+fractions of physical distance or of an individual road's `time` parameter.
+Verified native examples encode checkpoint index divided by checkpoint count;
+compatibility percentages derived from timing crossings use checkpoint
+position divided by count minus one. Legacy sources without supplied timing
+definitions retain the previous percentage interpretation.
+
+For that legacy path, a lap-enabled route with an exactly closed main path and a positive segment
+start followed by `percent_end: 0` resolves to the final checkpoint. The raw
+percentage is retained, with additive `resolved_percent_end: 1`; calculated
+end distance and map geometry use the resolved endpoint. Other zero values
+are left unchanged. Timing-derived passages instead use their actual crossings.
+
+Each exported segment also records `distance_m` (end minus start distance,
+rounded to 0.01 m) and `max_distance_m` (the longest observed passage with that
+exact hash across the cached routes). Every extraction refreshes these maxima
+across the output directory, including after a single-world refresh. Forward
+and reverse hashes remain separate; names are not used to group passages.
+
+Surface Map and Race Replay omit segment overlays whose recorded distance is
+more than 25 m below that maximum. Shortfalls up to and including 25 m remain
+visible, compared at the recorded 0.01 m precision. This is a display heuristic,
+not proof of leaderboard eligibility. Raw segment entries, names, percentages,
+and route geometry remain available unchanged in the exports. Legacy entries
+without the distance metadata retain their previous display behavior.
 
 ### Route Paddocks
 
@@ -136,6 +521,49 @@ lead-in escalators by the omitted distance. All other routes keep their view.
 Run `python -m tools.analyze_route_paddock_leadins` to regenerate the complete
 analysis and `race_data/paddock_leadin_adjustments.md`, which lists every
 qualifying route with its before/after distances and absolute discrepancies.
+
+#### All-World Paddock Groups
+
+[tools/analyze_paddock_groups.py](tools/analyze_paddock_groups.py) independently
+audits physical paddock-road groups without changing the extraction or app.
+Run `python -m tools.analyze_paddock_groups` against the installed world WADs;
+`--source-cache-dir` optionally reuses trusted per-world pickle snapshots from
+an earlier local WAD scan. The default spatial grouping threshold is 100 m.
+
+The current audit covers all 389 definitions across 13 worlds and all 170
+marked paddock roads, producing 33 groups. Every repeated or overlapping
+world-local paddock ID matches one nearest group: 383 routes declare IDs,
+197 have directly observed paddock-road starts with IDs, and none has an
+inconsistent ID/group assignment. The other matches remain spatial inference.
+
+Groups use connected components of nearby road control points. Route matching
+uses the first original lead-in checkpoint, falling back to coarse lead-in
+or main start only when necessary; distances are planar point-to-control-
+polyline distances, not travelled road-network lengths or sampled Bezier
+curves. Animated TT/BOOST gate models provide additional road evidence.
+Scotland's two previously verified complexes are reproduced. This associates
+IDs with groups, not individual IDs with specific roads or spawn lines.
+
+The full group and exception table is in
+[race_data/paddock_group_analysis.md](race_data/paddock_group_analysis.md).
+[race_data/paddock_groups.csv](race_data/paddock_groups.csv) retains every
+physical group; [race_data/paddock_group_routes.csv](race_data/paddock_group_routes.csv)
+retains all 389 route matches, exact distances, source restrictions and caveats.
+[race_data/paddock_group_analysis.json](race_data/paddock_group_analysis.json)
+also retains per-ID reference counts, gate models, source hashes, cache
+checksums and 50/100/150/200 m sensitivity partitions.
+
+Six route headers omit IDs: five Watopia Two Bridges/Beach Island/Ocean Lava
+variants and Yorkshire's Harrogate Circuit Reverse. Watopia road 107, Watopia
+roads 129/130/131 (AdZ_Paddock), and France roads 115/116/117 have no route-ID
+references; no missing IDs are guessed. Watopia road 101 is separate from
+roads 7-12 at 100 m but merges with them at 150 m, so those two memberships
+are threshold-sensitive. All other group memberships are stable across the
+tested thresholds. Richmond, Bologna, France and Watopia's special 19/20/116
+references have nearest-only ID evidence. Seventy-seven definitions lack
+lead-in checkpoints; Mayan 8, Mayan Mash, Tides and Temples, and Navig8 have
+main-start fallback anchors over 500 m from their nearest group. These are
+coverage caveats, not inconsistent mappings. No route cache fields change.
 
 ### Page: `GET /surface-map`
 

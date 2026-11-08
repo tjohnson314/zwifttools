@@ -6,6 +6,59 @@ const vm = require('node:vm');
 
 const SEGMENT_LOCATION_TOLERANCE_M = 20;
 
+function routeModeContext() {
+    const buttons = ['free_ride', 'race'].map(mode => ({
+        dataset: { mode }, disabled: false,
+        classList: { toggle() {} }, setAttribute() {},
+    }));
+    const links = [];
+    const pending = [];
+    const context = vm.createContext({
+        URL, URLSearchParams,
+        document: { addEventListener() {}, querySelectorAll() { return buttons; },
+            getElementById() { return { children: [] }; } },
+        window: { location: { href: 'http://localhost/surface-map?world=watopia&route=test-route&mode=free_ride' } },
+        location: { pathname: '/surface-map' },
+        history: { replaceState(state, title, url) { links.push(url); } },
+        fetch(url) { return new Promise(resolve => pending.push({ url, resolve })); },
+    });
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../static/js/surface_map.js'), 'utf8'), context);
+    for (const name of ['setStatus', 'hideSatellite', 'buildCombinedPath', 'renderRouteDetail', 'renderRouteList', 'fitToBounds']) {
+        context[name] = () => {};
+    }
+    vm.runInContext('state.world = {mapID:1, name:"Watopia", routes:[{nameHash:123,name:"Test Route"}]};', context);
+    return { context, buttons, links, pending };
+}
+
+test('route mode preserves deep links and disables unavailable free rides', () => {
+    const { context, buttons, links } = routeModeContext();
+    assert.equal(context.getUrlParams().mode, 'free_ride');
+    context.setRouteMode('free_ride');
+    assert.equal(vm.runInContext('state.routeMode', context), 'free_ride');
+    vm.runInContext('state.activeHash = 123;', context);
+    context.updateUrl();
+    assert.equal(new URL(links.at(-1), 'http://localhost').searchParams.get('mode'), 'free_ride');
+    vm.runInContext('state.routeMode = "race";', context);
+    context.updateRouteModeButtons(['race']);
+    assert.equal(buttons[0].disabled, true);
+    assert.equal(buttons[1].disabled, false);
+});
+
+test('route mode rapid switching rejects stale responses', async () => {
+    const { context, pending } = routeModeContext();
+    vm.runInContext('state.activeHash = 123;', context);
+    const earlier = context.setRouteMode('free_ride');
+    const latest = context.setRouteMode('race');
+    assert.equal(pending[0].url, '/api/surface_map/route/1/123?mode=free_ride');
+    assert.equal(pending[1].url, '/api/surface_map/route/1/123?mode=race');
+    pending[1].resolve({ ok: true, json: async () => ({ route_mode: 'race', available_modes: ['race', 'free_ride'] }) });
+    await latest;
+    pending[0].resolve({ ok: true, json: async () => ({ route_mode: 'free_ride', available_modes: ['race', 'free_ride'] }) });
+    await earlier;
+    assert.equal(vm.runInContext('state.routeMode', context), 'race');
+    assert.equal(vm.runInContext('state.route.route_mode', context), 'race');
+});
+
 function render(escalators, overrides = {}) {
     let result;
     const listeners = {};
@@ -39,7 +92,12 @@ function exportedSegmentRoutes() {
     return fs.readdirSync(directory).filter(name => /^world_\d+\.json$/.test(name)).flatMap(name => {
         const world = JSON.parse(fs.readFileSync(path.join(directory, name), 'utf8'),
             (key, value, context) => key === 'hash' && typeof value === 'number' ? context.source : value);
-        return world.routes.filter(route => route.segments?.length).map(route => ({ mapID: world.mapID, route }));
+        return world.routes.filter(route => route.segments?.length).map(route => ({
+            mapID: world.mapID,
+            route: { ...route, segments: route.segments.filter(segment =>
+                segment.distance_m == null || segment.max_distance_m == null ||
+                Math.round((segment.max_distance_m - segment.distance_m) * 100) <= 2500) },
+        })).filter(({ route }) => route.segments.length);
     });
 }
 
@@ -59,6 +117,13 @@ function checkpointPosition(route, fraction) {
     };
     assert.ok(Number.isFinite(point.x) && Number.isFinite(point.z), `${route.name}: invalid segment coordinates`);
     return point;
+}
+
+function segmentBoundaryPosition(route, segment, boundary) {
+    const checkpoint = segment[`${boundary}_checkpoint`];
+    return checkpointPosition(route,
+        checkpoint != null ? checkpoint / route.segment_path.d.at(-1)
+            : segment[`resolved_percent_${boundary}`] ?? segment[`percent_${boundary}`]);
 }
 
 function displayedBoundaryError(rendered, distanceKm, expected) {
@@ -81,7 +146,7 @@ function displayedBoundaryError(rendered, distanceKm, expected) {
     return nearest;
 }
 
-test('directional segment endpoints agree across every exported route within 20 metres', context => {
+test('displayed directional segment endpoints agree across exported routes within 20 metres', context => {
     const groups = new Map();
     const routes = exportedSegmentRoutes();
     for (const { mapID, route } of routes) {
@@ -100,8 +165,8 @@ test('directional segment endpoints agree across every exported route within 20 
                 const right = occurrences[second];
                 if (left.route.nameHash === right.route.nameHash) continue;
                 for (const boundary of ['start', 'end']) {
-                    const leftPoint = checkpointPosition(left.route, left.segment[`percent_${boundary}`]);
-                    const rightPoint = checkpointPosition(right.route, right.segment[`percent_${boundary}`]);
+                    const leftPoint = segmentBoundaryPosition(left.route, left.segment, boundary);
+                    const rightPoint = segmentBoundaryPosition(right.route, right.segment, boundary);
                     const distance = Math.hypot(leftPoint.x - rightPoint.x, leftPoint.z - rightPoint.z);
                     comparisons++;
                     if (distance > SEGMENT_LOCATION_TOLERANCE_M) {
@@ -133,8 +198,13 @@ test('every displayed segment boundary aligns with its route profile within 20 m
             start_distance_m: Math.round((segment.start_distance_m - omitted) * 100) / 100,
             end_distance_m: Math.round((segment.end_distance_m - omitted) * 100) / 100,
         }));
+        const leadin = route.leadin;
+        const routeOffset = leadin?.d?.length
+            ? route.leadin_view?.distance_m ?? leadin.d.at(-1) + Math.hypot(
+                route.route.x[0] - leadin.x.at(-1), route.route.z[0] - leadin.z.at(-1))
+            : 0;
         const rendered = render(undefined, {
-            ...route, escalators: [], segments,
+            ...route, route_offset_m: routeOffset, escalators: [], segments,
             leadin: pack(route.leadin_view?.profile || route.leadin), route: pack(route.route),
         });
         const shapes = rendered.result.layout.shapes.filter(shape => shape.type === 'rect');
@@ -142,7 +212,7 @@ test('every displayed segment boundary aligns with its route profile within 20 m
         for (let index = 0; index < segments.length; index++) {
             const segment = segments[index];
             for (const [boundary, edge] of [['start', 'x0'], ['end', 'x1']]) {
-                const expected = checkpointPosition(route, segment[`percent_${boundary}`]);
+                const expected = segmentBoundaryPosition(route, segment, boundary);
                 const error = displayedBoundaryError(rendered, shapes[index][edge], expected);
                 checked++;
                 if (error > SEGMENT_LOCATION_TOLERANCE_M) {
@@ -188,6 +258,21 @@ test('segment coordinate checks interpolate through nonuniform checkpoint positi
     } };
     assert.deepEqual(checkpointPosition(route, 0.375), { x: 100, z: 50 });
     assert.deepEqual(checkpointPosition(route, 0.875), { x: 250, z: 100 });
+    const segment = { start_checkpoint: 1.5, end_checkpoint: 3.5, percent_start: 0, percent_end: 1 };
+    assert.deepEqual(segmentBoundaryPosition(route, segment, 'start'), { x: 100, z: 50 });
+    assert.deepEqual(segmentBoundaryPosition(route, segment, 'end'), { x: 250, z: 100 });
+});
+
+test('wrapped zero endpoints use resolved positions without changing source percentages', () => {
+    const route = { name: 'Wrapped lap', segment_path: {
+        d: [0, 1, 2, 3], x: [-100, 0, 100, 0], z: [0, 0, 100, 0],
+    } };
+    const segment = { percent_start: 1 / 3, percent_end: 0, resolved_percent_end: 1 };
+
+    assert.deepEqual(segmentBoundaryPosition(route, segment, 'start'), { x: 0, z: 0 });
+    assert.deepEqual(segmentBoundaryPosition(route, segment, 'end'), { x: 0, z: 0 });
+    assert.deepEqual(checkpointPosition(route, segment.percent_end), { x: -100, z: 0 });
+    assert.equal(segment.percent_end, 0);
 });
 
 test('routes without lead-in geometry align every rendered boundary within two centimetres', () => {
@@ -202,7 +287,7 @@ test('routes without lead-in geometry align every rendered boundary within two c
         for (let index = 0; index < route.segments.length; index++) {
             const segment = route.segments[index];
             for (const [boundary, edge] of [['start', 'x0'], ['end', 'x1']]) {
-                const expected = checkpointPosition(route, segment[`percent_${boundary}`]);
+                const expected = segmentBoundaryPosition(route, segment, boundary);
                 const error = displayedBoundaryError(rendered, shapes[index][edge], expected);
                 assert.ok(error <= 0.02, `${route.name}: ${segment.name} ${boundary}: ${error} m`);
             }
@@ -251,7 +336,7 @@ test('Outer Scotland finishes at Champions Sprint without an unrepresented lead-
     const finishKm = sprint.end_distance_m / 1000;
     assert.equal(result.traces.at(-1).x.at(-1), finishKm);
     assert.equal(combined.at(-1).dist_m, sprint.end_distance_m);
-    const sprintShape = result.layout.shapes.find(shape => shape.type === 'rect');
+    const sprintShape = result.layout.shapes.find(shape => shape.type === 'rect' && shape.x1 === finishKm);
     assert.equal(sprintShape.x1, finishKm);
     assert.equal(result.layout.shapes.filter(shape => shape.type === 'line').length, 0);
 });
@@ -265,13 +350,22 @@ test('missing, null and empty lead-ins do not shift available geometry or mark a
     }
 });
 
-test('profiles with lead-in geometry retain their published main-route offset', () => {
+test('profiles use the measured main-route offset instead of published lead-in metadata', () => {
     const leadin = { d: [0, 40], x: [-1, 0], y: [0, 0],
         alt: [0, 0], surface: ['Tarmac', 'Tarmac'] };
-    const { result, combined } = render(undefined, { leadin });
-    assert.deepEqual(Array.from(result.traces[1].x), [0.05, 0.15, 0.25]);
-    assert.equal(combined[leadin.d.length].dist_m, 50);
-    assert.equal(result.layout.shapes.find(shape => shape.type === 'line').x0, 0.05);
+    const { result, combined } = render(undefined, { leadin, route_offset_m: 45, leadin_distance_m: 999 });
+    assert.deepEqual(Array.from(result.traces[1].x), [0.045, 0.145, 0.245]);
+    assert.equal(combined[leadin.d.length].dist_m, 45);
+    assert.equal(result.layout.shapes.find(shape => shape.type === 'line').x0, 0.045);
+});
+
+test('legacy profiles fall back to measured lead-in geometry, not published metadata', () => {
+    const leadin = { d: [0, 40], x: [-1, 0], y: [0, 0],
+        alt: [0, 0], surface: ['Tarmac', 'Tarmac'] };
+    const { result, combined } = render(undefined, { leadin, leadin_distance_m: 999 });
+    assert.deepEqual(Array.from(result.traces[1].x), [0.04, 0.14, 0.24]);
+    assert.equal(combined[leadin.d.length].dist_m, 40);
+    assert.equal(result.layout.shapes.find(shape => shape.type === 'line').x0, 0.04);
 });
 
 test('video routes only display their own independent road network', () => {

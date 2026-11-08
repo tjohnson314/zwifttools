@@ -467,6 +467,12 @@ def parse_segment_data(root: ET.Element) -> list[dict]:
     return segments
 
 
+def _directional_segment_name(name: str, direction: str) -> str:
+    if direction == "R" and not re.search(r"\breverse\b", name, re.IGNORECASE):
+        return f"{name} Reverse"
+    return name
+
+
 def parse_segment_names(data: bytes) -> dict[int, str]:
     """Return leaderboard segment names keyed by their directional network hash."""
     root = load_multiroot(data)
@@ -494,7 +500,7 @@ def parse_segment_names(data: bytes) -> dict[int, str]:
                 if attributes.get(key, "").strip()
             ), "")
             if name:
-                names.setdefault(int(hash_value), name)
+                names.setdefault(int(hash_value), _directional_segment_name(name, direction))
     return names
 
 
@@ -511,11 +517,16 @@ def parse_segment_definitions(data: bytes) -> list[dict]:
             finish_time = float(attributes["m_roadTime"])
         except (KeyError, TypeError, ValueError):
             continue
+        lap_arch = (attributes.get("m_bStopwatchRequiresAllCheckpoints") == "1"
+                    or attributes.get("m_telemetryArchType") == "4"
+                    or "laparch" in attributes.get("m_archGdePath", "").casefold())
         for direction in ("F", "R"):
             try:
                 start_time = float(attributes[f"m_startLineSplineTime{direction}"])
                 segment_hash = int(attributes[f"m_overrideNetworkHash{direction}"])
             except (KeyError, TypeError, ValueError):
+                continue
+            if not math.isfinite(start_time) or not math.isfinite(finish_time):
                 continue
             name = next((
                 attributes.get(key, "").strip()
@@ -533,13 +544,21 @@ def parse_segment_definitions(data: bytes) -> list[dict]:
                 segment_distance = float(attributes[f"m_ArchSegmentDistance{direction}"])
             except (KeyError, TypeError, ValueError):
                 continue
+            try:
+                begin_timer = float(attributes[f"m_beginTimerSplineTime{direction}"])
+            except (KeyError, TypeError, ValueError):
+                begin_timer = None
+            gap = abs(start_time - finish_time)
             definitions.append({
                 "hash": segment_hash,
-                "name": name,
+                "name": _directional_segment_name(name, direction),
                 "road_id": road_id,
                 "start_time": start_time,
                 "end_time": finish_time,
+                "direction": direction,
                 "distance_m": segment_distance * 1000,
+                "is_loop": lap_arch and min(gap, abs(1 - gap)) <= 0.0001,
+                "begin_timer_time": begin_timer if begin_timer is not None and math.isfinite(begin_timer) else None,
             })
     return definitions
 
@@ -625,68 +644,112 @@ def derive_escalator_passages(root: ET.Element, definitions: list[dict],
 
 
 def derive_segment_data(root: ET.Element, definitions: list[dict]) -> list[dict]:
-    """Derive segment passages from route checkpoints and timing-arch bounds."""
+    """Locate complete directional timing-line crossings on native route edges."""
     legs = [root.find("leadinhighrescheckpoint"), root.find("highrescheckpoint")]
     entries = [entry for leg in legs if leg is not None for entry in leg.findall("entry")]
-    points = []
-    for entry in entries:
+    leadin_count = len(legs[0].findall("entry")) if legs[0] is not None else 0
+    main_entries = entries[leadin_count:]
+    route_header = root.find("route")
+    closed_main = (route_header is not None and _i(route_header, "supportedLaps") > 0
+                   and len(main_entries) > 2
+                   and all(main_entries[0].get(key) == main_entries[-1].get(key)
+                           for key in ("road", "dir"))
+                   and all(_f(main_entries[0], key) == _f(main_entries[-1], key)
+                           for key in ("time", "x", "y", "z")))
+    edges = {}
+    for index, (first, last) in enumerate(zip(entries, entries[1:])):
         try:
-            points.append((float(entry.get("x")), float(entry.get("z"))))
+            road0, road1 = int(first.get("road")), int(last.get("road"))
+            time0, time1 = float(first.get("time")), float(last.get("time"))
+            dir0, dir1 = int(first.get("dir")), int(last.get("dir"))
         except (TypeError, ValueError):
-            points.append(None)
-    cumulative = [0.0]
-    for previous, current in zip(points, points[1:]):
-        if previous is None or current is None:
-            cumulative.append(cumulative[-1])
-        else:
-            cumulative.append(cumulative[-1] + math.hypot(
-                current[0] - previous[0], current[1] - previous[1]
-            ) / UNITS_PER_METRE)
+            continue
+        if road0 == road1 and dir0 == dir1 and math.isfinite(time0) and math.isfinite(time1):
+            edges.setdefault((road0, dir0), []).append((index, time0, time1))
     derived = []
     for definition in definitions:
-        low = min(definition["start_time"], definition["end_time"])
-        high = max(definition["start_time"], definition["end_time"])
-        matching = []
-        for index, entry in enumerate(entries):
-            try:
-                road_id = int(entry.get("road"))
-                road_time = float(entry.get("time"))
-            except (TypeError, ValueError):
+        direction = definition.get("direction", "F" if definition["end_time"] > definition["start_time"] else "R")
+        checkpoint_direction = 1 if direction == "F" else 0
+        is_loop = definition.get("is_loop", False)
+        timer_time = definition.get("begin_timer_time")
+        timer_boundary = timer_time % 1 if timer_time is not None else None
+        start = None
+        lap_armed = None
+        previous = -2
+        previous_passages = len(derived)
+        matching_edges = edges.get((definition["road_id"], checkpoint_direction), [])
+        for index, time0, time1 in matching_edges:
+            if index != previous + 1:
+                start = None
+                lap_armed = None
+            previous = index
+            if index == leadin_count - 1:
                 continue
-            if road_id == definition["road_id"] and low <= road_time <= high:
-                matching.append(index)
-        if not matching:
-            continue
-        start = matching[0]
-        previous = matching[0]
-        for current in matching[1:] + [None]:
-            if current is None or current != previous + 1:
-                if previous > start:
-                    distance_m = cumulative[previous] - cumulative[start]
-                    expected_m = definition["distance_m"]
-                    try:
-                        first_time = float(entries[start].get("time"))
-                        last_time = float(entries[previous].get("time"))
-                    except (TypeError, ValueError):
-                        first_time = last_time = 0.0
-                    expected_direction = definition["end_time"] - definition["start_time"]
-                    actual_direction = last_time - first_time
-                    direction_matches = expected_direction * actual_direction > 0
-                    distance_matches = expected_m and 0.5 <= distance_m / expected_m <= 1.5
-                    if not direction_matches or not distance_matches:
-                        if current is not None:
-                            start = current
-                        previous = current
-                        continue
+            monotonic = time0 != time1 and (time1 > time0) == bool(checkpoint_direction)
+            if (is_loop and timer_boundary is None and start is not None and not monotonic
+                    and ((time0 > 0.5 > time1) if checkpoint_direction else (time0 < 0.5 < time1))):
+                lap_armed = index + 1
+            crossings = []
+            boundaries = ([(boundary, road_time)
+                           for road_time in {definition["start_time"], definition["end_time"]}
+                           for boundary in ("start", "end")] if is_loop else
+                          [("start", definition["start_time"]), ("end", definition["end_time"])])
+            if is_loop and timer_boundary is not None:
+                boundaries.append(("arm", timer_boundary))
+            for boundary, road_time in boundaries:
+                if road_time == time0:
+                    weight = 0.0
+                elif road_time == time1:
+                    weight = 1.0
+                elif monotonic:
+                    weight = (road_time - time0) / (time1 - time0)
+                else:
+                    continue
+                if 0 <= weight <= 1:
+                    crossings.append((weight, boundary, road_time))
+            for weight, boundary, road_time in sorted(crossings):
+                position = index + weight
+                if boundary == "start" and (start is None or not is_loop):
+                    start = position
+                    start_line_time = road_time
+                    lap_armed = None
+                elif boundary == "arm" and start is not None and position > start:
+                    lap_armed = position
+                elif (boundary == "end" and start is not None and position > start
+                      and (not is_loop or (lap_armed is not None and position >= lap_armed))):
                     derived.append({
-                        "hash": definition["hash"],
+                        "hash": definition["hash"], "name": definition["name"],
+                        "road_id": definition["road_id"], "direction": direction,
+                        "start_time": definition["start_time"], "end_time": definition["end_time"],
+                        "declared_distance_m": definition.get("distance_m"),
+                        "boundary_source": "timing_arch",
+                        "start_checkpoint": start, "end_checkpoint": position,
                         "percent_start": start / max(len(entries) - 1, 1),
-                        "percent_end": previous / max(len(entries) - 1, 1),
-                        "name": definition["name"],
+                        "percent_end": position / max(len(entries) - 1, 1),
+                        **({"is_loop": True, "effective_start_time": start_line_time,
+                            "effective_end_time": road_time,
+                            "begin_timer_time": timer_time,
+                            "lap_armed_checkpoint": lap_armed} if is_loop else {}),
                     })
-                if current is not None:
-                    start = current
-            previous = current
+                    start = None
+                    lap_armed = None
+        if (is_loop and closed_main and len(derived) == previous_passages
+                and start is not None and leadin_count <= start <= leadin_count + 1
+                and lap_armed is not None and start < lap_armed <= len(entries) - 1
+                and sum(index >= leadin_count for index, _, _ in matching_edges) == len(main_entries) - 1):
+            derived.append({
+                "hash": definition["hash"], "name": definition["name"],
+                "road_id": definition["road_id"], "direction": direction,
+                "start_time": definition["start_time"], "end_time": definition["end_time"],
+                "declared_distance_m": definition.get("distance_m"),
+                "boundary_source": "closed_route_lap", "is_loop": True,
+                "start_checkpoint": leadin_count, "end_checkpoint": len(entries) - 1,
+                "percent_start": leadin_count / (len(entries) - 1), "percent_end": 1.0,
+                "effective_start_time": start_line_time, "effective_end_time": start_line_time,
+                "begin_timer_time": timer_time, "lap_armed_checkpoint": lap_armed,
+                "timing_arch_checkpoint": start,
+            })
+    derived.sort(key=lambda segment: (segment["start_checkpoint"], segment["end_checkpoint"], segment["hash"]))
     return derived
 
 
@@ -728,13 +791,168 @@ def build_leadin_view(pts, road_times, main_pts, published_distance_m,
     }
 
 
+def route_start_locations(root):
+    header = root.find("route")
+    locations = {}
+    for mode, tag, prefix in (("free_ride", "spawn_area", "freeRide"),
+                              ("meetup", "private_spawn_area", "meetup")):
+        area = root.find(tag)
+        distance = header.get(f"{prefix}LeadinDistanceInMeters")
+        ascent = header.get(f"{prefix}LeadinAscentInMeters")
+        if area is not None or distance is not None:
+            locations[mode] = {
+                "spawn_area": dict(area.attrib) if area is not None else None,
+                "leadin_distance_m": float(distance) if distance is not None else None,
+                "leadin_ascent_m": float(ascent) if ascent is not None else None,
+            }
+    return locations
+
+
+def native_start_paths(root, source="route"):
+    lead = root.findall("./leadinhighrescheckpoint/entry")
+    main = root.findall("./highrescheckpoint/entry")
+    return [(lead + main, source)] if lead or main else []
+
+
+def _native_crossings(entries, road, direction, road_time):
+    crossings = []
+    for index, entry in enumerate(entries):
+        if entry.get("road") != road or entry.get("dir") != direction:
+            continue
+        current_time = float(entry.get("time"))
+        if current_time == road_time:
+            crossings.append(float(index))
+        if index + 1 == len(entries):
+            continue
+        following = entries[index + 1]
+        if following.get("road") != road or following.get("dir") != direction:
+            continue
+        next_time = float(following.get("time"))
+        if (next_time - current_time) * (1 if direction == "1" else -1) <= 0:
+            continue
+        if min(current_time, next_time) < road_time < max(current_time, next_time):
+            crossings.append(index + (road_time - current_time) / (next_time - current_time))
+    return crossings
+
+
+def _native_start_slice(paths, area, target):
+    if area.get("road") is None or area.get("forward") not in ("0", "1"):
+        return None
+    try:
+        spawn_time = (float(area["starttime"]) + float(area["endtime"])) / 2
+        target_time = float(target.get("time"))
+        if not math.isfinite(spawn_time) or not math.isfinite(target_time):
+            return None
+    except (KeyError, TypeError, ValueError):
+        return None
+    best = None
+    for entries, source in paths:
+        starts = _native_crossings(entries, area["road"], area["forward"], spawn_time)
+        if not starts:
+            continue
+        ends = _native_crossings(entries, target.get("road"), target.get("dir"), target_time)
+        for start in starts:
+            end = next((position for position in ends if position >= start), None)
+            if end is None:
+                continue
+            def checkpoint(position):
+                index = int(position)
+                first = entries[index]
+                if position == index:
+                    return tuple(float(first.get(key)) for key in ("x", "y", "z")), first
+                last = entries[index + 1]
+                fraction = position - index
+                return tuple(float(first.get(key)) + fraction * (float(last.get(key)) - float(first.get(key)))
+                             for key in ("x", "y", "z")), first
+            first, first_entry = checkpoint(start)
+            last, last_entry = checkpoint(end)
+            target_point = tuple(float(target.get(key)) for key in ("x", "y", "z"))
+            if math.hypot(last[0] - target_point[0], last[2] - target_point[2]) > 200:
+                continue
+            middle = entries[math.floor(start) + 1:math.ceil(end)]
+            points = [first] + [tuple(float(entry.get(key)) for key in ("x", "y", "z")) for entry in middle] + [last]
+            distance = _cumulative_planar(points)[-1]
+            if best is None or distance < best[0]:
+                best = (distance, points, [first_entry] + middle + [last_entry], source)
+    return best
+
+
+def build_road_paths(entries, points=None):
+    if points is None:
+        points = [tuple(float(entry.get(key)) for key in ("x", "y", "z")) for entry in entries]
+    paths = {}
+    current_road = None
+    run = []
+
+    def save():
+        if current_road is None or not run:
+            return
+        profile = build_profile(run, 120)
+        path = {key: profile[key] for key in ("x", "z")} if profile else {
+            "x": [run[0][0] / UNITS_PER_METRE], "z": [run[0][2] / UNITS_PER_METRE]}
+        paths.setdefault(str(current_road), []).append(path)
+
+    for index, (entry, point) in enumerate(zip(entries, points)):
+        road = int(entry.get("road")) if entry.get("road") is not None else None
+        if road != current_road:
+            if run:
+                run.append(point)
+                save()
+            run = [points[index - 1], point] if index and current_road is not None else [point]
+            current_road = road
+        else:
+            run.append(point)
+    save()
+    return paths
+
+
+def build_route_versions(root, route, max_points=600, reference_paths=(),
+                         roads=None, styles=None, surface_map=None):
+    main_entries = list(root.findall("./highrescheckpoint/entry"))
+    race_entries = list(root.findall("./leadinhighrescheckpoint/entry")) + main_entries
+    main_roads = {int(entry.get("road")) for entry in root.findall("./highrescheckpoint/entry")
+                  if entry.get("road") is not None}
+    race_roads = main_roads | {int(entry.get("road")) for entry in root.findall("./leadinhighrescheckpoint/entry")
+                               if entry.get("road") is not None}
+    versions = {"race": {"available": True, "geometry_status": "native" if route.get("leadin") else "missing_leadin",
+                         "leadin_distance_m": route["leadin_distance_m"],
+                         "leadin_ascent_m": route["leadin_ascent_m"], "road_ids": sorted(race_roads),
+                         "road_paths": build_road_paths(race_entries)}}
+    location = route.get("start_locations", {}).get("free_ride")
+    if not location or route.get("event_only"):
+        versions["free_ride"] = {"available": False}
+        return versions
+    version = {**location, "available": True, "leadin": None, "geometry_status": "missing_leadin",
+               "road_ids": sorted(main_roads), "road_paths": build_road_paths(main_entries)}
+    target = root.find("./highrescheckpoint/entry")
+    area = location.get("spawn_area")
+    if target is not None and area:
+        result = _native_start_slice(native_start_paths(root), area, target)
+        if result is None:
+            result = _native_start_slice(reference_paths, area, target)
+        if result is not None:
+            _distance, points, entries, source = result
+            surfaces = None
+            if roads and styles and surface_map is not None:
+                surfaces = [surface_map.get(_resolve_style_name(int(entry.get("road")), float(entry.get("time")), roads, styles),
+                                            "Unknown") for entry in entries]
+            version.update({"leadin": build_profile(points, max_points, surfaces), "geometry_status": "native",
+                            "position_source": "native_checkpoints_spawn_range_midpoint", "source_route": source,
+                            "road_ids": sorted(main_roads | {int(entry.get("road")) for entry in entries}),
+                            "road_paths": build_road_paths(entries + main_entries, points +
+                                [tuple(float(entry.get(key)) for key in ("x", "y", "z")) for entry in main_entries])})
+    versions["free_ride"] = version
+    return versions
+
+
 def parse_route(data: bytes, map_id: int, max_points: int,
                 roads: dict | None = None, styles: list[str] | None = None,
                 surface_map: dict | None = None,
                 segment_names: dict[int, str] | None = None,
                 segment_definitions: list[dict] | None = None,
                 escalator_definitions: list[dict] | None = None,
-                paddock_road_ids: set[int] | None = None) -> dict | None:
+                paddock_road_ids: set[int] | None = None,
+                reference_paths=()) -> dict | None:
     root = load_multiroot(data)
     r = root.find("route")
     if r is None:
@@ -754,9 +972,9 @@ def parse_route(data: bytes, map_id: int, max_points: int,
         return [surface_map.get(_resolve_style_name(rid, t, roads, styles), "Unknown")
                 for rid, t in rt]
 
-    segment_entries = parse_segment_data(root)
-    if not segment_entries and segment_definitions:
-        segment_entries = derive_segment_data(root, segment_definitions)
+    native_segments = parse_segment_data(root)
+    segment_entries = (derive_segment_data(root, segment_definitions)
+                       if segment_definitions is not None else native_segments)
     segment_positions, leadin_boundaries, main_boundaries = [], [], []
     if segment_entries:
         combined_points = leadin_pts + main_pts
@@ -767,15 +985,24 @@ def parse_route(data: bytes, map_id: int, max_points: int,
             fraction = position - index
             return physical_distance[index] + fraction * (physical_distance[index + 1] - physical_distance[index])
         for segment in segment_entries:
+            if ("end_checkpoint" not in segment and segment["percent_end"] == 0 < segment["percent_start"] <= 1
+                    and _i(r, "supportedLaps") > 0 and len(main_pts) > 1
+                    and main_pts[0] == main_pts[-1]):
+                segment["resolved_percent_end"] = 1.0
             for boundary in ("start", "end"):
-                position = segment[f"percent_{boundary}"] * checkpoint_positions[-1]
+                fraction = segment.get(f"resolved_percent_{boundary}", segment[f"percent_{boundary}"])
+                position = segment.get(f"{boundary}_checkpoint", fraction * checkpoint_positions[-1])
                 distance = _distance_at(position)
                 segment_positions.append(position)
                 segment[f"{boundary}_distance_m"] = round(distance, 2)
                 if position <= len(leadin_pts) - 1:
                     leadin_boundaries.append(distance)
-                if position >= len(leadin_pts) and main_pts:
+                if len(leadin_pts) <= position < checkpoint_positions[-1] and main_pts:
                     main_boundaries.append(distance - physical_distance[len(leadin_pts)])
+            if "timing_arch_checkpoint" in segment:
+                position = segment["timing_arch_checkpoint"]
+                segment_positions.append(position)
+                segment["timing_arch_distance_m"] = round(_distance_at(position), 2)
             if segment_names and segment["hash"] in segment_names:
                 segment["name"] = segment_names[segment["hash"]]
     route_profile = build_profile(main_pts, max_points, _surfaces(main_rt), main_boundaries)
@@ -788,7 +1015,7 @@ def parse_route(data: bytes, map_id: int, max_points: int,
     segment_path = build_segment_path(leadin_pts + main_pts, max_points * 2,
                                       segment_positions) if segment_entries else None
 
-    return {
+    route = {
         "name": name,
         "nameHash": _i(r, "nameHash"),
         "mapID": _i(r, "mapID", map_id),
@@ -804,21 +1031,59 @@ def parse_route(data: bytes, map_id: int, max_points: int,
                    if value.strip()],
         "alternate_event_ramp": _i(r, "useAlternateEventRamp")
         if r.get("useAlternateEventRamp") is not None else None,
+        "start_locations": route_start_locations(root),
         "leadin": leadin_profile,
         **({"leadin_view": leadin_view} if leadin_view is not None else {}),
         "route": route_profile,
         "leadin_checkpoint_count": len(leadin_pts),
         "route_checkpoint_count": len(main_pts),
         "segments": segment_entries,
+        **({"native_segments": native_segments} if segment_definitions is not None else {}),
         "segment_path": segment_path,
         "escalators": derive_escalator_passages(root, escalator_definitions, leadin_distance_m)
         if escalator_definitions else [],
     }
+    route["route_versions"] = build_route_versions(root, route, max_points, reference_paths,
+                                                    roads, styles, surface_map)
+    return route
 
 
 # --------------------------------------------------------------------------- #
 # Driver
 # --------------------------------------------------------------------------- #
+def update_segment_distances(out: str) -> dict[int, float]:
+    documents = []
+    passages = []
+    maxima = {}
+    for filename in sorted(os.listdir(out)):
+        if not (re.fullmatch(r"world_\d+\.json", filename) or filename == "video_routes.json"):
+            continue
+        path = os.path.join(out, filename)
+        with open(path, "rb") as stream:
+            original = stream.read()
+        data = json.loads(original)
+        for route in data.get("routes", []):
+            for segment in route.get("segments", []):
+                start = segment.get("start_distance_m")
+                end = segment.get("end_distance_m")
+                if start is None or end is None:
+                    continue
+                distance = round(end - start, 2)
+                segment_hash = int(segment["hash"])
+                maxima[segment_hash] = max(maxima.get(segment_hash, distance), distance)
+                passages.append((segment, distance, segment_hash))
+        documents.append((path, data, original))
+    for segment, distance, segment_hash in passages:
+        segment["distance_m"] = distance
+        segment["max_distance_m"] = maxima[segment_hash]
+    for path, data, original in documents:
+        updated = json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        if updated != original:
+            with open(path, "wb") as stream:
+                stream.write(updated)
+    return maxima
+
+
 def _slug(name: str) -> str:
     s = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
     return s or "route"
@@ -982,7 +1247,62 @@ def extract_video_routes(cache_dir: str, out: str, out_surfaces: str) -> int:
         os.makedirs(directory, exist_ok=True)
         with open(os.path.join(directory, "video_routes.json"), "w", encoding="utf-8") as stream:
             json.dump(payload, stream, ensure_ascii=True, separators=(",", ":"), allow_nan=False)
+    update_segment_distances(out)
     return len(routes)
+
+
+def refresh_route_versions(out, zwift_dir, source_cache_dir=None):
+    import pickle
+    from tools.analyze_paddock_groups import assign_route, make_groups
+
+    surface_map = _load_style_surface()
+    for filename in sorted(os.listdir(out)):
+        if not re.fullmatch(r"world_\d+\.json", filename):
+            continue
+        map_id = int(re.search(r"\d+", filename).group())
+        snapshot = os.path.join(source_cache_dir, f"world_{map_id}.pickle") if source_cache_dir else None
+        if snapshot and os.path.isfile(snapshot):
+            with open(snapshot, "rb") as handle:
+                members = pickle.load(handle)
+        else:
+            members = read_wad_entries(os.path.join(zwift_dir, "assets", "Worlds", f"world{map_id}", "data_1.wad"),
+                                       keep_substrings=("/routes/", "road.xml", "roadstyle.xml", "entities.xml"))
+        roots = {}
+        for source, data in members.items():
+            if "/routes/" not in source.lower() or not source.endswith(".xml"):
+                continue
+            root = load_multiroot(data)
+            header = root.find("route")
+            if header is not None:
+                roots[int(header.get("nameHash"))] = (source, root)
+        references = [path for source, root in roots.values() for path in native_start_paths(root, source)]
+        road_data = next(data for source, data in members.items() if source.lower().endswith("/road.xml"))
+        entity_data = next((data for source, data in members.items() if source.lower().endswith("/entities.xml")), None)
+        styles = parse_roadstyles(next(data for source, data in members.items() if source.lower().endswith("/roadstyle.xml")))
+        roads = parse_roads(road_data.decode("utf-8", "replace"))
+        groups = make_groups(map_id, parse_paddock_roads(road_data, entity_data), entity_data=entity_data, road_data=road_data)
+        group_lookup = {group["group"]: group for group in groups}
+        path = os.path.join(out, filename)
+        with open(path, encoding="utf-8") as handle:
+            world = json.load(handle)
+        for route in world["routes"]:
+            source, root = roots[route["nameHash"]]
+            route["start_locations"] = route_start_locations(root)
+            route["route_versions"] = build_route_versions(root, route, reference_paths=references,
+                                                           roads=roads, styles=styles, surface_map=surface_map)
+            assignment = assign_route(root, map_id, groups, source)
+            group = group_lookup.get(assignment["observed_group"] or assignment["nearest_group"])
+            if group is not None:
+                route["route_versions"]["race"].update({
+                    "fallback_paddock_road_id": group["representative_road_id"],
+                    "fallback_paddock_road_length_m": group["representative_road_length_m"],
+                    "fallback_paddock_basis": "longest road in matched group; inferred, not actual pen selection",
+                })
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(world, handle, ensure_ascii=False, separators=(",", ":"))
+        available = [route for route in world["routes"] if route["route_versions"]["free_ride"].get("available")]
+        located = sum(route["route_versions"]["free_ride"]["geometry_status"] == "native" for route in available)
+        print(f"world{map_id}: {located}/{len(available)} free-ride approaches; {len(world['routes'])} routes", flush=True)
 
 
 def main() -> int:
@@ -999,7 +1319,14 @@ def main() -> int:
                     help="Export video routes only, from a local Zwift/mochi cache directory.")
     ap.add_argument("--out-surfaces", default="zwift_surfaces",
                     help="Surface output directory for video-cache extraction.")
+    ap.add_argument("--refresh-route-versions", action="store_true",
+                    help="Update only start-location metadata and mode profiles in existing numeric-world exports.")
+    ap.add_argument("--source-cache-dir", default=None,
+                    help="Optional trusted per-world WAD pickle snapshots for the start-version refresh.")
     args = ap.parse_args()
+    if args.refresh_route_versions:
+        refresh_route_versions(args.out, args.zwift_dir, args.source_cache_dir)
+        return 0
 
     if args.video_cache:
         count = extract_video_routes(args.video_cache, args.out, args.out_surfaces)
@@ -1065,12 +1392,15 @@ def main() -> int:
             continue
 
         routes: list[dict] = []
+        reference_paths = [path for source in route_files
+                   for path in native_start_paths(load_multiroot(entries[source]), source)]
         for nm in route_files:
             try:
                 route = parse_route(entries[nm], map_id, args.max_points,
                                     roads, styles, surface_map, segment_names,
                                     segment_definitions, escalator_definitions,
-                                    {road["road_id"] for road in paddock_roads})
+                                    {road["road_id"] for road in paddock_roads},
+                                    reference_paths=reference_paths)
             except Exception as exc:  # noqa: BLE001
                 print(f"  {world}/{nm}: parse error ({exc})", file=sys.stderr)
                 continue
@@ -1113,6 +1443,7 @@ def main() -> int:
     with open(os.path.join(args.out, "index.json"), "w", encoding="utf-8") as f:
         json.dump(index, f, ensure_ascii=False, indent=1)
 
+    update_segment_distances(args.out)
     print(f"\nDone: {len(index)} routes across {len(world_names)} worlds -> {args.out}/")
     return 0
 

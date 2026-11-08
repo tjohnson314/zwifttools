@@ -14,7 +14,48 @@ from race_replay.data_cleaner import (
     load_game_route_profile,
     load_preferred_route_geometry,
 )
-from tools.extract_zwift_routes import parse_segment_definitions
+from tools.extract_zwift_routes import parse_segment_definitions, parse_segment_names
+
+
+@pytest.mark.parametrize("reverse_name, expected", [
+    ("Epic KOM", "Epic KOM Reverse"),
+    ("Epic KOM Reverse", "Epic KOM Reverse"),
+    ("Reverse Epic KOM", "Reverse Epic KOM"),
+])
+def test_timing_arch_names_follow_source_direction_not_hash_sign(reverse_name, expected):
+    source = f'''<world><entities>
+        <ent type="ENTITY_TYPE_TIMINGARCH" m_roadTime="0.5"
+             m_startLineSplineTimeF="0.1" m_overrideNetworkHashF="-123"
+             m_startLineSplineTimeR="0.9" m_overrideNetworkHashR="456"
+             m_ArchFriendlyName="Epic KOM" m_ArchFriendlyNameR="{reverse_name}"
+             m_ArchSegmentDistanceF="1" m_ArchSegmentDistanceR="1" />
+    </entities></world>'''.encode()
+
+    names = parse_segment_names(source)
+
+    assert names == {-123: "Epic KOM", 456: expected}
+    assert {definition["hash"]: definition["name"]
+            for definition in parse_segment_definitions(source)} == names
+
+
+def test_power_to_the_tower_labels_reverse_and_forward_epic_kom_separately():
+    from shared.surface_map import _load_route_world, get_route
+
+    route = next(route for route in _load_route_world(1)["routes"] if route["nameHash"] == 2064290391)
+    climbs = sorted(
+        (segment for segment in route["segments"] if segment["name"].startswith("Epic KOM")),
+        key=lambda segment: segment["start_distance_m"],
+    )
+
+    assert [segment["name"] for segment in climbs] == ["Epic KOM Reverse", "Epic KOM"]
+    assert all(segment["boundary_source"] == "timing_arch" for segment in climbs)
+    assert all(0 <= segment["max_distance_m"] - segment["distance_m"] <= 25 for segment in climbs)
+    displayed = sorted(
+        (segment for segment in get_route(1, route["nameHash"])["segments"]
+         if segment["name"].startswith("Epic KOM")),
+        key=lambda segment: segment["start_distance_m"],
+    )
+    assert [segment["name"] for segment in displayed] == ["Epic KOM Reverse", "Epic KOM"]
 
 
 def test_timing_arch_without_road_id_uses_road_zero():
@@ -32,6 +73,26 @@ def test_timing_arch_without_road_id_uses_road_zero():
     assert definitions[0]['end_time'] == 0.4924368
 
 
+def test_timing_arch_catalog_excludes_internal_props_without_filtering_declared_lengths():
+    definitions = parse_segment_definitions(b'''
+        <world><entities>
+            <ent type="ENTITY_TYPE_TIMINGARCH" m_roadTime="0.9"
+                 m_startLineSplineTimeF="0.1" m_overrideNetworkHashF="7"
+                 m_Name="Internal prop" m_ArchSegmentDistanceF="1" />
+            <ent type="ENTITY_TYPE_TIMINGARCH" m_roadTime="0.9"
+                 m_startLineSplineTimeF="0.1" m_overrideNetworkHashF="8"
+                 m_ArchFriendlyName="Incomplete definition" />
+            <ent type="ENTITY_TYPE_TIMINGARCH" m_roadTime="0.9"
+                 m_startLineSplineTimeF="0.1" m_overrideNetworkHashF="9"
+                 m_ArchFriendlyName="Sprint" m_ArchSegmentDistanceF="1000" />
+        </entities></world>
+    ''')
+
+    assert len(definitions) == 1
+    assert definitions[0]['hash'] == 9
+    assert definitions[0]['distance_m'] == 1000000
+
+
 def _segment_race(finish_km=27.5, riders=None):
     return CleanedRaceData(
         race_id='segment-test', route_name='Montmartre Mixer',
@@ -41,30 +102,43 @@ def _segment_race(finish_km=27.5, riders=None):
     )
 
 
-def test_replay_route_segments_preserve_known_occurrences():
+def test_replay_route_segments_preserve_occurrences_within_length_tolerance():
+    from shared.surface_map import _load_route_world
+
+    source = next(route for route in _load_route_world(11)['routes'] if route['name'] == 'Montmartre Mixer')
+    assert sum(segment['hash'] == 1055881124 for segment in source['native_segments']) == 2
     segments = build_replay_route_segments(_segment_race(), 'PARIS')
-    assert len(segments) == 7
+    assert len(segments) == 6
     koms = [segment for segment in segments if segment['type'] == 'kom']
-    assert [segment['pass'] for segment in koms] == [1, 2]
-    assert koms[0]['start_distance_km'] == 15.05675
+    assert [segment['pass'] for segment in koms] == [1]
+    assert koms[0]['start_distance_km'] == 18.32678
     assert len(koms[0]['latlng']) > 2
+    sprints = [segment for segment in segments if segment['name'] == 'Monceau Sprint']
+    assert [segment['pass'] for segment in sprints] == [1, 2]
 
 
 def test_makuri_40_replay_uses_embedded_sprint_segments():
+    from shared.surface_map import _load_route_world
+
     race = _segment_race(40.256)
     race.route_name = 'Makuri 40'
     race.world = 'MAKURI'
     segments = build_replay_route_segments(race, race.world)
     assert segments == build_replay_route_segments(race, 'MAKURIISLANDS')
-    assert [segment['name'] for segment in segments] == [
+    source = next(route for route in _load_route_world(9)['routes'] if route['name'] == race.route_name)
+    source_segments = sorted(source['segments'], key=lambda segment: segment['start_distance_m'])
+    assert [segment['name'] for segment in source_segments] == [
         'Village Sprint', 'Country Sprint',
         'ALLEY SPRINT', 'CASTLE PARK SPRINT', 'SHISA SPRINT',
     ]
+    assert all(segment['boundary_source'] == 'timing_arch' for segment in source['segments'])
+    assert all(segment['distance_m'] <= segment['max_distance_m'] for segment in source['segments'])
+    expected = [segment for segment in source_segments
+                if round(segment['max_distance_m'] - segment['distance_m'], 2) <= 25]
+    assert len(expected) == 5
+    assert [segment['name'] for segment in segments] == [segment['name'] for segment in expected]
     assert all(segment['type'] == 'sprint' for segment in segments)
     assert all(len(segment['latlng']) > 2 for segment in segments)
-    assert np.isclose(segments[0]['start_distance_km'], 1.70447)
-    assert np.isclose(segments[1]['start_distance_km'], 7.42658)
-    assert np.isclose(segments[-1]['end_distance_km'], 27.73835)
 
 
 def test_replay_route_segments_repeat_laps_and_respect_shortened_races():
@@ -75,7 +149,11 @@ def test_replay_route_segments_repeat_laps_and_respect_shortened_races():
     assert abs(repeated['start_distance_km'] - first['start_distance_km'] - 25.1062) < 1e-6
     shortened = build_replay_route_segments(_segment_race(3.6), 'PARIS')
     assert len(shortened) == 1
-    assert shortened[0]['end_distance_km'] == 3.70982
+    assert shortened[0]['end_distance_km'] == pytest.approx(first['end_distance_km'])
+    shortened = build_replay_route_segments(_segment_race(first['start_distance_km'] + 0.01), 'PARIS')
+    assert len(shortened) == 1
+    assert shortened[0]['name'] == first['name']
+    assert shortened[0]['end_distance_km'] == first['end_distance_km']
     assert build_replay_route_segments(_segment_race(), None) == []
 
 

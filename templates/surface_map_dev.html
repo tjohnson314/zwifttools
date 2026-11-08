@@ -6,7 +6,7 @@
     <link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
     <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
     <title>Surface Map (Dev) - Zwift Tools</title>
-    <link rel="stylesheet" href="/static/css/surface_map.css?v=5">
+    <link rel="stylesheet" href="/static/css/surface_map.css?v=8">
 </head>
 <body>
     <div class="header-bar">
@@ -26,13 +26,20 @@
                 <label for="world-select">World</label>
                 <select id="world-select"><option value="">Loading…</option></select>
             </div>
+            <div class="dev-browser-tabs" role="tablist" aria-label="World entities">
+                <button id="tab-roads" role="tab" aria-selected="true" aria-controls="road-list">Roads</button>
+                <button id="tab-arches" role="tab" aria-selected="false" aria-controls="arch-list">Timing Arches</button>
+                <button id="tab-spawns" role="tab" aria-selected="false" aria-controls="spawn-list">Spawn Markers</button>
+            </div>
             <div class="sidebar-head">
-                <h2>Roads</h2>
+                <h2 id="browser-heading">Roads</h2>
                 <span id="road-count" class="route-count"></span>
             </div>
             <input id="road-search" type="search" placeholder="Search by id, name or surface…" autocomplete="off">
             <button id="btn-view-filter" class="btn-sm view-filter" title="Only list roads visible in the current map view">In view only</button>
-            <ul id="road-list" class="route-list dev-road-list"></ul>
+            <ul id="road-list" class="route-list dev-road-list dev-browser-list" role="tabpanel" aria-labelledby="tab-roads"></ul>
+            <ul id="arch-list" class="route-list dev-road-list dev-browser-list" role="tabpanel" aria-labelledby="tab-arches" hidden></ul>
+            <ul id="spawn-list" class="route-list dev-road-list dev-browser-list" role="tabpanel" aria-labelledby="tab-spawns" hidden></ul>
         </aside>
 
         <!-- Main map + XML inspector -->
@@ -43,10 +50,14 @@
                     <div class="map-actions">
                         <button id="btn-fit" class="btn-sm" title="Fit view">Reset view</button>
                         <label class="toggle"><input type="checkbox" id="toggle-network" checked> Show all roads</label>
+                        <label class="toggle"><input type="checkbox" id="toggle-arches" checked> Timing arches</label>
+                        <label class="toggle"><input type="checkbox" id="toggle-spawns" checked> Spawn markers</label>
+                        <span class="arch-map-key"><span class="arch-start-key"></span>Start <span class="arch-finish-key"></span>Finish</span>
                     </div>
                 </div>
                 <div class="canvas-wrap">
                     <canvas id="map-canvas"></canvas>
+                    <div id="arch-tooltip" class="arch-tooltip" role="tooltip" hidden></div>
                     <div id="map-hint" class="map-hint">Select a world, then pick a road.</div>
                 </div>
             </div>
@@ -62,10 +73,24 @@
                 </div>
                 <pre id="road-xml" class="road-xml"></pre>
             </div>
+            <section id="arch-detail" class="route-detail dev-road-detail" hidden>
+                <div class="route-detail-head"><h2 id="arch-name"></h2></div>
+                <div id="arch-location-status" class="arch-location-status"></div>
+                <dl id="arch-fields" class="arch-fields"></dl>
+                <div class="xml-head"><span>entities.xml</span></div>
+                <pre id="arch-xml" class="road-xml"></pre>
+            </section>
+            <section id="spawn-detail" class="route-detail dev-road-detail" hidden>
+                <div class="route-detail-head"><h2 id="spawn-name"></h2><button id="spawn-road" class="btn-sm" type="button" title="Inspect the associated road">Inspect road</button></div>
+                <div id="spawn-location-status" class="arch-location-status"></div>
+                <dl id="spawn-fields" class="arch-fields"></dl>
+                <div class="xml-head"><span>entities.xml</span></div>
+                <pre id="spawn-xml" class="road-xml"></pre>
+            </section>
         </main>
     </div>
 
     <script src="/static/js/map_canvas.js?v=1"></script>
-    <script src="/static/js/surface_map_dev.js?v=5"></script>
+    <script src="/static/js/surface_map_dev.js?v=10"></script>
 </body>
 </html>

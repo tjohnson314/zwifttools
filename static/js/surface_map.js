@@ -13,7 +13,10 @@ const state = {
     route: null,        // route detail from API
     routeFilter: '',
     sportFilter: 'all', // 'all' | 'cycling' | 'running'
+    routeMode: 'race',
     activeHash: null,
+    loadingHash: null,
+    roadPickerRequest: null,
     // Affine transform: screenX = X*scale + offsetX ; screenY = Y*scale + offsetY
     scale: 1,
     offsetX: 0,
@@ -42,6 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     bindEvents();
     resizeCanvas();
+    new ResizeObserver(resizeCanvas).observe(canvas);
     loadWorlds();
 });
 
@@ -49,6 +53,8 @@ function setStatus(msg, isError) {
     const el = document.getElementById('status');
     el.textContent = msg || '';
     el.classList.toggle('error', !!isError);
+    const pickerStatus = document.getElementById('road-picker-status');
+    if (pickerStatus) pickerStatus.textContent = isError ? msg || '' : '';
 }
 
 /* ---------------------------------------------------------------- data --- */
@@ -71,6 +77,8 @@ async function loadWorlds() {
         if (data.worlds.length) {
             // Deep-link support: ?world=<world-slug>&route=<route-slug>.
             const want = getUrlParams();
+            if (want.mode === 'free_ride') state.routeMode = want.mode;
+            updateRouteModeButtons();
             const match = want.world &&
                 data.worlds.find(w => matchesSlug(want.world, w.name, w.mapID));
             const mapId = match ? match.mapID : data.worlds[0].mapID;
@@ -83,14 +91,17 @@ async function loadWorlds() {
 }
 
 async function loadWorld(mapId, routeSlug = null) {
+    closeRoadPicker();
     setStatus('Loading world…');
     state.routeRequest++;
+    setRouteLoading(null);
     hideSatellite();
     state.route = null;
     state.activeHash = null;
     state.hoverPoint = null;
     state.bgImage = null;
     document.getElementById('route-detail').style.display = 'none';
+    updateRouteModeButtons();
     try {
         const res = await fetch(`/api/surface_map/world/${mapId}`);
         const data = await res.json();
@@ -127,17 +138,22 @@ function loadBackground(bg) {
     img.src = bg.image;
 }
 
-async function loadRoute(hash) {
-    setStatus('Loading route…');
+async function loadRoute(hash, fromPicker = false) {
+    if (!fromPicker) closeRoadPicker();
+    setStatus('');
     const request = ++state.routeRequest;
     const world = state.world;
+    const mode = state.routeMode;
+    setRouteLoading(hash);
     hideSatellite();
     try {
-        const res = await fetch(`/api/surface_map/route/${world.mapID}/${hash}`);
+        const res = await fetch(`/api/surface_map/route/${world.mapID}/${hash}?mode=${mode}`);
         const data = await res.json();
         if (request !== state.routeRequest || state.world !== world) return;
         if (!res.ok) throw new Error(data.error || 'Failed to load route');
         state.route = data;
+        state.routeMode = data.route_mode || mode;
+        updateRouteModeButtons(data.available_modes);
         state.activeHash = hash;
         state.hoverPoint = null;
         state.pinnedPoint = null;
@@ -149,8 +165,11 @@ async function loadRoute(hash) {
         setStatus('');
         updateUrl();
         if (world.disconnected_routes) await showSatellite(data);
+        return true;
     } catch (e) {
         if (request === state.routeRequest) setStatus(e.message, true);
+    } finally {
+        if (request === state.routeRequest && state.world === world) setRouteLoading(null);
     }
 }
 
@@ -366,9 +385,9 @@ function matchesSlug(token, name, id) {
 function getUrlParams() {
     try {
         const p = new URL(window.location.href).searchParams;
-        return { world: p.get('world'), route: p.get('route') };
+        return { world: p.get('world'), route: p.get('route'), mode: p.get('mode') };
     } catch (e) {
-        return { world: null, route: null };
+        return { world: null, route: null, mode: null };
     }
 }
 
@@ -378,6 +397,7 @@ function updateUrl() {
     if (state.activeHash != null && state.world) {
         const r = state.world.routes.find(r => r.nameHash === state.activeHash);
         if (r) p.set('route', slugify(r.name));
+        p.set('mode', state.routeMode);
     }
     const qs = p.toString();
     history.replaceState(null, '', qs ? `${location.pathname}?${qs}` : location.pathname);
@@ -408,6 +428,92 @@ function sportIsCycling(v) { return v !== 2; }
 function sportIsRunning(v) { return v === 2; }
 function sportLabel(v) { return v === 2 ? 'Running' : 'Cycling'; }
 
+function updateRouteModeButtons(available = ['free_ride', 'race']) {
+    document.querySelectorAll('#route-mode .sport-btn').forEach(button => {
+        const active = button.dataset.mode === state.routeMode;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-pressed', String(active));
+        button.disabled = !available.includes(button.dataset.mode);
+        button.title = button.disabled ? 'No free-ride version in the route definition' : '';
+    });
+}
+
+function setRouteMode(mode) {
+    if (!['free_ride', 'race'].includes(mode)) return;
+    closeRoadPicker();
+    state.routeMode = mode;
+    updateRouteModeButtons();
+    renderRouteList();
+    if (state.activeHash != null) return loadRoute(state.activeHash);
+    updateUrl();
+}
+
+function setRouteLoading(hash) {
+    state.loadingHash = hash;
+    for (const listId of ['route-list', 'road-picker-list']) {
+        for (const item of document.getElementById(listId).children) {
+            item.setAttribute('aria-busy', String(hash != null && item.dataset.hash === String(hash)));
+        }
+    }
+}
+
+function closeRoadPicker(cancelPending = true) {
+    if (cancelPending && state.roadPickerRequest != null && state.roadPickerRequest === state.routeRequest) {
+        state.routeRequest++;
+        setRouteLoading(null);
+    }
+    state.roadPickerRequest = null;
+    const picker = document.getElementById('road-route-picker');
+    if (picker.open) picker.close();
+}
+
+async function showRoadRoutes(hit) {
+    if (!hit || !state.world) return;
+    const tolerance2 = (state.world.road_match_tolerance ?? 5) ** 2;
+    const routes = state.world.routes.filter(route => {
+        const paths = route.road_paths?.[state.routeMode] || route.road_paths?.race || {};
+        const pieces = state.world.disconnected_routes ? [paths[String(hit.road_id)] || []] : Object.values(paths);
+        return pieces.some(run => run.some(path => polylineDistance2(hit.point, path) <= tolerance2));
+    });
+    if (!routes.length) return;
+    if (routes.length === 1) return loadRoute(routes[0].nameHash);
+    closeRoadPicker();
+    const picker = document.getElementById('road-route-picker');
+    const list = document.getElementById('road-picker-list');
+    document.getElementById('road-picker-title').textContent = 'Routes at this point';
+    document.getElementById('road-picker-status').textContent = '';
+    const search = document.getElementById('road-picker-search');
+    search.value = '';
+    search.oninput = event => {
+        const filter = event.target.value.toLowerCase();
+        for (const item of list.children) item.hidden = !item.dataset.name.includes(filter);
+    };
+    list.innerHTML = '';
+    for (const route of routes) {
+        const item = document.createElement('li');
+        item.dataset.hash = String(route.nameHash);
+        item.dataset.name = route.name.toLowerCase();
+        const button = document.createElement('button');
+        button.type = 'button';
+        const leadin = state.routeMode === 'free_ride' ? route.free_ride_leadin_distance_m : route.leadin_distance_m;
+        button.innerHTML = `${escapeHtml(route.name)}<span class="r-meta">` +
+            `${((route.distance_m + (leadin ?? 0)) / 1000).toFixed(1)} km &middot; ${sportLabel(route.sport_type)}</span>`;
+        button.addEventListener('click', async () => {
+            const loading = loadRoute(route.nameHash, true);
+            const request = state.routeRequest;
+            state.roadPickerRequest = request;
+            const loaded = await loading;
+            if (state.roadPickerRequest !== request) return;
+            state.roadPickerRequest = null;
+            if (loaded && state.routeRequest === request && state.activeHash === route.nameHash) closeRoadPicker(false);
+        });
+        item.appendChild(button);
+        list.appendChild(item);
+    }
+    setRouteLoading(state.loadingHash);
+    picker.showModal();
+}
+
 function renderRouteList() {
     const ul = document.getElementById('route-list');
     ul.innerHTML = '';
@@ -426,25 +532,31 @@ function renderRouteList() {
 
     routes.forEach(r => {
         const li = document.createElement('li');
+        li.dataset.hash = String(r.nameHash);
         if (r.nameHash === state.activeHash) li.classList.add('active');
-        const dist = ((r.distance_m + r.leadin_distance_m) / 1000).toFixed(1);
-        const asc = Math.round(r.ascent_m + r.leadin_ascent_m);
-        const badge = r.event_only ? '<span class="r-badge">Event</span>' : '';
+        const leadin = state.routeMode === 'free_ride' ? r.free_ride_leadin_distance_m : r.leadin_distance_m;
+        const dist = ((r.distance_m + (leadin ?? 0)) / 1000).toFixed(1);
+        const asc = Math.round(r.ascent_m + (state.routeMode === 'free_ride' ? r.free_ride_leadin_ascent_m ?? 0 : r.leadin_ascent_m));
+        const badge = state.routeMode === 'free_ride' && r.available_modes && !r.available_modes.includes('free_ride')
+            ? '<span class="r-badge">Race only</span>' : r.event_only ? '<span class="r-badge">Event</span>' : '';
         const sport = sportLabel(r.sport_type);
         const sportBadge =
             `<span class="sport-tag sport-${sport.toLowerCase()}">${sport}</span>`;
         li.innerHTML = `${escapeHtml(r.name)}${badge}` +
-            `<span class="r-meta">${dist} km · ${asc} m ↑${sportBadge}</span>`;
+            `<span class="r-meta">${dist} km${leadin == null ? ' course' : ''} · ${asc} m ↑${sportBadge}</span>`;
         li.addEventListener('click', () => {
             if (r.nameHash === state.activeHash) clearRoute();
             else loadRoute(r.nameHash);
         });
         ul.appendChild(li);
     });
+    setRouteLoading(state.loadingHash);
 }
 
 function clearRoute() {
+    closeRoadPicker();
     state.routeRequest++;
+    setRouteLoading(null);
     hideSatellite();
     state.route = null;
     state.activeHash = null;
@@ -452,6 +564,7 @@ function clearRoute() {
     state.pinnedPoint = null;
     state.combined = [];
     document.getElementById('route-detail').style.display = 'none';
+    updateRouteModeButtons();
     renderRouteList();
     if (state.world) fitToBounds(state.world.bounds);
     updateUrl();
@@ -461,14 +574,20 @@ function renderRouteDetail(d) {
     const panel = document.getElementById('route-detail');
     panel.style.display = '';
     document.getElementById('rd-name').textContent = d.name;
+    const startStatus = document.getElementById('rd-start-status');
+    startStatus.hidden = !d.start_geometry_status;
+    startStatus.textContent = d.start_geometry_status === 'missing_leadin'
+        ? 'Start geometry unavailable' : d.route_mode === 'free_ride' ? 'Spawn-range midpoint' : 'Native race approach';
+    startStatus.title = d.start_position_source || '';
 
-    const totalKm = ((d.distance_m + d.leadin_distance_m) / 1000).toFixed(1);
+    const totalKm = ((d.distance_m + (d.leadin_distance_m ?? 0)) / 1000).toFixed(1);
     const ascent = Math.round(d.ascent_m);
-    const leadinKm = (d.leadin_distance_m / 1000).toFixed(1);
+    const leadinKm = d.leadin_distance_m == null ? 'Unknown' : d.leadin_distance_m < 1000
+        ? `${Math.round(d.leadin_distance_m)} m` : `${(d.leadin_distance_m / 1000).toFixed(2)} km`;
     document.getElementById('rd-stats').innerHTML = `
-        <div class="stat"><span class="v">${totalKm} km</span><span class="k">Distance</span></div>
+        <div class="stat"><span class="v">${totalKm} km</span><span class="k">${d.leadin_distance_m == null ? 'Course distance' : 'Distance'}</span></div>
         <div class="stat"><span class="v">${ascent} m</span><span class="k">Ascent</span></div>
-        <div class="stat"><span class="v">${leadinKm} km</span><span class="k">Lead-in</span></div>`;
+        <div class="stat"><span class="v">${leadinKm}</span><span class="k">Lead-in</span></div>`;
 
     renderBreakdown(d.breakdown);
     renderElevation(d);
@@ -519,6 +638,7 @@ function elevationShapes() {
 
 function buildCombinedPath(d) {
     const combined = [];
+    const routeOffset = d.route_offset_m ?? d.leadin?.d?.at(-1) ?? 0;
     const push = (leg, offset) => {
         if (!leg) return;
         for (let i = 0; i < leg.d.length; i++) {
@@ -526,12 +646,13 @@ function buildCombinedPath(d) {
         }
     };
     push(d.leadin, 0);
-    push(d.route, d.leadin?.d?.length ? d.leadin_distance_m || 0 : 0);
+    push(d.route, routeOffset);
     state.combined = combined;
 }
 
 function renderElevation(d) {
     const colors = (state.world && state.world.colors) || {};
+    const routeOffset = d.route_offset_m ?? d.leadin?.d?.at(-1) ?? 0;
     const traces = [];
     const segmentShapes = [];
     const segmentAnnotations = [];
@@ -583,7 +704,7 @@ function renderElevation(d) {
     };
 
     combinedIdx = addLeg(d.leadin, 0, 'dot');
-    combinedIdx = addLeg(d.route, d.leadin?.d?.length ? d.leadin_distance_m || 0 : 0, 'solid');
+    combinedIdx = addLeg(d.route, routeOffset, 'solid');
 
     (d.escalators || []).forEach((escalator, index) => {
         const start = escalator.start_distance_m / 1000;
@@ -609,8 +730,8 @@ function renderElevation(d) {
     });
 
     // Lead-in boundary; the pinned-point line is added on click via relayout.
-    state.elevationLeadinKm = d.leadin?.d?.length && d.leadin_distance_m > 0
-        ? d.leadin_distance_m / 1000 : null;
+    state.elevationLeadinKm = d.leadin?.d?.length && routeOffset > 0
+        ? routeOffset / 1000 : null;
 
     const layout = {
         margin: { l: 48, r: 12, t: 10, b: 40 },
@@ -822,7 +943,61 @@ renderBase = function () { _origRenderBase(); requestAnimationFrame(paint); };
 
 /* --------------------------------------------------------------- events --- */
 
+function nearestPolylinePoint(point, path) {
+    let closest = {distance: Infinity, point: null};
+    if (!path) return closest;
+    if (path.x.length === 1) return {distance: (point.x - path.x[0]) ** 2 + (point.y - path.y[0]) ** 2,
+        point: {x: path.x[0], y: path.y[0]}};
+    for (let index = 1; index < path.x.length; index++) {
+        const startX = path.x[index - 1], startY = path.y[index - 1];
+        const dx = path.x[index] - startX, dy = path.y[index] - startY;
+        const length2 = dx * dx + dy * dy;
+        const fraction = length2 ? Math.max(0, Math.min(1,
+            ((point.x - startX) * dx + (point.y - startY) * dy) / length2)) : 0;
+        const projected = {x: startX + fraction * dx, y: startY + fraction * dy};
+        const distance = (point.x - projected.x) ** 2 + (point.y - projected.y) ** 2;
+        if (distance < closest.distance) closest = {distance, point: projected};
+    }
+    return closest;
+}
+
+function polylineDistance2(point, path) {
+    return nearestPolylinePoint(point, path).distance;
+}
+
+function pickRoad(clientX, clientY) {
+    if (!state.world) return null;
+    const rect = canvas.getBoundingClientRect();
+    if (clientX < rect.left || clientX > rect.left + rect.width ||
+        clientY < rect.top || clientY > rect.top + rect.height) return null;
+    const point = toWorld((clientX - rect.left) * state.dpr, (clientY - rect.top) * state.dpr);
+    let closest = (8 * state.dpr / state.scale) ** 2;
+    if (!state.showNetwork && Math.min(polylineDistance2(point, state.route?.route),
+        polylineDistance2(point, state.route?.leadin)) > closest) return null;
+    let hit = null;
+    for (const segment of state.world.segments) {
+        if (segment.road_id == null) continue;
+        const projection = nearestPolylinePoint(point, segment);
+        if (projection.distance < closest) {
+            closest = projection.distance;
+            hit = {road_id: segment.road_id, point: projection.point};
+        }
+    }
+    return hit;
+}
+
 function bindEvents() {
+    const picker = document.getElementById('road-route-picker');
+    document.getElementById('road-picker-close').addEventListener('click', () => closeRoadPicker());
+    picker.addEventListener('cancel', event => { event.preventDefault(); closeRoadPicker(); });
+    picker.addEventListener('click', event => {
+        const bounds = picker.getBoundingClientRect();
+        if (event.target === picker && (event.clientX < bounds.left || event.clientX > bounds.right ||
+            event.clientY < bounds.top || event.clientY > bounds.bottom)) closeRoadPicker();
+    });
+    document.querySelectorAll('#route-mode .sport-btn').forEach(button => {
+        button.addEventListener('click', () => setRouteMode(button.dataset.mode));
+    });
     document.getElementById('world-select').addEventListener('change', e => {
         if (e.target.value) loadWorld(parseInt(e.target.value, 10));
     });
@@ -849,13 +1024,22 @@ function bindEvents() {
     document.getElementById('btn-copy-link').addEventListener('click', copyRouteLink);
 
     // Pan
-    let dragging = false, lastX = 0, lastY = 0;
-    canvas.addEventListener('mousedown', e => {
+    let dragging = false, moved = false, lastX = 0, lastY = 0, startX = 0, startY = 0;
+    canvas.addEventListener('pointerdown', e => {
+        if (e.button !== 0) return;
+        moved = false; startX = e.clientX; startY = e.clientY;
         dragging = true; lastX = e.clientX; lastY = e.clientY;
+        canvas.setPointerCapture(e.pointerId);
     });
-    window.addEventListener('mouseup', () => { dragging = false; });
-    window.addEventListener('mousemove', e => {
+    window.addEventListener('pointerup', e => {
         if (!dragging) return;
+        dragging = false;
+        if (!moved) showRoadRoutes(pickRoad(e.clientX, e.clientY));
+    });
+    window.addEventListener('pointercancel', () => { dragging = false; });
+    window.addEventListener('pointermove', e => {
+        if (!dragging) return;
+        moved = moved || Math.abs(e.clientX - startX) + Math.abs(e.clientY - startY) > 4;
         const dx = (e.clientX - lastX) * state.dpr;
         const dy = (e.clientY - lastY) * state.dpr;
         lastX = e.clientX; lastY = e.clientY;

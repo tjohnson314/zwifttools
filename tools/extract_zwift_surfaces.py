@@ -97,24 +97,37 @@ def _vec_xz(tag: str, attr: str) -> tuple[float, float] | None:
             float(m.group(3)) / UNITS_PER_METRE)
 
 
-def _nodes_full(block: str):
+def _nodes_full(block: str, *, auto_tangents: bool = False):
     """ROADNODE ``(pos, tangentIn, tangentOut)`` in local metres, spline order.
 
     ``m_tangentIn`` / ``m_tangentOut`` are cubic-Bezier control-point offsets
     (per-node incoming/outgoing handles), not raw Hermite tangents. Missing or
-    absent handles default to zero. ``m_bStraight`` overrides both handles of
-    the node's outgoing segment, including a loop's closing segment."""
+    absent handles default to zero unless ``auto_tangents`` requests uniform
+    Catmull-Rom handles. Explicit handles, including zero, are preserved.
+    ``m_bStraight`` overrides both handles of the node's outgoing segment,
+    including a loop's closing segment."""
     out = []
     straight = []
+    missing = []
     for m in _NODE_RE.finditer(block):
         tag = m.group(0)
         pos = _vec_xz(tag, "m_pos")
         if pos is None:
             continue
-        ti = _vec_xz(tag, "m_tangentIn") or (0.0, 0.0)
-        to = _vec_xz(tag, "m_tangentOut") or (0.0, 0.0)
-        out.append((pos, ti, to))
+        ti = _vec_xz(tag, "m_tangentIn")
+        to = _vec_xz(tag, "m_tangentOut")
+        out.append((pos, ti or (0.0, 0.0), to or (0.0, 0.0)))
+        missing.append((ti is None, to is None))
         straight.append(re.search(r'\bm_bStraight="(?:1|true)"', tag, re.I) is not None)
+    if auto_tangents and len(out) >= 2:
+        looped = re.search(r"<looped>\s*1\s*</looped>", block) is not None
+        positions = [node[0] for node in out]
+        for index, (pos, ti, to) in enumerate(out):
+            before = positions[index - 1] if index > 0 or looped else pos
+            after = positions[(index + 1) % len(out)] if index + 1 < len(out) or looped else pos
+            handle = ((after[0] - before[0]) / 6, (after[1] - before[1]) / 6)
+            out[index] = (pos, (-handle[0], -handle[1]) if missing[index][0] else ti,
+                          handle if missing[index][1] else to)
     for index, is_straight in enumerate(straight):
         if not is_straight:
             continue
@@ -244,7 +257,7 @@ def _style_at(t: float, base: int, markers: list[tuple[float, float, int]]) -> i
 def resolve_road(block: str, spacing: float, styles: list[str]
                  ) -> list[dict]:
     """Return constant-surface segments for one ``<road>`` block."""
-    nodes = _nodes_full(block)
+    nodes = _nodes_full(block, auto_tangents=True)
     if len(nodes) < 2:
         return []
     looped = re.search(r"<looped>\s*1\s*</looped>", block) is not None
@@ -285,7 +298,12 @@ def resolve_road(block: str, spacing: float, styles: list[str]
             xs.append(x)
             zs.append(z)
     segments.append(_segment(run_style, xs, zs, styles))
-    return [s for s in segments if s is not None]
+    segments = [s for s in segments if s is not None]
+    road_id = re.search(r"<id>\s*(\d+)\s*</id>", block)
+    if road_id:
+        for segment in segments:
+            segment["road_id"] = int(road_id.group(1))
+    return segments
 
 
 def _segment(style_id: int, xs: list[float], zs: list[float], styles: list[str]

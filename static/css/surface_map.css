@@ -129,12 +129,75 @@ select option {
     background: rgba(247, 147, 30, 0.14);
     border-color: rgba(247, 147, 30, 0.5);
 }
+#route-list li, #road-list li {
+    position: relative;
+    padding-right: 33px;
+}
+.route-list li[aria-busy="true"]::after {
+    content: '';
+    position: absolute;
+    top: 11px;
+    right: 11px;
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--panel-border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: list-loading-spin 0.8s linear infinite;
+}
+@keyframes list-loading-spin {
+    to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .route-list li[aria-busy="true"]::after { animation: none; }
+}
 .route-list li .r-meta {
     display: block;
     color: var(--muted);
     font-size: 0.78rem;
     margin-top: 2px;
 }
+.road-route-picker {
+    width: min(420px, calc(100vw - 32px));
+    max-height: 80vh;
+    margin: auto;
+    padding: 16px;
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    background: #202328;
+    color: var(--text);
+}
+.road-route-picker[open] { display: flex; flex-direction: column; gap: 12px; }
+.road-route-picker::backdrop { background: rgba(0, 0, 0, 0.55); }
+.road-picker-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.road-picker-head h2 { font-size: 1.1rem; }
+.road-picker-head button { width: 32px; height: 32px; padding: 0; font-size: 1.5rem; line-height: 1; }
+.road-picker-status { color: #ff6b6b; font-size: 0.85rem; }
+.road-route-picker input {
+    width: 100%;
+    flex-shrink: 0;
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    background: rgba(0, 0, 0, 0.25);
+    color: inherit;
+    font: inherit;
+}
+.road-picker-status:empty { display: none; }
+.road-route-picker .route-list { margin: 0; padding: 0; min-height: 0; }
+.road-route-picker li { padding-right: 33px; position: relative; }
+.road-route-picker li button {
+    display: block;
+    width: 100%;
+    border: 0;
+    padding: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.road-route-picker li button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .route-list li .r-badge {
     display: inline-block;
     font-size: 0.68rem;
@@ -163,6 +226,7 @@ select option {
     transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .sport-btn:hover { border-color: var(--accent); color: var(--text); }
+.sport-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .sport-btn.active {
     background: var(--accent);
     border-color: var(--accent);
@@ -341,6 +405,37 @@ select option {
 .view-filter.active:hover { color: #0d1220; }
 
 .dev-road-detail { min-height: 0; }
+.dev-browser-tabs { display: flex; gap: 2px; margin: 12px 0 4px; border-bottom: 1px solid var(--panel-border); }
+.dev-browser-tabs button {
+    flex: 1; padding: 9px 4px; border: 0; border-bottom: 2px solid transparent;
+    background: transparent; color: var(--muted); font: inherit; font-size: 0.85rem; cursor: pointer;
+}
+.dev-browser-tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+.dev-browser-list[hidden], #arch-detail[hidden], #spawn-detail[hidden], #arch-tooltip[hidden] { display: none; }
+.arch-row {
+    display: block; width: 100%; padding: 0; border: 0; background: transparent;
+    color: inherit; font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere;
+}
+.arch-row .r-meta { white-space: normal; }
+.arch-unlocated { color: #e8ba6e; }
+.arch-fields { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(0, 3fr); gap: 8px 16px; font-size: 0.85rem; }
+.arch-fields dt { color: var(--muted); }
+.arch-fields dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.arch-location-status { color: #76ddba; font-size: 0.85rem; margin-bottom: 12px; }
+.arch-location-status.incomplete { color: #e8ba6e; }
+.arch-map-key { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+.arch-start-key, .arch-finish-key { width: 10px; height: 10px; border-radius: 50%; display: inline-block; border: 1px solid #141b22; }
+.arch-start-key { background: #64e3bb; }
+.arch-finish-key { background: #fff; }
+.arch-tooltip {
+    position: absolute; z-index: 3; pointer-events: none; padding: 8px 10px;
+    max-width: min(300px, calc(100% - 16px)); border: 1px solid var(--panel-border);
+    border-radius: 4px; background: #151c24; color: var(--text); font-size: 0.8rem;
+    white-space: pre-line; overflow-wrap: anywhere;
+}
+.map-toolbar:has(#toggle-arches) { flex-wrap: wrap; }
+.map-actions:has(#toggle-arches) { flex-wrap: wrap; gap: 8px 14px; }
+.canvas-wrap:has(#arch-tooltip) { touch-action: none; }
 .xml-head {
     display: flex;
     justify-content: space-between;
@@ -387,4 +482,5 @@ select option {
 @media (max-width: 900px) {
     .layout { grid-template-columns: 1fr; }
     .sidebar { position: static; max-height: 340px; }
+    .sidebar:has(.dev-browser-tabs) { max-height: 460px; }
 }

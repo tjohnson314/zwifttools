@@ -8,7 +8,7 @@
     <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
     <title>Surface Map - Zwift Tools</title>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-    <link rel="stylesheet" href="/static/css/surface_map.css?v=6">
+    <link rel="stylesheet" href="/static/css/surface_map.css?v=10">
 </head>
 <body>
     <div class="header-bar">
@@ -27,6 +27,10 @@
             <div class="world-select-wrap">
                 <label for="world-select">World</label>
                 <select id="world-select"><option value="">Loading…</option></select>
+            </div>
+            <div id="route-mode" class="sport-filter" role="group" aria-label="Route version">
+                <button type="button" class="sport-btn" data-mode="free_ride" aria-pressed="false">Free Ride</button>
+                <button type="button" class="sport-btn active" data-mode="race" aria-pressed="true">Race</button>
             </div>
             <div class="sidebar-head">
                 <h2>Routes</h2>
@@ -61,6 +65,7 @@
             <div id="route-detail" class="route-detail" style="display:none;">
                 <div class="route-detail-head">
                     <h2 id="rd-name">—</h2>
+                    <span id="rd-start-status" class="r-badge" hidden></span>
                     <div class="route-detail-actions">
                         <button id="btn-copy-link" class="btn-sm" title="Copy a link to this route">Copy link</button>
                     </div>
@@ -72,7 +77,16 @@
         </main>
     </div>
 
+    <dialog id="road-route-picker" class="road-route-picker" aria-labelledby="road-picker-title">
+        <div class="road-picker-head">
+            <h2 id="road-picker-title"></h2>
+            <button id="road-picker-close" type="button" class="btn-sm" aria-label="Close route picker" title="Close">&times;</button>
+        </div>
+        <input id="road-picker-search" type="search" placeholder="Search routes..." aria-label="Search routes at this point" autocomplete="off">
+        <p id="road-picker-status" class="road-picker-status" role="alert"></p>
+        <ul id="road-picker-list" class="route-list"></ul>
+    </dialog>
     <script src="/static/js/map_canvas.js?v=1"></script>
-    <script src="/static/js/surface_map.js?v=14"></script>
+    <script src="/static/js/surface_map.js?v=22"></script>
 </body>
 </html>
