@@ -370,6 +370,7 @@ function buildMortonDataset() {
 
     return {
         label: 'Morton model (1s peak; 5/10/20 min fit)',
+        mortonFit: fit,
         data: durationsSec.map((duration) => ({
             x: duration,
             y: duration >= 1 && duration <= 3600 ? fit.cp + fit.wPrime / (duration + fit.timeConstant) : null,
@@ -579,6 +580,12 @@ function updateInspectPanel(index) {
         context.appendChild(label);
         context.appendChild(link);
         context.appendChild(date);
+        if (activity) {
+            const actions = document.createElement('div');
+            actions.className = 'activity-actions';
+            actions.innerHTML = actionsCellHtml(activity);
+            context.appendChild(actions);
+        }
 
         const head = document.createElement('div');
         head.className = 'partition-metric-head';
@@ -589,6 +596,55 @@ function updateInspectPanel(index) {
         row.appendChild(context);
         container.appendChild(row);
     });
+
+    const model = showMortonModel && powerCurveChart?.data.datasets.find((dataset) => dataset.mortonFit);
+    if (model) {
+        const row = document.createElement('div');
+        row.className = 'partition-metric-row morton-metric-row';
+
+        const head = document.createElement('div');
+        head.className = 'partition-metric-head';
+        const swatch = document.createElement('span');
+        swatch.className = 'partition-swatch';
+        swatch.style.background = model.borderColor;
+        const value = document.createElement('div');
+        value.className = 'metric-value';
+        value.textContent = formatPower(model.data[index]?.y);
+        head.appendChild(swatch);
+        head.appendChild(value);
+
+        const context = document.createElement('div');
+        context.className = 'metric-context';
+        const label = document.createElement('div');
+        label.className = 'metric-label';
+        label.textContent = 'Morton model';
+        const parameters = document.createElement('dl');
+        parameters.className = 'morton-parameters';
+        const fit = model.mortonFit;
+        const values = [
+            ['CP', 'Critical power', formatPower(fit.cp)],
+            ["W'", 'Work capacity above critical power', powerUnit === 'W'
+                ? `${(fit.wPrime / 1000).toFixed(1)} kJ` : `${fit.wPrime.toFixed(1)} J/kg`],
+            ['Pmax', 'Peak power', formatPower(fit.peakPower)],
+        ];
+        values.forEach(([name, title, text]) => {
+            const parameter = document.createElement('div');
+            parameter.className = 'morton-parameter';
+            const term = document.createElement('dt');
+            term.textContent = name;
+            term.title = title;
+            const definition = document.createElement('dd');
+            definition.textContent = text;
+            parameter.appendChild(term);
+            parameter.appendChild(definition);
+            parameters.appendChild(parameter);
+        });
+        context.appendChild(label);
+        context.appendChild(parameters);
+        row.appendChild(head);
+        row.appendChild(context);
+        container.appendChild(row);
+    }
 }
 
 // ── Weekly bars (computed client-side from loaded peaks) ───────────────────────
@@ -1040,6 +1096,7 @@ function bindControls() {
         criticalPowerToggle.addEventListener('change', () => {
             showMortonModel = criticalPowerToggle.checked;
             refreshChart();
+            updateInspectPanel(pinnedIndex !== null ? pinnedIndex : selectedIndex);
         });
     }
 

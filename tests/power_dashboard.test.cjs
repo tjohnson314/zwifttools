@@ -59,6 +59,111 @@ test('Morton fit omits unavailable or incompatible inputs without clipping raw d
     assert.equal(context.fitMortonModel([{ duration: 300, power: 1400 }, { duration: 600, power: 350 }], 1200), null);
 });
 
+function inspectContext() {
+    function element() {
+        return {
+            children: [], style: {}, textContent: '',
+            set innerHTML(html) { this.html = html; this.children = []; },
+            get innerHTML() { return this.html || ''; },
+            appendChild(child) { this.children.push(child); },
+            addEventListener(event, callback) { this[event] = callback; },
+        };
+    }
+    const elements = Object.fromEntries(['partitionMetrics', 'selectedInterval', 'selectedIntervalLabel',
+        'criticalPowerToggle'].map(id => [id, element()]));
+    const context = dashboardContext({
+        document: {
+            getElementById(id) { return elements[id]; },
+            createElement: element,
+            querySelectorAll() { return []; },
+        },
+    });
+    return { context, elements };
+}
+
+test('inspect panel reuses activity actions for the winning point in each visible group', () => {
+    const { context, elements } = inspectContext();
+    vm.runInContext(`
+        durationsSec = [1, 300];
+        activities = [
+            { activity_id: 'ride', name: 'Ride', peak_watts: [900, 200] },
+            { activity_id: 'race', name: 'Race', peak_watts: [800, 300], is_race: true, event_id: 'event' },
+            { activity_id: 'hidden', name: 'Hidden', peak_watts: [2000, 1000] },
+            { activity_id: 'empty', name: 'Empty', peak_watts: [null, null] },
+        ];
+        dividers = new Set([2, 3]);
+        hiddenPartitions.add(partitionKey(2));
+    `, context);
+    context.updateInspectPanel(1);
+    const rows = elements.partitionMetrics.children;
+    assert.equal(rows.length, 2);
+    const details = rows[0].children[1];
+    assert.equal(details.children[1].textContent, 'Race');
+    assert.equal(details.children[3].innerHTML, context.actionsCellHtml({
+        activity_id: 'race', is_race: true, event_id: 'event',
+    }));
+    assert.equal(rows[1].children[1].children.length, 3);
+
+    context.updateInspectPanel(0);
+    const actions = elements.partitionMetrics.children[0].children[1].children[3].innerHTML;
+    assert.match(actions, /bike-comparison\?activity_id=ride/);
+    assert.match(actions, /www.zwift.com\/activity\/ride/);
+    assert.doesNotMatch(actions, /race-replay|zwiftpower/);
+});
+
+test('inspect panel shows the plotted Morton prediction and three parameters in the selected units', () => {
+    const { context, elements } = inspectContext();
+    vm.runInContext(`
+        durationsSec = [1, 300, 600, 1200, 7200];
+        activities = [{ activity_id: 'ride', weight_kg: 75,
+            peak_watts: durationsSec.map(duration => duration === 1 ? 1200 : 300 + 20000 / (duration + 20000 / 900)) }];
+        showMortonModel = true;
+        powerCurveChart = { data: { datasets: buildChartDatasets() } };
+    `, context);
+    context.updateInspectPanel(1);
+    function modelDetails() {
+        const row = elements.partitionMetrics.children.at(-1);
+        assert.equal(row.className, 'partition-metric-row morton-metric-row');
+        return {
+            prediction: row.children[0].children[1].textContent,
+            parameters: row.children[1].children[1].children.flatMap(parameter => {
+                assert.equal(parameter.className, 'morton-parameter');
+                assert.equal(parameter.children.length, 2);
+                return parameter.children.map(child => child.textContent);
+            }),
+        };
+    }
+    assert.equal(modelDetails().prediction, context.formatPower(context.buildMortonDataset().data[1].y));
+    assert.deepEqual(modelDetails().parameters, ['CP', '300 W', "W'", '20.0 kJ', 'Pmax', '1200 W']);
+    context.updateInspectPanel(4);
+    assert.equal(modelDetails().prediction, '\u2014');
+
+    vm.runInContext('powerUnit = "W/kg"; powerCurveChart.data.datasets = buildChartDatasets();', context);
+    context.updateInspectPanel(1);
+    assert.deepEqual(modelDetails().parameters, ['CP', '4.00 W/kg', "W'", '266.7 J/kg', 'Pmax', '16.00 W/kg']);
+    vm.runInContext('activities[0].peak_watts[0] = null; powerCurveChart.data.datasets = buildChartDatasets();', context);
+    context.updateInspectPanel(1);
+    assert.equal(elements.partitionMetrics.children.length, 1);
+});
+
+test('Morton toggle immediately refreshes the pinned interval in the inspect panel', () => {
+    const { context, elements } = inspectContext();
+    vm.runInContext(`
+        durationsSec = [1, 300, 600, 1200];
+        activities = [{ activity_id: 'ride', peak_watts: [1200, 360, 330, 315] }];
+        pinnedIndex = 2;
+        powerCurveChart = { data: { datasets: [] }, update() {} };
+    `, context);
+    context.bindControls();
+    elements.criticalPowerToggle.checked = true;
+    elements.criticalPowerToggle.change();
+    assert.equal(elements.partitionMetrics.children.length, 2);
+    assert.equal(elements.selectedInterval.textContent, '00:10:00');
+    elements.criticalPowerToggle.checked = false;
+    elements.criticalPowerToggle.change();
+    assert.equal(elements.partitionMetrics.children.length, 1);
+});
+
 test('progressive loading updates only the changed row and preserves partition cells', () => {
     const cells = Array.from({ length: 9 }, () => ({
         textContent: 'unchanged', innerHTML: '',
