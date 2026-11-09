@@ -8,6 +8,18 @@ import pytest
 from shared import data_fetcher
 
 
+def test_pre_refit_replay_cache_is_recleaned(tmp_path, caplog):
+    from race_replay.data_cleaner import CLEANING_VERSION, load_from_cache
+
+    cache_path = tmp_path / 'cleaned_cache.json'
+    cache_path.write_text(json.dumps({'cleaning_version': 39}))
+    assert CLEANING_VERSION > 39
+    with caplog.at_level('INFO'):
+        assert load_from_cache(cache_path) is None
+    assert 're-cleaning' in caplog.text
+    assert cache_path.exists()
+
+
 @pytest.fixture
 def race_api(monkeypatch):
     activity = {

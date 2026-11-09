@@ -441,6 +441,12 @@ def get_world_surfaces(map_id: int) -> dict:
     )
 
     tolerance_x, tolerance_y = proj["project"]([0, 5, 0], [0, 0, 5])
+    basis_x, basis_y = proj["project"]([0, 1, 0], [0, 0, 1])
+    basis = np.array([
+        [basis_x[1] - basis_x[0], basis_x[2] - basis_x[0]],
+        [basis_y[1] - basis_y[0], basis_y[2] - basis_y[0]],
+    ], dtype=float)
+    meters_per_plot_x = float(np.linalg.norm(np.linalg.solve(basis, [1.0, 0.0])))
     return {
         "mapID": map_id,
         "name": _WORLD_NAMES.get(map_id, f"World {map_id}"),
@@ -448,6 +454,7 @@ def get_world_surfaces(map_id: int) -> dict:
         "disconnected_routes": map_id == VIDEO_ROUTES_MAP_ID,
         "background": proj["background"],
         "bounds": proj["bounds"],
+        "meters_per_plot_x": meters_per_plot_x,
         "segments": segments,
         "routes": routes,
         "road_match_tolerance": math.sqrt(sum((float(tolerance_x[index]) - float(tolerance_x[0])) ** 2 +

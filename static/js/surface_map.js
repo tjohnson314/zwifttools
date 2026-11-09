@@ -292,6 +292,7 @@ async function showSatellite(route) {
                 hover: new maps.Circle({ clickable: false, zIndex: 5 }),
                 pinned: new maps.Circle({ clickable: false, zIndex: 4 }) };
             map.addListener('zoom_changed', paintSatelliteMarkers);
+            map.addListener('idle', updateMapScale);
         }
         state.satellite.project = project;
         state.satelliteActive = true;
@@ -774,6 +775,27 @@ function renderElevation(d) {
 
 /* --------------------------------------------------------------- canvas --- */
 
+function updateMapScale() {
+    const element = document.getElementById('map-scale');
+    if (!element) return;
+    let metersPerCssPixel = state.world?.meters_per_plot_x * state.dpr / state.scale;
+    if (state.satelliteActive) {
+        const map = state.satellite.map;
+        const latitude = map.getBounds()?.getSouthWest().lat();
+        const zoom = map.getZoom();
+        metersPerCssPixel = Number.isFinite(latitude) && Number.isFinite(zoom)
+            ? 2 * Math.PI * 6378137 * Math.cos(latitude * Math.PI / 180) / (256 * 2 ** zoom)
+            : NaN;
+    }
+    const measurement = mapScaleMeasurement(metersPerCssPixel);
+    element.hidden = !measurement;
+    if (!measurement) return;
+    element.classList.toggle('satellite-scale', state.satelliteActive);
+    element.setAttribute('aria-label', `Map distance scale: ${measurement.label}`);
+    document.getElementById('map-scale-label').textContent = measurement.label;
+    document.getElementById('map-scale-bar').style.width = `${measurement.width}px`;
+}
+
 function resizeCanvas() {
     const rect = canvas.parentElement.getBoundingClientRect();
     state.dpr = window.devicePixelRatio || 1;
@@ -814,6 +836,7 @@ function networkSegments(world, route) {
 }
 
 function renderBase() {
+    updateMapScale();
     if (!state.world) return;
     if (state.satelliteActive) { renderSatellite(); return; }
     const g = baseCtx;

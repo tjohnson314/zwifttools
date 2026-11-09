@@ -261,7 +261,7 @@ for (const script of ['surface_map.js', 'surface_map_dev.js']) {
             stroke() { strokes.push({ width: this.lineWidth, color: this.strokeStyle }); },
         };
         const context = vm.createContext({
-            document: { addEventListener() {} },
+            document: { addEventListener() {}, getElementById() { return null; } },
             requestAnimationFrame() {},
             g,
         });

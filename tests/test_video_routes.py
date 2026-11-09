@@ -1,5 +1,6 @@
 import json
 
+import numpy as np
 import pytest
 
 from shared import surface_map
@@ -59,6 +60,32 @@ def test_video_routes_are_a_separate_surface_map_world(video_world):
     assert route["world_name"] == "Video Routes"
     assert route["route"]["alt"] == [-10, 5, -20]
     assert surface_map.get_route(1000, 0) is None
+    assert surface_map.get_world_surfaces(1000)["meters_per_plot_x"] == pytest.approx(1)
+
+
+def test_surface_map_scale_inverts_rotated_anisotropic_projection(video_world, monkeypatch):
+    def project(xs, zs):
+        xs, zs = np.asarray(xs), np.asarray(zs)
+        return 2 * xs + zs + 500, xs - 3 * zs + 200
+
+    monkeypatch.setattr(surface_map, "_projection", lambda _: {
+        "mode": "image", "project": project, "background": None,
+        "bounds": {"min_x": 0, "max_x": 100, "min_y": 0, "max_y": 100},
+    })
+    data = surface_map.get_world_surfaces(1000)
+    # A horizontal plot unit is (3/7, 1/7) metres in the local frame.
+    assert data["meters_per_plot_x"] == pytest.approx(np.sqrt(10) / 7)
+
+
+def test_watopia_surface_map_scale_represents_horizontal_game_distance():
+    data = surface_map.get_world_surfaces(1)
+    project = surface_map._projection(1)["project"]
+    x, y = project([0, 1, 0], [0, 0, 1])
+    local_delta = np.linalg.solve(
+        [[x[1] - x[0], x[2] - x[0]], [y[1] - y[0], y[2] - y[0]]],
+        [100, 0],
+    )
+    assert np.linalg.norm(local_delta) == pytest.approx(data["meters_per_plot_x"] * 100)
 
 
 def test_video_cache_export_keeps_geometry_gps_and_named_surface_markers(tmp_path):

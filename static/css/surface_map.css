@@ -313,6 +313,28 @@ select option {
 #map-canvas:active { cursor: grabbing; }
 #map-canvas[hidden], #satellite-map[hidden] { display: none; }
 #satellite-map { position: absolute; inset: 0; }
+.map-scale {
+    position: absolute;
+    bottom: 16px;
+    left: 16px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    background: rgba(16, 24, 32, 0.85);
+    color: #fff;
+    font-size: 12px;
+    line-height: 1.4;
+    text-align: center;
+    pointer-events: none;
+    z-index: 2;
+}
+.map-scale[hidden] { display: none; }
+.map-scale.satellite-scale { bottom: 32px; }
+.map-scale-bar {
+    height: 7px;
+    border: solid #fff;
+    border-width: 0 2px 2px;
+    box-sizing: border-box;
+}
 .map-hint {
     position: absolute;
     inset: 0;

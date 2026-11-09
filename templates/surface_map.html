@@ -8,7 +8,7 @@
     <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
     <title>Surface Map - Zwift Tools</title>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-    <link rel="stylesheet" href="/static/css/surface_map.css?v=10">
+    <link rel="stylesheet" href="/static/css/surface_map.css?v=11">
 </head>
 <body>
     <div class="header-bar">
@@ -58,6 +58,10 @@
                 <div class="canvas-wrap">
                     <div id="satellite-map" role="region" aria-label="Satellite map of the selected video route" hidden></div>
                     <canvas id="map-canvas"></canvas>
+                    <div id="map-scale" class="map-scale" role="img" aria-label="Map distance scale" hidden>
+                        <div id="map-scale-label"></div>
+                        <div id="map-scale-bar" class="map-scale-bar"></div>
+                    </div>
                     <div id="map-hint" class="map-hint">Select a world, then pick a route.</div>
                 </div>
             </div>
@@ -86,7 +90,7 @@
         <p id="road-picker-status" class="road-picker-status" role="alert"></p>
         <ul id="road-picker-list" class="route-list"></ul>
     </dialog>
-    <script src="/static/js/map_canvas.js?v=1"></script>
-    <script src="/static/js/surface_map.js?v=22"></script>
+    <script src="/static/js/map_canvas.js?v=2"></script>
+    <script src="/static/js/surface_map.js?v=24"></script>
 </body>
 </html>

@@ -75,6 +75,54 @@ def test_reverse_partial_and_parallel_passes_are_not_records(points):
     assert segment_prs.find_traversals(frame_from_xy(points), [segment([(0, 0), (100, 0)])]) == []
 
 
+@pytest.mark.parametrize("offset, accepted", [
+    (19.9, True), (20, True), (20.1, False), (35, False), (50, False),
+    (-19.9, True), (-20, True), (-20.1, False),
+])
+def test_crossing_corridor_accepts_only_offsets_within_twenty_metres(offset, accepted):
+    path = [segment([(0, 0), (100, 0)])]
+    offset_frame = frame_from_xy([(x, offset) for x in range(-5, 106, 10)])
+    rows = segment_prs.find_traversals(offset_frame, path)
+    assert len(rows) == int(accepted)
+    if accepted:
+        assert rows[0]["distance_m"] == pytest.approx(100)
+
+
+def test_interior_crossings_use_the_same_twenty_metre_corridor():
+    points = [(x, 25 if 80 < x < 220 else 0) for x in range(-5, 306, 10)]
+    assert segment_prs.find_traversals(
+        frame_from_xy(points), [segment([(0, 0), (300, 0)])],
+    ) == []
+
+
+@pytest.mark.parametrize("offset, accepted", [(10, True), (35, False)])
+def test_molten_momentum_volcano_kom_matches_with_offset_gps_samples(offset, accepted):
+    surface_map = segment_prs.surface_map
+    route = surface_map.get_route(1, 121619062)
+    parts = [part for part in (route.get("leadin"), route.get("route")) if part]
+    xy = np.column_stack([
+        np.concatenate([part["local_x"] for part in parts]),
+        np.concatenate([part["local_z"] for part in parts]),
+    ])
+    distance = np.r_[0, np.cumsum(np.linalg.norm(np.diff(xy, axis=0), axis=1))]
+    valid = np.r_[True, np.diff(distance) > 0]
+    gps = np.asarray(surface_map.local_to_latlng(1, xy[:, 0], xy[:, 1]))
+    axis = np.arange(0, distance[-1], 10)
+    lat = np.interp(axis, distance[valid], gps[valid, 0])
+    lng = np.interp(axis, distance[valid], gps[valid, 1])
+    lng += offset / (111_320 * np.cos(np.radians(lat.mean())))
+    frame = pd.DataFrame({
+        "time_sec": axis / 10, "distance_km": axis / 1000, "lat": lat, "lng": lng,
+    })
+    climb = next(row for row in segment_prs.world_segments(1, segment_prs.catalog_version())
+                 if row["segment_id"] == "1:8176359221329222504")
+    rows = segment_prs.find_traversals(frame, [climb])
+    assert len(rows) == int(accepted)
+    if accepted:
+        assert rows[0]["distance_m"] == pytest.approx(3684, abs=100)
+        assert rows[0]["total_time_sec"] == pytest.approx(368.4, abs=10)
+
+
 def test_wrong_route_with_matching_endpoints_and_distance_is_rejected():
     path = [(0, 0), (100, 0), (100, 100), (200, 100), (200, 0), (300, 0)]
     shortcut = [(-10, 0), (0, 0), (100, 0), (100, -100), (200, -100), (200, 0), (300, 0), (310, 0)]

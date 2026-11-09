@@ -124,8 +124,14 @@
         <!-- Map panel -->
         <section class="panel" id="map-panel" style="display:none;">
             <h2>Race Map</h2>
+            <label class="map-boundaries-control"><input id="show-map-boundaries" type="checkbox" checked> Segment boundaries: green circle = start, red square = finish (hover for name)</label>
             <div id="map-container" class="map-container">
                 <canvas id="map-canvas"></canvas>
+                <div id="map-scale" class="map-scale" role="img" aria-label="Map distance scale" hidden>
+                    <div id="map-scale-label"></div>
+                    <div id="map-scale-bar" class="map-scale-bar"></div>
+                </div>
+                <div id="map-boundary-tooltip" class="map-boundary-tooltip" hidden></div>
                 <button id="map-zoom-in" class="map-zoom-btn" title="Zoom in">+</button>
                 <button id="map-zoom-out" class="map-zoom-btn" title="Zoom out">&minus;</button>
             </div>
@@ -169,6 +175,7 @@
         </div>
     </div>
 
+    <script src="/static/js/map_canvas.js?v=2"></script>
     <script src="/static/js/race_replay.js"></script>
     <script src="/static/js/ride_compare.js"></script>
 </body>

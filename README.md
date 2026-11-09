@@ -39,6 +39,7 @@ unchanged.
   - *Riders mode* — individual rider dots on the elevation profile
   - *Peloton mode* — automatic group detection with colored bars, group stats
 - **Interactive map** — overhead view of the Zwift world with route line and rider dots, zoom/pan/follow
+- Bottom-left metric distance scale follows map zoom and pan; segment boundary markers show starts as green circles and finishes as red squares, with names on hover and an independent visibility toggle. Only boundaries within the raced distance are shown; repeated laps share map markers. Ride Compare uses the same map controls
 - **Rider table** — live position, gap, power, 1-min avg, NP, weight, HR, speed, distance; sortable columns, W/kg toggle
 - **YouTube stream links** — auto-detects known streamers, links to VOD at the current playback timestamp, handles trimmed VODs
 - **Rider analysis** — pick any rider to see where they lost contact (drops and near misses), what it would have taken to stay on, where they spent more than the riders around them, and moves that worked; thresholds are explained in the in-app FAQ
@@ -49,6 +50,8 @@ unchanged.
 ### Surface Map / Route Explorer
 
 - Browse worlds and routes at `/surface-map`, with surface-colored elevation profiles
+- Virtual-world GPS transforms fit an affine mapping from game x/z coordinates to cached ZwiftMap GPS routes. Watopia uses the wider-coverage Peak Performance reference rather than Jungle Circuit Reverse, improving alignment across both northern and southern roads. Previously cleaned replays are rebuilt from saved telemetry on their next load; segment PR caches also invalidate when the calibration changes
+- A bottom-left metric distance scale updates with zoom and resizing. Canvas maps derive horizontal distances from the inverse world projection in game metres; video satellite maps use their geographic zoom scale
 - Road overlays use thin, zoom-aware strokes (1.5 CSS pixels at world fit, growing gently up to 3 pixels); selected routes remain more prominent, including on high-DPI screens and after resizing
 - New York subway escalators are highlighted in gold, including repeated passages and lead-ins
 - Hover an escalator marker for its distance interval and trainer-slope scale
@@ -93,6 +96,7 @@ python tools\extract_zwift_routes.py --world world4
 - Open `/segment-prs` while logged in to progressively analyze all activities from the past 90 days
 - Detect complete, forward traversals against the calibrated segment paths and timing boundaries used by Surface Map; repeated passes in a ride are separate attempts
 - A nearby road can cross a segment's finish-line plane before the true finish (for example Dos d'Âne Sprint Reverse on Croissant); later crossings are checked until one satisfies the recorded-distance and ordered-path checks, without relaxing those checks
+- Directional crossing lines accept interpolated crossings up to 20 m from their reference points, including at interior route-validation gates; recorded-distance and ordered-path checks still reject incomplete or wrong-route traversals
 - Search segment names and paginate the fastest attempt per segment, or select a segment to see all attempts, including repeated passes within a ride, ranked by duration by default; all traversals remain recorded in the activity cache
 - Forward and reverse segments retain their distinct IDs; when both directions share a catalog name, their dashboard labels explicitly distinguish Forward and Reverse
 - Click any data-column heading to sort all results before pagination, then click again to reverse the order; missing metrics stay last in either direction

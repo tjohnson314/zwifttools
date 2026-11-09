@@ -6,6 +6,65 @@ const vm = require('node:vm');
 
 const SEGMENT_LOCATION_TOLERANCE_M = 20;
 
+function scaleContext() {
+    const elements = new Map(['map-scale', 'map-scale-label', 'map-scale-bar'].map(id => [id, {
+        style: {}, classList: { toggle() {} }, setAttribute(name, value) { this[name] = value; },
+    }]));
+    const context = vm.createContext({
+        document: { addEventListener() {}, getElementById: id => elements.get(id) },
+    });
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../static/js/map_canvas.js'), 'utf8'), context);
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../static/js/surface_map.js'), 'utf8'), context);
+    return { context, elements };
+}
+
+test('distance scale chooses readable metric lengths and stays within its CSS width', () => {
+    const { context } = scaleContext();
+    for (const metersPerPixel of [0.001, 0.2, 1, 10, 100, 1000]) {
+        const scale = context.mapScaleMeasurement(metersPerPixel);
+        assert.ok(scale.width <= 120 && scale.width > 0);
+        assert.ok(Math.abs(scale.width * metersPerPixel - scale.meters) < 1e-9);
+    }
+    assert.equal(context.mapScaleMeasurement(1).label, '100 m');
+    assert.equal(context.mapScaleMeasurement(10).label, '1 km');
+    assert.equal(context.mapScaleMeasurement(0.001).label, '0.1 m');
+    assert.equal(context.mapScaleMeasurement(NaN), null);
+    assert.equal(context.mapScaleMeasurement(0), null);
+});
+
+test('canvas distance scale follows zoom, DPI, resizing and local-metre worlds', () => {
+    const { context, elements } = scaleContext();
+    vm.runInContext('state.world = {meters_per_plot_x: 2}; state.scale = 2;', context);
+    context.updateMapScale();
+    assert.equal(elements.get('map-scale-label').textContent, '100 m');
+    assert.equal(elements.get('map-scale-bar').style.width, '100px');
+    assert.equal(elements.get('map-scale')['aria-label'], 'Map distance scale: 100 m');
+    vm.runInContext('state.dpr = 2; state.scale = 4;', context);
+    context.updateMapScale();
+    assert.equal(elements.get('map-scale-bar').style.width, '100px');
+    vm.runInContext('state.scale = 8;', context);
+    context.updateMapScale();
+    assert.equal(elements.get('map-scale-label').textContent, '50 m');
+    vm.runInContext('state.world = {meters_per_plot_x: 1}; state.dpr = 1; state.scale = 1;', context);
+    context.updateMapScale();
+    assert.equal(elements.get('map-scale-label').textContent, '100 m');
+    vm.runInContext('state.world = null;', context);
+    context.updateMapScale();
+    assert.equal(elements.get('map-scale').hidden, true);
+});
+
+test('satellite scale uses geographic latitude and zoom independent of canvas DPI', () => {
+    const { context, elements } = scaleContext();
+    vm.runInContext(`state.satelliteActive = true; state.dpr = 2; state.satellite = {map: {
+        getBounds: () => ({getSouthWest: () => ({lat: () => 60})}),
+        getZoom: () => 15,
+    }};`, context);
+    context.updateMapScale();
+    const expectedMetersPerPixel = 2 * Math.PI * 6378137 * 0.5 / (256 * 2 ** 15);
+    assert.equal(elements.get('map-scale-label').textContent, '200 m');
+    assert.ok(Math.abs(parseFloat(elements.get('map-scale-bar').style.width) * expectedMetersPerPixel - 200) < 1e-9);
+});
+
 function routeModeContext() {
     const buttons = ['free_ride', 'race'].map(mode => ({
         dataset: { mode }, disabled: false,

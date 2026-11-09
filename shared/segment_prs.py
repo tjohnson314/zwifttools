@@ -13,6 +13,8 @@ from shared import surface_map
 from shared.utils import calculate_normalized_power
 from shared.zrl_leaderboard import _crossing_time_at_route_position
 
+SEGMENT_CROSSING_CORRIDOR_M = 20
+
 
 def catalog_version():
     paths = [surface_map.CALIBRATION_FILE, surface_map.ZRL_SEGMENTS_FILE,
@@ -34,7 +36,7 @@ def _catalog_version(signature):
                    surface_map._load_segment_names, surface_map._load_calibration,
                    surface_map._projection):
         loader.cache_clear()
-    return "segmentPRsV4:" + digest.hexdigest()[:16]
+    return "segmentPRsV6:" + digest.hexdigest()[:16]
 
 
 def segment_map_id(activity):
@@ -96,7 +98,7 @@ def _crossings(frame, path, position):
     remaining = frame
     while len(remaining) >= 2:
         crossing = _crossing_time_at_route_position(
-            remaining, path, position, max_lateral_m=30,
+            remaining, path, position, max_lateral_m=SEGMENT_CROSSING_CORRIDOR_M,
         )
         if crossing is None:
             break
@@ -197,7 +199,8 @@ def find_traversals(frame, segments, weight_kg=None, height_cm=None, setup=None)
                 gate_time = start
                 for gate in gates:
                     crossing = _crossing_time_at_route_position(
-                        portion[portion["time_sec"] >= gate_time], path, gate, max_lateral_m=30,
+                        portion[portion["time_sec"] >= gate_time], path, gate,
+                        max_lateral_m=SEGMENT_CROSSING_CORRIDOR_M,
                     )
                     if crossing is None or crossing <= gate_time:
                         break
