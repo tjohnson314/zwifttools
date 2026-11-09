@@ -27,6 +27,8 @@ from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from scipy.ndimage import uniform_filter1d
 
+import math
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s %(levelname)s %(name)s: %(message)s',
@@ -37,7 +39,10 @@ from bike_comparison.bike_data import get_bike_database, get_bike_stats, BASE_CD
 from bike_comparison.physics import compare_bike_setups, frontal_area_from_rider, rider_cda, estimate_draft_efficiency
 from bike_comparison.pacing_planner import (
     list_routes,
+    list_segments,
     load_route_profile,
+    load_segment_profile,
+    load_segment_geometry,
     plan_tt_pacing,
     truncate_route_profile,
 )
@@ -2869,6 +2874,15 @@ def api_tt_pacing_routes():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/tt_pacing/segments')
+def api_tt_pacing_segments():
+    try:
+        return jsonify({'segments': list_segments()})
+    except Exception as exc:
+        logger.exception("Error listing pacing planner segments")
+        return jsonify({'error': str(exc)}), 500
+
+
 @app.route('/api/tt_pacing_plan', methods=['POST'])
 def api_tt_pacing_plan():
     """
@@ -2878,6 +2892,7 @@ def api_tt_pacing_plan():
         route_id        (str)   — route ID (WAD route nameHash)
         route_name      (str)   — route name (used for geometry lookup)
         world           (str)   — world name
+        segment_id      (str, optional) — plan a complete timing segment instead
         include_leadin  (bool)  — include the route lead-in (default true)
         rider_weight_kg (float)
         rider_height_cm (float)
@@ -2891,13 +2906,14 @@ def api_tt_pacing_plan():
                         dividers are placed optimally and this wins over dividers_km
         laps            (int, optional) — number of laps for looped routes; the
                         main leg is repeated this many times (lead-in ridden once)
-        custom_distance_km (float, optional) — plan only the initial section of
-                              the course, shorter than its full distance
+        start_distance_km (float, optional) — start of the selected route portion
+        custom_distance_km (float, optional) — end of the selected route portion
     """
     body = request.get_json(force=True, silent=True) or {}
+    segment_id = body.get('segment_id')
 
     try:
-        route_name  = str(body['route_name'])
+        route_name  = str(body['route_name']) if not segment_id else ''
         weight_kg   = float(body['rider_weight_kg'])
         height_cm   = float(body['rider_height_cm'])
         avg_power_w = float(body['avg_power_watts'])
@@ -2925,7 +2941,7 @@ def api_tt_pacing_plan():
             return jsonify({'error': 'num_buckets must be >= 1'}), 400
 
     try:
-        laps = int(body.get('laps', 1) or 1)
+        laps = int(body.get('laps', 1) or 1) if not segment_id else 1
     except (TypeError, ValueError):
         return jsonify({'error': 'laps must be an integer'}), 400
     if laps < 1:
@@ -2936,13 +2952,21 @@ def api_tt_pacing_plan():
     if weight_kg <= 0 or height_cm <= 0:
         return jsonify({'error': 'rider_weight_kg and rider_height_cm must be positive'}), 400
 
-    custom_distance_km = body.get('custom_distance_km')
+    start_distance_km = 0.0
+    custom_distance_km = body.get('custom_distance_km') if not segment_id else None
+    if not segment_id:
+        try:
+            start_distance_km = float(body.get('start_distance_km') or 0.0)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'start_distance_km must be a number'}), 400
+        if not math.isfinite(start_distance_km) or start_distance_km < 0:
+            return jsonify({'error': 'start_distance_km must be finite and non-negative'}), 400
     if custom_distance_km is not None:
         try:
             custom_distance_km = float(custom_distance_km)
         except (TypeError, ValueError):
             return jsonify({'error': 'custom_distance_km must be a number'}), 400
-        if custom_distance_km <= 0:
+        if not math.isfinite(custom_distance_km) or custom_distance_km <= 0:
             return jsonify({'error': 'custom_distance_km must be positive'}), 400
 
     db = get_db()
@@ -2969,13 +2993,19 @@ def api_tt_pacing_plan():
         return jsonify({'error': 'Resulting CdA is non-positive.'}), 400
 
     try:
-        route = load_route_profile(
-            body.get('route_id', ''), route_name, world=body.get('world'),
-            include_leadin=bool(body.get('include_leadin', True)),
-            laps=laps,
-        )
-        if custom_distance_km is not None:
-            route = truncate_route_profile(route, custom_distance_km * 1000.0)
+        if segment_id:
+            route = load_segment_profile(str(segment_id))
+        else:
+            route = load_route_profile(
+                body.get('route_id', ''), route_name, world=body.get('world'),
+                include_leadin=bool(body.get('include_leadin', True)),
+                laps=laps,
+            )
+            if custom_distance_km is not None or start_distance_km:
+                route = truncate_route_profile(
+                    route, custom_distance_km * 1000.0 if custom_distance_km is not None else None,
+                    start_distance_m=start_distance_km * 1000.0,
+                )
         from shared.surface_lookup import get_bike_type_for_frame
         result = plan_tt_pacing(
             route=route,
@@ -2996,6 +3026,7 @@ def api_tt_pacing_plan():
 
     return jsonify({
         'route_name': result.route_name,
+        'start_distance_km': start_distance_km,
         'total_time_seconds': round(result.total_time_seconds),
         'total_time_formatted': result.total_time_formatted,
         'total_distance_km': round(result.total_distance_km, 2),
@@ -3319,6 +3350,13 @@ def api_tt_pacing_route_geometry():
     route_name = request.args.get('route_name', '')
     world      = request.args.get('world') or None
     include_leadin = request.args.get('include_leadin', 'true').lower() != 'false'
+
+    segment_id = request.args.get('segment_id')
+    if segment_id:
+        try:
+            return jsonify(load_segment_geometry(segment_id))
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 404
 
     entry = _find_wad_route(route_name, world, route_id)
     if entry is None:

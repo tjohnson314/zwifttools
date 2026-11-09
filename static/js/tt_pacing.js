@@ -8,6 +8,8 @@
 'use strict';
 
 let allRoutes = [];       // full list from /api/tt_pacing/routes
+let allSegments = [];
+let planMode = 'route';
 let bikeSelector = null;  // shared BikeSelector instance (frame/wheels/level)
 let selectedRoute = null; // currently selected route object
 let planChart = null;     // Chart.js instance
@@ -76,6 +78,24 @@ function getCustomDistanceKm() {
     return isImperial() ? value / KM_TO_MI : value;
 }
 
+function getStartDistanceKm() {
+    const value = parseFloat(document.getElementById('startDistance').value);
+    if (isNaN(value)) return 0;
+    return isImperial() ? value / KM_TO_MI : value;
+}
+
+function portionError() {
+    if (planMode === 'segment') return '';
+    const start = getStartDistanceKm();
+    const end = getCustomDistanceKm();
+    if (!document.getElementById('startDistance').checkValidity()
+        || !document.getElementById('customDistance').checkValidity()
+        || !Number.isFinite(start) || start < 0 || (end != null && (!Number.isFinite(end) || end <= start))) {
+        return 'End distance must be greater than start distance; start must be zero or more.';
+    }
+    return '';
+}
+
 function setUnits(unit) {
     if (unit === currentUnit) return;
     convertInputs(unit);          // convert field values before switching
@@ -88,18 +108,20 @@ function setUnits(unit) {
 function convertInputs(newUnit) {
     const wEl = document.getElementById('riderWeight');
     const hEl = document.getElementById('riderHeight');
-    const distanceEl = document.getElementById('customDistance');
     const w = parseFloat(wEl.value);
     const h = parseFloat(hEl.value);
-    const distance = parseFloat(distanceEl.value);
     if (newUnit === 'imperial') {
         if (!isNaN(w)) wEl.value = Math.round(w * KG_TO_LB);
         if (!isNaN(h)) hEl.value = (h * CM_TO_IN).toFixed(1);
-        if (!isNaN(distance)) distanceEl.value = (distance * KM_TO_MI).toFixed(1);
     } else {
         if (!isNaN(w)) wEl.value = (w / KG_TO_LB).toFixed(1);
         if (!isNaN(h)) hEl.value = Math.round(h / CM_TO_IN);
-        if (!isNaN(distance)) distanceEl.value = (distance / KM_TO_MI).toFixed(1);
+    }
+    for (const id of ['startDistance', 'customDistance']) {
+        const el = document.getElementById(id);
+        const distance = parseFloat(el.value);
+        if (!isNaN(distance)) el.value = (newUnit === 'imperial'
+            ? distance * KM_TO_MI : distance / KM_TO_MI).toFixed(3);
     }
 }
 
@@ -111,13 +133,15 @@ function updateInputConstraints() {
         wEl.min = 66; wEl.max = 440; wEl.step = 1;
         document.getElementById('heightLabel').textContent = 'Height (in)';
         hEl.min = 55; hEl.max = 87; hEl.step = 0.5;
-        document.getElementById('customDistanceLabel').textContent = 'Custom distance (mi)';
+        document.getElementById('startDistanceLabel').textContent = 'Start distance (mi)';
+        document.getElementById('customDistanceLabel').textContent = 'End distance (mi)';
     } else {
         document.getElementById('weightLabel').textContent = 'Weight (kg)';
         wEl.min = 30; wEl.max = 200; wEl.step = 0.5;
         document.getElementById('heightLabel').textContent = 'Height (cm)';
         hEl.min = 140; hEl.max = 220; hEl.step = 1;
-        document.getElementById('customDistanceLabel').textContent = 'Custom distance (km)';
+        document.getElementById('startDistanceLabel').textContent = 'Start distance (km)';
+        document.getElementById('customDistanceLabel').textContent = 'End distance (km)';
     }
 }
 
@@ -164,6 +188,8 @@ function saveSettings() {
         includeLeadin: document.getElementById('includeLeadin').checked,
         draftLevel: document.getElementById('draftLevel').value,
         laps: laps,
+        planMode,
+        startDistanceKm: getStartDistanceKm(),
         customDistanceKm: getCustomDistanceKm(),
     };
     try { localStorage.setItem(TT_SETTINGS_KEY, JSON.stringify(data)); } catch (e) { /* ignore */ }
@@ -201,6 +227,8 @@ function restoreSelections(settings) {
 // ── Initialise ───────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
     const settings = loadSettings();
+    planMode = settings.planMode === 'segment' ? 'segment' : 'route';
+    updateCourseUI();
 
     // Restore rider inputs (canonical metric) before any unit conversion.
     if (settings.weightKg != null) document.getElementById('riderWeight').value = settings.weightKg;
@@ -208,8 +236,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (settings.npTarget != null) document.getElementById('avgPower').value = settings.npTarget;
     if (settings.customDistanceKm != null) {
         const value = isImperial() ? settings.customDistanceKm * KM_TO_MI : settings.customDistanceKm;
-        document.getElementById('customDistance').value = value.toFixed(1);
+        document.getElementById('customDistance').value = value.toFixed(3);
     }
+    if (settings.startDistanceKm != null) document.getElementById('startDistance').value = settings.startDistanceKm;
     if (settings.includeLeadin != null) document.getElementById('includeLeadin').checked = settings.includeLeadin;
     if (settings.draftLevel != null) document.getElementById('draftLevel').value = settings.draftLevel;
     onDraftLevelInput();
@@ -243,20 +272,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Persist choices whenever the user changes them. Bike selections persist
     // via the BikeSelector onChange handler.
-    ['riderWeight', 'riderHeight', 'avgPower', 'customDistance', 'worldFilter', 'routeSelect',
+    ['riderWeight', 'riderHeight', 'avgPower', 'startDistance', 'customDistance', 'worldFilter', 'routeSelect',
      'includeLeadin', 'draftLevel'].forEach(id => {
         const el = document.getElementById(id);
         el.addEventListener('change', saveSettings);
         if (el.type === 'number') el.addEventListener('input', saveSettings);
     });
+    for (const id of ['startDistance', 'customDistance']) {
+        document.getElementById(id).addEventListener('input', updatePlanButton);
+    }
 });
 
 // ── Data loading ─────────────────────────────────────────────────────────────
 async function loadRoutes() {
-    const resp = await fetch('/api/tt_pacing/routes');
-    if (!resp.ok) throw new Error('Could not load routes');
-    const data = await resp.json();
-    allRoutes = data.routes || [];
+    const responses = await Promise.all([
+        fetch('/api/tt_pacing/routes'), fetch('/api/tt_pacing/segments'),
+    ]);
+    if (responses.some(resp => !resp.ok)) throw new Error('Could not load courses');
+    const [routes, segments] = await Promise.all(responses.map(resp => resp.json()));
+    allRoutes = routes.routes || [];
+    allSegments = segments.segments || [];
     buildRouteSlugMap();
     populateWorldFilter();
     filterRoutes();
@@ -279,31 +314,65 @@ function convertToSlug(routeName) {
 // the original route. First match wins when two worlds share a slug.
 function buildRouteSlugMap() {
     routeSlugMap = {};
-    allRoutes.forEach(r => {
-        const slug = convertToSlug(r.name);
-        if (slug && !(slug in routeSlugMap)) routeSlugMap[slug] = r;
-    });
+    for (const [mode, courses] of [['route', allRoutes], ['segment', allSegments]]) {
+        courses.forEach(r => {
+            const slug = `${mode}:${convertToSlug(r.name)}`;
+            if (!(slug in routeSlugMap)) routeSlugMap[slug] = r;
+        });
+    }
+}
+
+function availableCourses() {
+    return planMode === 'segment' ? allSegments : allRoutes;
+}
+
+function updateCourseUI() {
+    const isSegment = planMode === 'segment';
+    document.getElementById('courseLabel').textContent = isSegment ? 'Segment' : 'Route';
+    document.getElementById('leadinGroup').style.display = isSegment ? 'none' : '';
+    document.getElementById('portionGroup').style.display = isSegment ? 'none' : '';
+    for (const mode of ['route', 'segment']) {
+        const btn = document.getElementById(`${mode}Mode`);
+        btn.classList.toggle('active', planMode === mode);
+        btn.setAttribute('aria-pressed', String(planMode === mode));
+    }
+}
+
+function setPlanMode(mode) {
+    if (mode === planMode) return;
+    planMode = mode;
+    selectedRoute = null;
+    laps = 1;
+    updateCourseUI();
+    populateWorldFilter();
+    filterRoutes();
+    clearRouteUrlParam();
+    saveSettings();
 }
 
 // ── World filter ─────────────────────────────────────────────────────────────
 function populateWorldFilter() {
-    const worldNames = new Map(allRoutes.map(r => [r.world, r.world_name || r.world]));
+    const worldNames = new Map(availableCourses().map(r => [r.world, r.world_name || r.world]));
     const worlds = [...worldNames.keys()].sort();
     const sel = document.getElementById('worldFilter');
+    const previous = sel.value;
+    sel.innerHTML = '<option value="">All Worlds</option>';
     worlds.forEach(w => {
         const opt = document.createElement('option');
         opt.value = w;
         opt.textContent = worldNames.get(w);
         sel.appendChild(opt);
     });
+    sel.value = worlds.includes(previous) ? previous : '';
 }
 
 function filterRoutes() {
     const world = document.getElementById('worldFilter').value;
-    const filtered = world ? allRoutes.filter(r => r.world === world) : allRoutes;
+    const courses = availableCourses();
+    const filtered = world ? courses.filter(r => r.world === world) : courses;
 
     const sel = document.getElementById('routeSelect');
-    sel.innerHTML = '<option value="">Select a route…</option>';
+    sel.innerHTML = `<option value="">Select a ${planMode}...</option>`;
     filtered.forEach(r => {
         const opt = document.createElement('option');
         opt.value = r.id;
@@ -323,7 +392,7 @@ function filterRoutes() {
 
 function onRouteChange() {
     const id = document.getElementById('routeSelect').value;
-    selectedRoute = allRoutes.find(r => r.id === id) || null;
+    selectedRoute = availableCourses().find(r => r.id === id) || null;
     laps = 1;
     updateLapUI();
     if (selectedRoute) {
@@ -339,7 +408,7 @@ function onRouteChange() {
 // ── Laps (looped routes only) ─────────────────────────────────────────────────
 function updateLapUI() {
     const group = document.getElementById('lapGroup');
-    const isLoop = !!(selectedRoute && selectedRoute.is_loop);
+    const isLoop = planMode === 'route' && !!(selectedRoute && selectedRoute.is_loop);
     group.style.display = isLoop ? 'block' : 'none';
     if (!isLoop) laps = 1;
     document.getElementById('lapCount').textContent = laps;
@@ -357,7 +426,9 @@ function changeLaps(delta) {
 function setRouteUrlParam(route) {
     try {
         const url = new URL(window.location.href);
-        url.searchParams.set('route', convertToSlug(route.name));
+        url.searchParams.delete('route');
+        url.searchParams.delete('segment');
+        url.searchParams.set(planMode, convertToSlug(route.name));
         window.history.replaceState(null, '', url);
     } catch (e) { /* ignore */ }
 }
@@ -366,6 +437,7 @@ function clearRouteUrlParam() {
     try {
         const url = new URL(window.location.href);
         url.searchParams.delete('route');
+        url.searchParams.delete('segment');
         window.history.replaceState(null, '', url);
     } catch (e) { /* ignore */ }
 }
@@ -373,11 +445,20 @@ function clearRouteUrlParam() {
 // Resolve a ?route= slug to a route and select it. Returns true on success.
 function selectRouteFromUrl() {
     let slug = null;
-    try { slug = new URL(window.location.href).searchParams.get('route'); }
+    let mode = 'route';
+    try {
+        const params = new URL(window.location.href).searchParams;
+        mode = params.has('segment') ? 'segment' : 'route';
+        slug = params.get(mode);
+    }
     catch (e) { return false; }
     if (!slug) return false;
-    const route = routeSlugMap[slug];
+    const route = routeSlugMap[`${mode}:${slug}`];
     if (!route) return false;
+    planMode = mode;
+    updateCourseUI();
+    populateWorldFilter();
+    filterRoutes();
 
     const wf = document.getElementById('worldFilter');
     if ([...wf.options].some(o => o.value === route.world)) {
@@ -395,7 +476,7 @@ function selectRouteFromUrl() {
 
 function showRouteStats(route) {
     document.getElementById('routeStats').style.display = 'flex';
-    const includeLeadin = document.getElementById('includeLeadin').checked;
+    const includeLeadin = planMode === 'route' && document.getElementById('includeLeadin').checked;
     const dist = (includeLeadin ? (route.leadin_distance_km || 0) : 0)
         + route.distance_km * laps;
     const ascent = (includeLeadin ? (route.leadin_ascent_m || 0) : 0)
@@ -426,11 +507,12 @@ function updateWperKg() {
 }
 
 function updatePlanButton() {
-    const ready = !!selectedRoute && !!bikeSelector && bikeSelector.isReady();
+    const error = portionError();
+    const ready = !!selectedRoute && !!bikeSelector && bikeSelector.isReady() && !error;
     const btn = document.getElementById('planBtn');
     btn.disabled = !ready;
     document.getElementById('planHint').textContent =
-        ready ? 'Ready — click to build the plan' : 'Select a route and bike to continue';
+        error || (ready ? 'Ready — click to build the plan' : `Select a ${planMode} and bike to continue`);
 }
 
 function showError(msg) {
@@ -477,6 +559,9 @@ function onBucketSliderInput() {
 
 async function requestPlan({ numBuckets = null, isBuild = false } = {}) {
     if (!selectedRoute) return;
+    const error = portionError();
+    if (error) { showError(error); return; }
+    const isSegment = planMode === 'segment';
 
     const weightKg  = getWeightKg();
     const heightCm  = getHeightCm();
@@ -504,9 +589,10 @@ async function requestPlan({ numBuckets = null, isBuild = false } = {}) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 route_id:        selectedRoute.id,
+                segment_id:      isSegment ? selectedRoute.id : undefined,
                 route_name:      selectedRoute.name,
                 world:           selectedRoute.world,
-                include_leadin:  document.getElementById('includeLeadin').checked,
+                include_leadin:  !isSegment && document.getElementById('includeLeadin').checked,
                 rider_weight_kg: weightKg,
                 rider_height_cm: heightCm,
                 avg_power_watts: avgPowerW,
@@ -514,8 +600,9 @@ async function requestPlan({ numBuckets = null, isBuild = false } = {}) {
                 wheel_id:        wheelId,
                 upgrade_level:   level,
                 draft_fraction:  getDraftFraction(),
-                laps:            (selectedRoute.is_loop ? laps : 1),
-                custom_distance_km: getCustomDistanceKm(),
+                laps:            (!isSegment && selectedRoute.is_loop ? laps : 1),
+                start_distance_km: isSegment ? undefined : getStartDistanceKm(),
+                custom_distance_km: isSegment ? undefined : getCustomDistanceKm(),
                 num_buckets:     numBuckets != null ? numBuckets : undefined,
             }),
         });
@@ -582,7 +669,7 @@ async function exportSaucePlan() {
 
     const planName = (lastPlanData.route_name || selectedRoute.name || '').replace(/,/g, ' ');
     const rows = ['course_id,route_id,name,date',
-        `${selectedRoute.course_id || ''},${selectedRoute.id || ''},${planName},${new Date().toISOString().substring(0, 10)}`,
+        `${selectedRoute.course_id || ''},${planMode === 'route' ? selectedRoute.id || '' : ''},${planName},${new Date().toISOString().substring(0, 10)}`,
         'time_sec,distance_m,lat,lng'];
     let elapsed = 0;
     let previousDistance = 0;
@@ -611,6 +698,7 @@ async function exportSaucePlan() {
 function interpolateRouteGps(distanceM) {
     const points = routeGeometry && routeGeometry.combined;
     if (!points || points.length < 2 || points.some(p => p.lat == null || p.lng == null)) return null;
+    distanceM = mapDistanceToGeometry(distanceM);
     if (distanceM <= points[0].d) return [points[0].lat, points[0].lng];
     if (distanceM >= points[points.length - 1].d) {
         const last = points[points.length - 1];
@@ -853,8 +941,10 @@ function formatTime(sec) {
 // Fetch the lead-in + route geometry for the current route and draw it.
 async function loadRouteMap() {
     if (!selectedRoute) return;
-    const includeLeadin = document.getElementById('includeLeadin').checked;
-    const key = `${selectedRoute.id}|${selectedRoute.name}|${selectedRoute.world}|${includeLeadin}`;
+    const isSegment = planMode === 'segment';
+    const includeLeadin = !isSegment && document.getElementById('includeLeadin').checked;
+    const key = `${planMode}|${selectedRoute.id}|${selectedRoute.name}|${selectedRoute.world}|${includeLeadin}`;
+    document.getElementById('mapLeadinLegend').style.display = includeLeadin ? '' : 'none';
 
     if (!routeGeometry || routeGeometry.key !== key) {
         const params = new URLSearchParams({
@@ -863,6 +953,7 @@ async function loadRouteMap() {
             world: selectedRoute.world || '',
             include_leadin: includeLeadin ? 'true' : 'false',
         });
+        if (isSegment) params.set('segment_id', selectedRoute.id);
         try {
             const res = await fetch('/api/tt_pacing/route_geometry?' + params.toString());
             const data = await res.json();
@@ -1005,6 +1096,7 @@ function drawRouteMap() {
 
 // Map a full-plan distance onto the single lap represented by the map geometry.
 function mapDistanceToGeometry(targetM) {
+    targetM += ((lastPlanData && lastPlanData.start_distance_km) || 0) * 1000;
     if (!routeGeometry) return targetM;
     const route = routeGeometry.legs.find(l => l.name === 'route');
     if (!route || route.pts.length < 2) return targetM;

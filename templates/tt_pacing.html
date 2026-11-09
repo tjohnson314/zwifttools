@@ -30,7 +30,14 @@
 
         <!-- Route -->
         <div class="panel">
-            <h2>🗺 Route</h2>
+            <h2>🗺 Course</h2>
+
+            <div class="form-group">
+                <div class="unit-toggle" role="group" aria-label="Course type">
+                    <button type="button" class="unit-btn active" id="routeMode" aria-pressed="true" onclick="setPlanMode('route')">Route</button>
+                    <button type="button" class="unit-btn" id="segmentMode" aria-pressed="false" onclick="setPlanMode('segment')">Segment</button>
+                </div>
+            </div>
 
             <div class="form-group">
                 <label for="worldFilter">World</label>
@@ -40,22 +47,26 @@
             </div>
 
             <div class="form-group">
-                <label for="routeSelect">Route</label>
+                <label for="routeSelect" id="courseLabel">Route</label>
                 <select id="routeSelect" onchange="onRouteChange()">
                     <option value="">Loading routes…</option>
                 </select>
             </div>
 
-            <div class="form-group form-check">
+            <div class="form-group form-check" id="leadinGroup">
                 <input type="checkbox" id="includeLeadin" checked>
                 <label for="includeLeadin">Include lead-in</label>
             </div>
 
-            <div class="form-group">
-                <label for="customDistance" id="customDistanceLabel">Custom distance (km)</label>
-                <input type="number" id="customDistance" min="0.1" step="0.1"
-                       placeholder="Full route">
-                  <p class="field-hint">Leave blank for the full route; custom distance must be shorter.</p>
+            <div id="portionGroup">
+                <div class="form-group">
+                    <label for="startDistance" id="startDistanceLabel">Start distance (km)</label>
+                    <input type="number" id="startDistance" min="0" step="any" placeholder="0">
+                </div>
+                <div class="form-group">
+                    <label for="customDistance" id="customDistanceLabel">End distance (km)</label>
+                    <input type="number" id="customDistance" min="0" step="any" placeholder="Route finish">
+                </div>
             </div>
 
             <div class="form-group lap-group" id="lapGroup" style="display:none;">
@@ -222,10 +233,10 @@
         <!-- Route map (lead-in + route) -->
         <div class="map-section" id="mapSection" style="display:none;">
             <div class="map-header">
-                <h3>Route map</h3>
+                <h3>Course map</h3>
                 <div class="map-legend">
-                    <span class="map-legend-item"><i class="swatch swatch-leadin"></i>Lead-in</span>
-                    <span class="map-legend-item"><i class="swatch swatch-route"></i>Route</span>
+                    <span class="map-legend-item" id="mapLeadinLegend"><i class="swatch swatch-leadin"></i>Lead-in</span>
+                    <span class="map-legend-item"><i class="swatch swatch-route"></i>Course</span>
                 </div>
             </div>
             <div class="map-container">

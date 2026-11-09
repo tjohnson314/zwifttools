@@ -397,6 +397,95 @@ def list_routes() -> list[dict]:
     return sorted(routes, key=lambda r: (r["world"], r["name"]))
 
 
+@lru_cache(maxsize=1)
+def _segment_catalog() -> dict:
+    catalog = {}
+    for map_id, world_name in surface_map._WORLD_NAMES.items():
+        for route in surface_map._load_route_world(map_id).get("routes", []):
+            path = route.get("segment_path")
+            if not path or not path.get("d") or not path.get("alt"):
+                continue
+            checkpoints = np.asarray(path["d"], dtype=float)
+            for segment in route.get("segments", []):
+                length = segment.get("distance_m")
+                maximum = segment.get("max_distance_m")
+                if length is None or length <= 0 or (maximum is not None and maximum - length > 25):
+                    continue
+                start = segment.get("start_checkpoint", segment["percent_start"] * checkpoints[-1])
+                end = segment.get("end_checkpoint", segment["percent_end"] * checkpoints[-1])
+                if start < checkpoints[0] or end > checkpoints[-1] or start >= end:
+                    continue
+                key = f"{map_id}:{segment['hash']}"
+                if key in catalog and catalog[key]["length"] >= length:
+                    continue
+                interior = checkpoints[(checkpoints > start) & (checkpoints < end)]
+                samples = np.concatenate(([start], interior, [end]))
+                arch = segment.get("timing_arch_checkpoint")
+                if segment.get("boundary_source") == "closed_route_lap" and arch is not None:
+                    samples = np.concatenate(([arch], samples[samples > arch], samples[samples < arch], [arch]))
+                xs = np.interp(samples, checkpoints, path["x"])
+                zs = np.interp(samples, checkpoints, path["z"])
+                altitude = np.interp(samples, checkpoints, path["alt"])
+                scale = surface_map.get_world_altitude_scale(map_id)
+                altitude = altitude[0] + (altitude - altitude[0]) * scale
+                distances = np.concatenate(([0.0], np.cumsum(np.hypot(np.diff(xs), np.diff(zs)))))
+                if distances[-1] <= 0:
+                    continue
+                name = segment.get("name") or surface_map._load_segment_names().get(
+                    int(segment["hash"]), f"Segment {segment['hash']}")
+                catalog[key] = {
+                    "id": key, "name": name, "world": world_name.upper(), "world_name": world_name,
+                    "course_id": map_id, "distance_km": float(distances[-1]) / 1000.0,
+                    "ascent_m": float(np.maximum(np.diff(altitude), 0).sum()),
+                    "direction": segment.get("direction"), "length": length,
+                    "leg": {"d": distances.tolist(), "alt": altitude.tolist(),
+                            "x": xs.tolist(), "z": zs.tolist()},
+                }
+    by_name = {}
+    for entry in catalog.values():
+        by_name.setdefault((entry["world"], entry["name"]), []).append(entry)
+    for entries in by_name.values():
+        if len(entries) > 1:
+            for entry in entries:
+                direction = {"F": "Forward", "R": "Reverse"}.get(entry["direction"], entry["id"])
+                entry["name"] += f" ({direction})"
+    return catalog
+
+
+def list_segments() -> list[dict]:
+    """List complete directional timing segments with real elevation geometry."""
+    return sorted(
+        ({key: value for key, value in entry.items() if key not in ("leg", "length")}
+         for entry in _segment_catalog().values()),
+        key=lambda entry: (entry["world"], entry["name"]),
+    )
+
+
+def load_segment_geometry(segment_id: str) -> dict:
+    """Load a timing segment on a zero-based distance axis."""
+    entry = _segment_catalog().get(str(segment_id))
+    if entry is None:
+        raise ValueError("Unknown segment or no elevation data available for this segment")
+    leg = surface_map._pack_leg(entry["course_id"], entry["leg"])
+    leg["latlng"] = surface_map.local_to_latlng(entry["course_id"], entry["leg"]["x"], entry["leg"]["z"])
+    return {"route_name": entry["name"], "world": entry["world"],
+            "background": surface_map.get_world_background(entry["course_id"])["background"],
+            "leadin": None, "route": leg}
+
+
+def load_segment_profile(segment_id: str) -> RouteProfile:
+    data = load_segment_geometry(segment_id)
+    leg = data["route"]
+    latlng = np.asarray(leg["latlng"], dtype=float) if leg["latlng"] else None
+    return RouteProfile(
+        name=data["route_name"], world=data["world"],
+        distance_m=np.asarray(leg["d"], dtype=float), altitude_m=np.asarray(leg["alt"], dtype=float),
+        surfaces=np.asarray(leg["surface"], dtype=object),
+        lats=latlng[:, 0] if latlng is not None else None,
+        lngs=latlng[:, 1] if latlng is not None else None,
+    )
+
+
 def load_route_profile(
     route_id: str,
     route_name: str,
@@ -472,37 +561,36 @@ def load_route_profile(
     )
 
 
-def truncate_route_profile(route: RouteProfile, distance_m: float) -> RouteProfile:
-    """Return the initial section of a route, interpolating its final sample."""
+def truncate_route_profile(
+    route: RouteProfile, distance_m: Optional[float] = None, start_distance_m: float = 0.0,
+) -> RouteProfile:
+    """Return a zero-based route portion, interpolating both boundary samples."""
     distances = np.asarray(route.distance_m, dtype=float)
-    end_distance = float(distances[0]) + distance_m
-    if not np.isfinite(distance_m) or distance_m <= 0 or end_distance >= distances[-1]:
-        raise ValueError("Custom distance must be positive and shorter than the full route")
+    full_distance = float(distances[-1] - distances[0])
+    end_m = full_distance if distance_m is None else distance_m
+    if (not np.isfinite(start_distance_m) or not np.isfinite(end_m)
+            or start_distance_m < 0 or end_m <= start_distance_m or end_m > full_distance):
+        raise ValueError("Custom distance must satisfy 0 <= start < end <= full route distance")
 
-    end_index = int(np.searchsorted(distances, end_distance, side="left"))
-    cropped_distance = np.append(distances[:end_index], end_distance)
-    cropped_altitude = np.append(
-        route.altitude_m[:end_index],
-        np.interp(end_distance, distances, route.altitude_m),
-    )
+    start_distance = float(distances[0]) + start_distance_m
+    end_distance = float(distances[0]) + end_m
+    interior = distances[(distances > start_distance) & (distances < end_distance)]
+    sample_distances = np.concatenate(([start_distance], interior, [end_distance]))
+    cropped_altitude = np.interp(sample_distances, distances, route.altitude_m)
 
     cropped_surfaces = None
     if route.surfaces is not None:
-        surface_index = np.searchsorted(distances, end_distance, side="right") - 1
-        cropped_surfaces = np.append(route.surfaces[:end_index], route.surfaces[surface_index])
+        surface_indices = np.searchsorted(distances, sample_distances, side="right") - 1
+        cropped_surfaces = route.surfaces[surface_indices]
 
     cropped_lats = cropped_lngs = None
     if route.lats is not None and route.lngs is not None:
-        cropped_lats = np.append(
-            route.lats[:end_index], np.interp(end_distance, distances, route.lats)
-        )
-        cropped_lngs = np.append(
-            route.lngs[:end_index], np.interp(end_distance, distances, route.lngs)
-        )
+        cropped_lats = np.interp(sample_distances, distances, route.lats)
+        cropped_lngs = np.interp(sample_distances, distances, route.lngs)
 
     return RouteProfile(
         name=route.name,
-        distance_m=cropped_distance,
+        distance_m=sample_distances - start_distance,
         altitude_m=cropped_altitude,
         lats=cropped_lats,
         lngs=cropped_lngs,
