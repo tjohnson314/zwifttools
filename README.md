@@ -17,6 +17,7 @@ unchanged.
 
 - Load any Zwift activity by URL/ID or upload a .fit file
 - Compare your actual bike against any frame/wheel/upgrade-level combination
+- Bike selectors in Bike Comparison and both pacing planners offer **Top performers only** (off by default), limiting choices to the combined road and TT Top Performers lists while retaining required fixed wheels. Explicitly restoring or copying equipment outside those lists turns the filter off.
 - Physics model using Zwift's CdA, Crr, weight, and gradient data
 - Estimates drafting savings from your recorded telemetry
 - Time range slider to focus analysis on specific sections
@@ -174,9 +175,21 @@ Standalone browser overlays for [Sauce4Zwift](https://www.sauce.llc/), installed
 | **Surface Telemetry** | `sauce_mod_surface_telemetry/` | Records your telemetry with manual surface type tagging (Tarmac, Cobbles, Brick, Wood, Dirt, Gravel) for CRR mapping. Exports CSV. |
 | **Team Race Score** | `sauce_mod_team_race/` | Live team race scoreboard — tracks two teams across categories with 3/2/1 point scoring, gap-to-rival, and power stats. |
 | **Race Telemetry** | `sauce_mod_telemetry/` | Records per-second telemetry for all nearby riders (power, HR, speed, cadence, location, draft). Exports rider telemetry + profiles as separate CSVs. |
+| **Power Breakdown** | `sauce_mod_power_breakdown/` | Live aero, rolling, gravity, acceleration, and draft power estimates using bike upgrade stats and road surfaces. |
 | **Nearby Draft** | `sauce_mod_nearby_draft/` | Live road map with initials-centered draft donuts at actual rider positions: green effective draft, blue wasted watts, gray remaining maximum draft. Configurable radius (default 50 m) and closest-rider limit (0 = unlimited), with displayed/actual rider counts including you. Zoomable; negative segments are dashed and flagged rather than clipped. Uses each rider's Zwift weight/height, automatic road surfaces, and a configurable shared bike assumption. |
 
 Nearby Draft interpolates all rider positions, displayed distances, and camera motion at approximately 30 Hz using one shared delayed game timestamp. Playback has a one-second buffer anchored to your position history. New or stale riders wait individually until their history covers the displayed timestamp, without hiding the rest of the group or extrapolating positions. Draft values and radius filtering continue to use the actual telemetry.
+
+Refresh the bundled bike stats, physics constants, rolling resistance, and road
+surface data for **both Power Breakdown and Nearby Draft** from the repository root:
+
+```powershell
+python tools/build_power_breakdown_data.py
+```
+
+The builder uses the current bike database and local Zwift world WADs. If no WADs
+are available, existing road-surface bundles are preserved. Other map-based mods
+load road geometry directly from Sauce rather than bundling repository route data.
 
 ## Data Sources
 

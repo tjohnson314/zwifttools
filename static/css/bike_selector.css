@@ -1,0 +1,20 @@
+.bike-selector-filter label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.bike-selector-filter input[type="checkbox"] {
+    appearance: auto;
+    accent-color: #f7931e;
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    padding: 0;
+}
+
+.bike-selector-filter [role="alert"] {
+    color: #ef5350;
+}
