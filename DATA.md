@@ -12,6 +12,7 @@ This document describes the complete data pipeline for every page and API endpoi
 - [Surface Map](#surface-map)
 - [My Activities](#my-activities)
 - [Workout Analysis](#workout-analysis)
+- [Workout Route Check](#workout-route-check)
 - [Bike Comparison](#bike-comparison)
 - [Race Replay](#race-replay)
 - [Ride Compare](#ride-compare)
@@ -720,6 +721,68 @@ There is no automatic workout matching, pause/skip reconstruction, or
 mid-workout intensity reconstruction.
 
 ---
+
+## Workout Route Check
+
+### Page: `GET /workout-route`
+
+Requires login and is linked from the homepage. Rider weight, height, and FTP
+come from `GET /api/my_profile`; every value remains editable. Profile errors
+are shown and allow manual entry. A profile response never overwrites a field
+edited while the request was pending.
+
+Routes reuse `GET /api/tt_pacing/routes`; equipment uses the shared `BikeSelector`
+and frame/wheel/stats APIs. Built-in workout selection uses the existing catalog
+and detail APIs. Custom `.zwo` files reuse `POST /api/workouts/upload`; neither
+uploads nor estimates are persisted.
+
+Page settings are stored locally under `workoutRouteSettings`: rider inputs,
+frame/wheel/upgrade choices, world/route/lead-in selection, workout search and
+built-in workout ID, and untargeted-block power. Saved non-empty rider values
+take precedence over profile values on reload. Dropdowns are restored only
+after their catalogs load, and unavailable cached choices are not selected.
+Custom workout contents, files, and prediction results are never stored.
+Storage errors are reported without blocking manual use of the page.
+
+### Prediction: `POST /api/workout_route_plan`
+
+Requires login. Accepts `route_id`, `include_leadin` (default true),
+`rider_weight_kg`, `rider_height_cm`, `ftp_w`, `frame_id`, `wheel_id`,
+`upgrade_level`, and either `workout_id` or the uploaded numeric
+`custom_workout` object. `untargeted_percent` (default 75) specifies power for
+blocks without targets, as a percentage of the rider's FTP. Numeric custom plans
+are validated again; malformed/non-finite values, negative power targets, and
+workouts longer than 24 hours are explicitly rejected, not clipped.
+
+`bike_comparison/workout_route.py` integrates power and kinetic energy over the
+existing `RouteProfile` using the shared air density, gravity, drivetrain loss,
+rider/bike CdA model, and bike-specific surface CRR tables. Zero-power blocks
+integrate velocity so a stopped rider can accelerate downhill without a
+numerical minimum speed. Zero-distance geometry joins have no traversal time;
+gradients are computed only over positive-distance edges without clipping.
+Lead-in requests fail if only fallback geometry without lead-in support exists;
+main-route-only fallback estimates explicitly warn about default CRR.
+
+Assumptions: standing start, no drafting, uninterrupted workout, and midpoint power
+for target ranges. All segment targets round to the nearest 5 W after FTP
+scaling, with halfway values rounded up to match Workout Analysis. Ramps are
+split at exact rounding thresholds so simulation and chart use identical
+five-watt plateaus, including zero-power coasting steps. Estimates support up
+to 10,000 simulation steps including these plateaus; larger plans fail explicitly.
+Fixed
+`ftp_override` references replace rider FTP only for prescribed targets;
+untargeted blocks always use the rider's FTP. Parser warnings, including nominal
+variable-duration schedules and quantized-ramp approximations, remain visible.
+
+Returns `completed`, `finish_time_sec` (null when unfinished),
+`workout_duration_sec`, `workout_time_remaining_sec`, `route_distance_km`,
+`distance_covered_km`, `distance_remaining_km`, rider/reference FTP, and warnings.
+The profile contains time, distance, altitude, power, and speed at five-second
+intervals plus exact block/rounded-ramp boundaries and the finish event. Calculation stops at
+the route finish or workout end, whichever comes first. Distance uses loaded
+geometry, not rounded catalog labels. There is no extrapolation past the route
+finish or promise of badge eligibility. Input changes invalidate visible
+results and stale asynchronous responses.
 
 ## Bike Comparison
 

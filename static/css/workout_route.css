@@ -1,0 +1,67 @@
+.panels > .panel,
+.controls > .form-group {
+    min-width: 0;
+}
+
+.workout-panel { margin-bottom: 20px; }
+
+.controls {
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+}
+
+.controls > .form-group {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+.controls > .wide { flex: 2; }
+.upload-controls { margin-top: 16px; }
+
+.btn-upload {
+    padding: 10px 14px;
+    border: 1px solid rgba(247,147,30,0.7);
+    border-radius: 8px;
+    background: rgba(247,147,30,0.12);
+    color: #f7931e;
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.btn-upload:hover:not(:disabled) { background: rgba(247,147,30,0.24); }
+.btn-upload:disabled { opacity: 0.4; cursor: not-allowed; }
+
+#workoutFile::file-selector-button {
+    margin-right: 12px;
+    padding: 6px 10px;
+    border: 1px solid #2a2a45;
+    border-radius: 6px;
+    background: #2a2a45;
+    color: #fff;
+    font: inherit;
+    cursor: pointer;
+}
+
+.workout-panel > .field-hint,
+#storageStatus,
+#estimateForm > .field-hint { margin-top: 12px; }
+
+#workoutWarnings,
+#resultWarnings { padding-left: 18px; }
+
+#workoutInfo,
+#resultDetails { overflow-wrap: anywhere; }
+
+.simulate-bar { margin-top: 20px; }
+.error { margin-bottom: 20px; color: #ff9898; }
+.error:empty { display: none; }
+.chart { height: 420px; margin-top: 20px; }
+[hidden] { display: none !important; }
+
+@media (max-width: 650px) {
+    .controls { flex-direction: column; align-items: stretch; }
+    .chart { height: 320px; }
+}

@@ -51,6 +51,7 @@ from bike_comparison.ttt_planner import (
     TTTRider,
     plan_ttt_pacing,
 )
+from bike_comparison.workout_route import simulate_workout_route, validate_workout
 from shared.utils import calculate_normalized_power
 from shared.data_fetcher import (
     fetch_rider_telemetry, convert_telemetry_to_dataframe,
@@ -668,6 +669,82 @@ def api_workouts(workout_id=None):
     except (OSError, ValueError, KeyError):
         logger.exception("Could not load workout catalog")
         return jsonify({'error': 'Workout catalog unavailable. Run tools\\extract_zwift_workouts.py.'}), 503
+
+
+@app.route('/workout-route')
+def workout_route():
+    if 'tokens' not in session:
+        return redirect(url_for('auth_login', next=request.full_path.rstrip('?')))
+    return render_template('workout_route.html')
+
+
+@app.route('/api/workout_route_plan', methods=['POST'])
+def api_workout_route_plan():
+    if 'tokens' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    if request.content_length is not None and request.content_length > 4 * MAX_WORKOUT_BYTES:
+        return jsonify({'error': 'Workout request is too large.'}), 413
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({'error': 'Expected a JSON object.'}), 400
+    try:
+        if body.get('workout_id') and body.get('custom_workout') is not None:
+            raise ValueError("Choose either a built-in or custom workout, not both.")
+        if body.get('workout_id'):
+            try:
+                workout = load_workouts().get(str(body['workout_id']))
+            except (OSError, ValueError, KeyError):
+                logger.exception("Could not load workout catalog")
+                return jsonify({'error': 'Workout catalog unavailable.'}), 503
+            if workout is None:
+                raise ValueError("Workout not found.")
+        else:
+            workout = body.get('custom_workout')
+        validate_workout(workout)
+        numbers = {}
+        for key in ('rider_weight_kg', 'rider_height_cm', 'ftp_w', 'untargeted_percent'):
+            value = body.get(key, 75.0 if key == 'untargeted_percent' else None)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                raise ValueError(f"{key} must be a finite number.")
+            if value < 0 or (key != 'untargeted_percent' and value == 0):
+                raise ValueError(f"{key} must be {'non-negative' if key == 'untargeted_percent' else 'positive'}.")
+            numbers[key] = value
+        level = body.get('upgrade_level', 0)
+        if isinstance(level, bool) or not isinstance(level, int) or not 0 <= level <= 5:
+            raise ValueError("upgrade_level must be an integer from 0 to 5.")
+        include_leadin = body.get('include_leadin', True)
+        if not isinstance(include_leadin, bool):
+            raise ValueError("include_leadin must be a boolean.")
+        route_info = next((route for route in list_routes()
+                           if str(route['id']) == str(body.get('route_id'))), None)
+        if route_info is None:
+            raise ValueError("Choose a route with available geometry.")
+        bike = get_db().get_bike_stats(str(body.get('frame_id', '')), body.get('wheel_id') or None, level)
+        if bike is None:
+            raise ValueError("Unknown frame/wheel configuration.")
+        route = load_route_profile(
+            str(route_info['id']), route_info['name'], world=route_info['world'],
+            include_leadin=include_leadin,
+        )
+        if include_leadin and route.surfaces is None:
+            raise ValueError("Lead-in geometry unavailable for this route. Uncheck Include lead-in to estimate the main route only.")
+        from shared.surface_lookup import get_bike_type_for_frame
+        result = simulate_workout_route(
+            route, workout, rider_weight_kg=numbers['rider_weight_kg'],
+            bike_weight_kg=bike.weight_kg,
+            cda=rider_cda(numbers['rider_height_cm'] / 100, numbers['rider_weight_kg']) + bike.cda_bias,
+            ftp_w=numbers['ftp_w'], untargeted_percent=numbers['untargeted_percent'],
+            bike_type=get_bike_type_for_frame(bike.frame_type),
+        )
+        result.update(route_name=route.name, workout_name=workout.get('name', 'Custom workout'),
+                      include_leadin=include_leadin)
+        return jsonify(result)
+    except (ValueError, TypeError, KeyError, OverflowError) as error:
+        logger.warning("Invalid workout route estimate: %s", error)
+        return jsonify({'error': str(error)}), 400
+    except (OSError, RuntimeError) as error:
+        logger.exception("Workout route estimate failed")
+        return jsonify({'error': str(error)}), 500
 
 
 @app.route('/api/workouts/upload', methods=['POST'])

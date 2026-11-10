@@ -1,6 +1,6 @@
 # ZwiftTools
 
-A web app for analyzing Zwift rides. Includes **Bike Comparison**, **Race Replay**, **Ride Compare**, **Workout Analysis**, and **TTT Analysis** tools, plus a collection of **Sauce4Zwift mods** for live in-game overlays.
+A web app for analyzing Zwift rides. Includes **Bike Comparison**, **Race Replay**, **Ride Compare**, **Workout Analysis**, **Workout Route Check**, and **TTT Analysis** tools, plus a collection of **Sauce4Zwift mods** for live in-game overlays.
 
 ## Live Site
 
@@ -128,6 +128,21 @@ does not require Zwift to be installed. Refresh it after a client update with:
 ```powershell
 python tools\extract_zwift_workouts.py --zwift-dir "C:\Program Files (x86)\Zwift"
 ```
+
+### Workout Route Check
+
+- Open `/workout-route` while logged in to estimate whether a workout reaches a route finish
+- Load weight, height, and FTP from your Zwift profile; all remain editable, and missing values can be entered manually
+- Remember rider values, bike setup, route/lead-in choices, workout search and built-in selection, and untargeted-block power in browser local storage; saved rider values take precedence over profile values on reload. Custom workouts must be uploaded again
+- Choose a frame, wheels, upgrade level, route, and built-in workout, or upload a custom time-based cycling `.zwo`
+- Include the lead-in by default; unavailable lead-in geometry produces an explicit error rather than silently excluding it
+- Simulate a standing start, solo riding without drafting, surface-aware rolling resistance, and momentum over the existing route geometry
+- Scale prescribed targets by rider FTP, except fixed-reference tests; target ranges use midpoints, then all segment targets round to the nearest 5 W (halfway values round up). Ramps step between rounded targets in both simulation and chart
+- Set an explicit FTP percentage (default 75%) for free-ride, max-effort, and other blocks without power targets
+- See estimated finish time and workout time remaining, or distance still to go at workout end, with a power/distance chart
+- Stop the simulation at the first route finish or workout end; no terrain beyond the finish is invented
+- Custom uploads reuse the existing 1 MiB / 10,000-block limits and are not saved; estimates support workouts up to 24 hours and 10,000 simulation steps including rounded ramp plateaus
+- Variable-duration tests use their nominal schedule and retain interpretation warnings. Results are estimates, not route-badge guarantees
 
 ### TTT Analysis
 

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
+    <title>Workout Route Check - Zwift Tools</title>
+    <link rel="stylesheet" href="/static/css/tt_pacing.css">
+    <link rel="stylesheet" href="/static/css/bike_selector.css">
+    <link rel="stylesheet" href="/static/css/workout_route.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<main class="container">
+    <div class="header-bar">
+        <div>
+            <a href="/" class="back-link">Back to Tools</a>
+            <h1><span class="logo-emoji" aria-hidden="true">&#x1F6B4;</span> Workout Route Check</h1>
+            <p class="subtitle">Will you reach the route finish before your workout ends?</p>
+        </div>
+    </div>
+    <form id="estimateForm">
+        <div class="panels">
+            <section class="panel">
+                <h2><span aria-hidden="true">&#x1F5FA;</span> Route</h2>
+                <div class="form-group">
+                    <label for="worldFilter">World</label>
+                    <select id="worldFilter"><option value="">All worlds</option></select>
+                </div>
+                <div class="form-group">
+                    <label for="routeSelect">Route</label>
+                    <select id="routeSelect" required><option value="">Loading...</option></select>
+                </div>
+                <div class="form-group form-check">
+                    <input id="includeLeadin" type="checkbox" checked>
+                    <label for="includeLeadin">Include lead-in</label>
+                </div>
+                <p id="routeInfo" class="field-hint"></p>
+            </section>
+            <section class="panel">
+                <h2><span aria-hidden="true">&#x1F9CD;</span> Rider</h2>
+                <div class="form-group">
+                    <label for="riderWeight">Weight (kg)</label>
+                    <input id="riderWeight" type="number" step="any" min="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label for="riderHeight">Height (cm)</label>
+                    <input id="riderHeight" type="number" step="any" min="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label for="ftp">FTP (W)</label>
+                    <input id="ftp" type="number" step="any" min="0.01" required>
+                    <p class="field-hint">FTP scales prescribed targets except for fixed-reference tests.</p>
+                </div>
+                <p id="profileStatus" class="field-hint" role="status">Loading your Zwift profile...</p>
+            </section>
+            <section class="panel">
+                <h2><span aria-hidden="true">&#x1F6B2;</span> Bike</h2>
+                <div class="form-group">
+                    <label for="frameSelect">Frame</label>
+                    <select id="frameSelect" required><option value="">Loading...</option></select>
+                </div>
+                <div class="form-group">
+                    <label for="wheelSelect">Wheels</label>
+                    <select id="wheelSelect"><option value="">Loading...</option></select>
+                </div>
+                <div class="form-group">
+                    <label for="upgradeLevel">Upgrade level</label>
+                    <select id="upgradeLevel"><option value="0">Stock</option></select>
+                </div>
+                <div class="bike-summary">
+                    <div class="bike-summary-row">
+                        <span class="bike-summary-label">Total weight</span>
+                        <span id="bikeWeight" class="bike-summary-value weight">-</span>
+                    </div>
+                    <div class="bike-summary-row">
+                        <span class="bike-summary-label">Total CdA bias</span>
+                        <span id="bikeCda" class="bike-summary-value cda">-</span>
+                    </div>
+                </div>
+            </section>
+        </div>
+        <section class="panel workout-panel">
+            <h2><span aria-hidden="true">&#x1F4CB;</span> Workout</h2>
+            <div class="controls">
+                <div class="form-group">
+                    <label for="workoutSearch">Search built-in workouts</label>
+                    <input id="workoutSearch" type="search" placeholder="Name or training plan">
+                </div>
+                <div class="form-group wide">
+                    <label for="workoutSelect">Built-in workout</label>
+                    <select id="workoutSelect"><option value="">Loading...</option></select>
+                </div>
+            </div>
+            <div class="controls upload-controls">
+                <div class="form-group">
+                    <label for="workoutFile">Or upload a custom workout (.zwo)</label>
+                    <input id="workoutFile" type="file" accept=".zwo">
+                </div>
+                <button id="uploadBtn" class="btn-upload" type="button">Load custom workout</button>
+            </div>
+            <p class="field-hint">Time-based cycling workouts only. Custom files: up to 1 MiB and 10,000 blocks; not saved. Estimates support up to 24 hours and 10,000 steps including rounded ramps.</p>
+            <p id="workoutInfo" class="field-hint" role="status">Choose a built-in workout or upload a custom file.</p>
+            <ul id="workoutWarnings" class="field-hint"></ul>
+            <div class="form-group" id="untargetedGroup" hidden>
+                <label for="untargetedPercent">Power for free-ride, max-effort, and other blocks without targets (% of rider FTP)</label>
+                <input id="untargetedPercent" type="number" min="0" step="any" value="75" required>
+                <p class="field-hint">An explicit assumption, not the workout's prescribed power. Adjust to the effort you expect to ride.</p>
+            </div>
+        </section>
+        <p id="storageStatus" class="field-hint" role="status">Your settings are remembered in this browser. Custom workout files must be uploaded again after reloading.</p>
+        <p class="field-hint">Assumes a standing start, solo riding, no drafting, and uninterrupted target power. Target ranges use their midpoint; ramps follow their endpoints. All segment targets are rounded to the nearest 5 W after FTP scaling. Predictions are estimates, not a guarantee of route-badge eligibility.</p>
+        <div class="simulate-bar">
+            <button id="estimateBtn" class="btn-simulate" type="submit" disabled>Check route completion</button>
+        </div>
+        <p id="error" class="error" role="alert"></p>
+    </form>
+    <section id="results" class="results-section" hidden aria-live="polite">
+        <div class="results-header"><h2 id="resultTitle"></h2></div>
+        <p id="resultSummary"></p>
+        <p id="resultDetails" class="field-hint"></p>
+        <ul id="resultWarnings" class="field-hint"></ul>
+        <p class="field-hint">The simulation stops at the route finish or workout end, whichever comes first. Distance uses the loaded route geometry; no terrain beyond the finish is assumed.</p>
+        <div class="chart"><canvas id="progressChart" role="img" aria-label="Workout power and predicted distance over time"></canvas></div>
+    </section>
+</main>
+<script src="/static/js/bike_selector.js?v=2"></script>
+<script src="/static/js/workout_route.js"></script>
+</body>
+</html>
