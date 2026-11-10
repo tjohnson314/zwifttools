@@ -240,3 +240,138 @@ def test_tt_api_unknown_segment_is_bad_request(tt_api):
     response = module.app.test_client().post("/api/tt_pacing_plan", json=body)
     assert response.status_code == 400
     assert not seen
+
+
+@pytest.fixture
+def start_modes(monkeypatch):
+    from bike_comparison import pacing_planner as planner
+
+    calls = []
+
+    def get_route(map_id, name_hash, mode=None):
+        calls.append(mode)
+        length = 20. if mode == "free_ride" else 60.
+        return {
+            "mapID": map_id, "route_mode": mode, "available_modes": ["race", "free_ride"],
+            "ascent_m": 0., "leadin_ascent_m": 0., "leadin_distance_m": length,
+            "leadin": {"d": [0., length], "alt": [0., 0.], "surface": ["Tarmac"] * 2},
+            "route": {"d": [0., 100.], "alt": [0., 0.], "surface": ["Tarmac"] * 2},
+        }
+
+    monkeypatch.setattr(planner, "_find_wad_route", lambda *args: {"mapID": 1, "nameHash": 123})
+    monkeypatch.setattr(planner.surface_map, "get_route", get_route)
+    return planner, calls
+
+
+def test_route_profiles_select_explicit_start_modes_without_changing_legacy_callers(start_modes):
+    planner, calls = start_modes
+    legacy = planner.load_route_profile("123", "Test")
+    race = planner.load_route_profile("123", "Test", mode="race", laps=2)
+    free = planner.load_route_profile("123", "Test", mode="free_ride", laps=2)
+    assert legacy.distance_m[-1] == 160.
+    assert race.distance_m[-1] == 260.
+    assert free.distance_m[-1] == 220.
+    assert calls == [None, "race", "free_ride"]
+    for mode in ("free_ride", "race"):
+        assert planner.load_route_profile("123", "Test", mode=mode, include_leadin=False).distance_m[-1] == 100.
+
+
+def test_free_ride_never_silently_falls_back_to_race(start_modes, monkeypatch):
+    planner, _ = start_modes
+    race_data = planner.surface_map.get_route(1, 123, mode="race")
+    race_data["available_modes"] = ["race"]
+    monkeypatch.setattr(planner.surface_map, "get_route", lambda *args, **kwargs: race_data)
+    with pytest.raises(ValueError, match="Free-ride version unavailable"):
+        planner.load_route_profile("123", "Event only", mode="free_ride")
+    monkeypatch.setattr(planner, "_find_wad_route", lambda *args: None)
+    with pytest.raises(ValueError, match="Free-ride geometry unavailable"):
+        planner.load_route_profile("123", "Unknown start", mode="free_ride", include_leadin=False)
+    with pytest.raises(ValueError, match="Race lead-in geometry unavailable"):
+        planner.load_route_profile("123", "Unknown start", mode="race")
+
+
+def test_start_options_distinguish_zero_leadin_from_missing_geometry(monkeypatch):
+    from shared import surface_map
+
+    monkeypatch.setattr(surface_map, "_load_route_world", lambda _: {"routes": [{
+        "nameHash": 123, "leadin_distance_m": 60., "route_versions": {
+            "race": {"available": True},
+            "free_ride": {"available": True, "leadin_distance_m": 0.},
+        },
+    }]})
+    options = surface_map.get_route_start_options(1, 123)["leadin_by_mode"]
+    assert options["race"]["distance_m"] is None
+    assert options["free_ride"]["distance_m"] == 0.
+
+
+def test_missing_free_ride_approach_is_explicit_but_main_route_can_be_selected(start_modes, monkeypatch):
+    planner, _ = start_modes
+    data = planner.surface_map.get_route(1, 123, mode="free_ride")
+    data["leadin"] = None
+    monkeypatch.setattr(planner.surface_map, "get_route", lambda *args, **kwargs: data)
+    with pytest.raises(ValueError, match="Free-ride lead-in geometry unavailable"):
+        planner.load_route_profile("123", "No approach", mode="free_ride")
+    assert planner.load_route_profile("123", "No approach", mode="free_ride", include_leadin=False).distance_m[-1] == 100.
+
+
+@pytest.mark.parametrize("mode", ["free_ride", "race"])
+def test_tt_api_passes_start_mode_to_profile_and_response(tt_api, monkeypatch, mode):
+    module, body, _ = tt_api
+    calls = []
+
+    def load(*args, **kwargs):
+        calls.append(kwargs)
+        return make_route_profile()
+
+    monkeypatch.setattr(module, "load_route_profile", load)
+    body["route_mode"] = mode
+    response = module.app.test_client().post("/api/tt_pacing_plan", json=body)
+    assert response.status_code == 200
+    assert response.get_json()["route_mode"] == mode
+    assert calls[0]["mode"] == mode
+
+
+def test_tt_api_rejects_unknown_mode_but_segments_ignore_route_start_modes(tt_api, monkeypatch):
+    module, body, seen = tt_api
+    body["route_mode"] = "invalid"
+    assert module.app.test_client().post("/api/tt_pacing_plan", json=body).status_code == 400
+    assert not seen
+    monkeypatch.setattr(module, "load_segment_profile", lambda _: make_route_profile())
+    body["segment_id"] = "1:123"
+    response = module.app.test_client().post("/api/tt_pacing_plan", json=body)
+    assert response.status_code == 200
+    assert response.get_json()["route_mode"] is None
+
+
+def test_free_ride_catalog_filters_unavailable_starts_and_uses_matching_totals():
+    import app as module
+
+    client = module.app.test_client()
+    routes = client.get("/api/tt_pacing/routes?mode=free_ride").get_json()["routes"]
+    assert routes
+    assert all("free_ride" in route["available_modes"] for route in routes)
+    volcano = next(route for route in routes if route["name"] == "Volcano Circuit")
+    assert volcano["leadin_distance_km"] == volcano["free_ride_leadin_distance_km"]
+    assert volcano["leadin_distance_km"] != volcano["race_leadin_distance_km"]
+    assert client.get("/api/tt_pacing/routes?mode=invalid").status_code == 400
+
+
+def test_real_start_modes_keep_map_and_model_distance_axes_aligned():
+    import app as module
+    from bike_comparison import pacing_planner as planner
+
+    info = next(route for route in planner.list_routes() if route["name"] == "Volcano Circuit")
+    totals = {}
+    for mode in ("race", "free_ride"):
+        profile = planner.load_route_profile(str(info["id"]), info["name"], world=info["world"], mode=mode)
+        response = module.app.test_client().get("/api/tt_pacing/route_geometry", query_string={
+            "route_id": info["id"], "route_name": info["name"], "world": info["world"], "mode": mode,
+        })
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["route_mode"] == mode
+        assert data["route"]["d"][-1] == pytest.approx(profile.distance_m[-1], abs=.11)
+        assert data["route"]["d"][0] == data["leadin"]["d"][-1]
+        totals[mode] = profile.distance_m[-1]
+    assert totals["free_ride"] < totals["race"]
+    assert module.app.test_client().get("/api/tt_pacing/route_geometry?mode=bad").status_code == 400

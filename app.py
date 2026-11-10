@@ -41,6 +41,7 @@ from bike_comparison.pacing_planner import (
     list_routes,
     list_segments,
     load_route_profile,
+    load_route_map_data,
     load_segment_profile,
     load_segment_geometry,
     plan_tt_pacing,
@@ -724,7 +725,7 @@ def api_workout_route_plan():
             raise ValueError("Unknown frame/wheel configuration.")
         route = load_route_profile(
             str(route_info['id']), route_info['name'], world=route_info['world'],
-            include_leadin=include_leadin,
+            include_leadin=include_leadin, mode='free_ride',
         )
         if include_leadin and route.surfaces is None:
             raise ValueError("Lead-in geometry unavailable for this route. Uncheck Include lead-in to estimate the main route only.")
@@ -737,7 +738,7 @@ def api_workout_route_plan():
             bike_type=get_bike_type_for_frame(bike.frame_type),
         )
         result.update(route_name=route.name, workout_name=workout.get('name', 'Custom workout'),
-                      include_leadin=include_leadin)
+                      include_leadin=include_leadin, route_mode='free_ride')
         return jsonify(result)
     except (ValueError, TypeError, KeyError, OverflowError) as error:
         logger.warning("Invalid workout route estimate: %s", error)
@@ -2941,7 +2942,14 @@ def tt_pacing():
 def api_tt_pacing_routes():
     """Return all rideable routes for the pacing planner route selector."""
     try:
+        mode = request.args.get('mode')
+        if mode not in (None, 'race', 'free_ride'):
+            return jsonify({'error': "Mode must be 'free_ride' or 'race'."}), 400
         routes = list_routes()
+        if mode is not None:
+            routes = [dict(route, leadin_distance_km=route.get(f'{mode}_leadin_distance_km'),
+                           leadin_ascent_m=route.get(f'{mode}_leadin_ascent_m'))
+                      for route in routes if mode in route.get('available_modes', ['race'])]
         from shared.world_config import MAP_TO_WORLD_ID
         for route in routes:
             route['course_id'] = MAP_TO_WORLD_ID.get(route.get('world'))
@@ -2971,6 +2979,7 @@ def api_tt_pacing_plan():
         world           (str)   — world name
         segment_id      (str, optional) — plan a complete timing segment instead
         include_leadin  (bool)  — include the route lead-in (default true)
+        route_mode      (str)   — 'race' (default) or 'free_ride'
         rider_weight_kg (float)
         rider_height_cm (float)
         avg_power_watts (float) — target overall average power
@@ -2988,6 +2997,9 @@ def api_tt_pacing_plan():
     """
     body = request.get_json(force=True, silent=True) or {}
     segment_id = body.get('segment_id')
+    route_mode = body.get('route_mode', 'race') if not segment_id else None
+    if not segment_id and route_mode not in ('race', 'free_ride'):
+        return jsonify({'error': "route_mode must be 'free_ride' or 'race'."}), 400
 
     try:
         route_name  = str(body['route_name']) if not segment_id else ''
@@ -3077,6 +3089,7 @@ def api_tt_pacing_plan():
                 body.get('route_id', ''), route_name, world=body.get('world'),
                 include_leadin=bool(body.get('include_leadin', True)),
                 laps=laps,
+                mode=route_mode,
             )
             if custom_distance_km is not None or start_distance_km:
                 route = truncate_route_profile(
@@ -3103,6 +3116,7 @@ def api_tt_pacing_plan():
 
     return jsonify({
         'route_name': result.route_name,
+        'route_mode': route_mode,
         'start_distance_km': start_distance_km,
         'total_time_seconds': round(result.total_time_seconds),
         'total_time_formatted': result.total_time_formatted,
@@ -3420,13 +3434,13 @@ def api_tt_pacing_route_geometry():
     distance on the SAME axis the pacing plan uses (lead-in first, then the
     route offset by the lead-in length), plus the world's background image.
     """
-    from bike_comparison.pacing_planner import _find_wad_route
     from shared import surface_map
 
     route_id   = request.args.get('route_id', '')
     route_name = request.args.get('route_name', '')
     world      = request.args.get('world') or None
     include_leadin = request.args.get('include_leadin', 'true').lower() != 'false'
+    mode = request.args.get('mode')
 
     segment_id = request.args.get('segment_id')
     if segment_id:
@@ -3435,15 +3449,14 @@ def api_tt_pacing_route_geometry():
         except ValueError as exc:
             return jsonify({'error': str(exc)}), 404
 
-    entry = _find_wad_route(route_name, world, route_id)
-    if entry is None:
-        return jsonify({'error': 'No map geometry available for this route'}), 404
-
-    data = surface_map.get_route(entry['mapID'], entry['nameHash'])
+    try:
+        data = load_route_map_data(route_id, route_name, world, include_leadin, mode)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
     if data is None:
         return jsonify({'error': 'Route geometry not found'}), 404
 
-    bg = surface_map.get_world_background(entry['mapID'])
+    bg = surface_map.get_world_background(data['mapID'])
     # Offset by the lead-in's own geometry length (its last d) to match the
     # geometry-derived distance axis used by the pacing plan.
     leadin_d = (data.get('leadin') or {}).get('d') or []
@@ -3456,7 +3469,7 @@ def api_tt_pacing_route_geometry():
         if not leg or not leg.get('x'):
             return None
         latlng = surface_map.local_to_latlng(
-            entry['mapID'], leg.get('local_x', []), leg.get('local_z', [])
+            data['mapID'], leg.get('local_x', []), leg.get('local_z', [])
         )
         return {
             'd': [round(v + d_offset, 1) for v in leg.get('d', [])],
@@ -3467,6 +3480,7 @@ def api_tt_pacing_route_geometry():
 
     return jsonify({
         'route_name': data.get('name', route_name),
+        'route_mode': data['route_mode'],
         'background': bg['background'],
         'bounds': bg['bounds'],
         'leadin_distance_m': round(leadin_len_m, 1),

@@ -54,6 +54,15 @@
                 </select>
             </div>
 
+            <div class="form-group" id="routeStartModeGroup">
+                <label>Start mode</label>
+                <div class="unit-toggle" role="group" aria-label="Route start mode">
+                    <button type="button" class="unit-btn" id="freeRideStart" aria-pressed="false" onclick="setRouteMode('free_ride')">Free Ride</button>
+                    <button type="button" class="unit-btn active" id="raceStart" aria-pressed="true" onclick="setRouteMode('race')">Race</button>
+                </div>
+                <p class="field-hint" id="routeModeHint"></p>
+            </div>
+
             <div class="form-group form-check" id="leadinGroup">
                 <input type="checkbox" id="includeLeadin" checked>
                 <label for="includeLeadin">Include lead-in</label>

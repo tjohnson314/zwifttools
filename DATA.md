@@ -731,7 +731,8 @@ come from `GET /api/my_profile`; every value remains editable. Profile errors
 are shown and allow manual entry. A profile response never overwrites a field
 edited while the request was pending.
 
-Routes reuse `GET /api/tt_pacing/routes`; equipment uses the shared `BikeSelector`
+Routes reuse `GET /api/tt_pacing/routes?mode=free_ride`, excluding routes without
+a free-ride version; equipment uses the shared `BikeSelector`
 and frame/wheel/stats APIs. Built-in workout selection uses the existing catalog
 and detail APIs. Custom `.zwo` files reuse `POST /api/workouts/upload`; neither
 uploads nor estimates are persisted.
@@ -760,8 +761,22 @@ rider/bike CdA model, and bike-specific surface CRR tables. Zero-power blocks
 integrate velocity so a stopped rider can accelerate downhill without a
 numerical minimum speed. Zero-distance geometry joins have no traversal time;
 gradients are computed only over positive-distance edges without clipping.
-Lead-in requests fail if only fallback geometry without lead-in support exists;
-main-route-only fallback estimates explicitly warn about default CRR.
+The profile always uses the explicit `free_ride` version, including native spawn
+geometry rather than a racing paddock. The response includes
+`route_mode: "free_ride"`; client-supplied modes cannot change this. Missing
+free-ride versions fail rather than falling back to race or ZwiftMap geometry.
+Missing positive-distance lead-in geometry fails explicitly when included;
+the user can exclude the lead-in to estimate an available main route.
+
+The regular TT planner at `/tt-pacing` offers Free Ride/Race starts, defaulting
+to Race and remembering the choice in `ttSettings`. Route deep links carry
+`mode=free_ride|race`. `POST /api/tt_pacing_plan` accepts `route_mode`, and
+`GET /api/tt_pacing/route_geometry` accepts the matching `mode`; both use the same
+explicit start geometry. Lead-ins are included once, even for multiple laps.
+Timing segments ignore route start modes. Catalog mode queries filter unavailable
+versions and expose matching lead-in totals; requests without a mode preserve
+legacy catalog fields. Other profile/map callers omitting the mode retain their
+existing display geometry.
 
 Assumptions: standing start, no drafting, uninterrupted workout, and midpoint power
 for target ranges. All segment targets round to the nearest 5 W after FTP

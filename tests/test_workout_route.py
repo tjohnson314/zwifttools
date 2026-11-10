@@ -166,8 +166,8 @@ def test_zero_length_geometry_joins_do_not_create_infinite_gradients():
 
 def test_real_wad_route_includes_leadin_and_supports_geometry_joins():
     info = next(route for route in app_module.list_routes() if route["name"] == "Volcano Circuit")
-    geometry = app_module.load_route_profile(str(info["id"]), info["name"], world=info["world"], include_leadin=True)
-    without_leadin = app_module.load_route_profile(str(info["id"]), info["name"], world=info["world"], include_leadin=False)
+    geometry = app_module.load_route_profile(str(info["id"]), info["name"], world=info["world"], include_leadin=True, mode="free_ride")
+    without_leadin = app_module.load_route_profile(str(info["id"]), info["name"], world=info["world"], include_leadin=False, mode="free_ride")
     assert geometry.distance_m[-1] > without_leadin.distance_m[-1]
     result = simulate(course=geometry)
     assert result["distance_covered_km"] > 0
@@ -270,3 +270,19 @@ def test_missing_leadin_is_not_silently_excluded(client, monkeypatch):
     response = client.post("/api/workout_route_plan", json=body)
     assert response.status_code == 200
     assert any("CRR" in warning for warning in response.get_json()["warnings"])
+
+
+def test_workout_api_always_requests_free_ride_even_if_client_sends_race(client, monkeypatch):
+    calls = []
+
+    def load(*args, **kwargs):
+        calls.append(kwargs)
+        return route(200)
+
+    monkeypatch.setattr(app_module, "load_route_profile", load)
+    body = request_body()
+    body["route_mode"] = "race"
+    response = client.post("/api/workout_route_plan", json=body)
+    assert response.status_code == 200
+    assert response.get_json()["route_mode"] == "free_ride"
+    assert calls[0]["mode"] == "free_ride"

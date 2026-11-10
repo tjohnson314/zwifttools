@@ -186,9 +186,32 @@ def route_is_loop(
         return False
 
 
+def load_route_map_data(
+    route_id: str, route_name: str, world: Optional[str] = None,
+    include_leadin: bool = True, mode: Optional[str] = None,
+) -> Optional[dict]:
+    """Load Surface Map geometry, rejecting unavailable explicitly chosen starts."""
+    if mode not in (None, "race", "free_ride"):
+        raise ValueError("Route mode must be 'free_ride' or 'race'.")
+    entry = _find_wad_route(route_name, world, route_id)
+    if entry is None:
+        return None
+    data = surface_map.get_route(entry["mapID"], entry["nameHash"], mode=mode)
+    if data is None:
+        return None
+    if mode is not None:
+        label = "Free-ride" if mode == "free_ride" else "Race"
+        if mode not in data["available_modes"] or data["route_mode"] != mode:
+            raise ValueError(f"{label} version unavailable for route '{route_name}'.")
+        if (include_leadin and not (data.get("leadin") or {}).get("d")
+                and data.get("leadin_distance_m", 0) > 0):
+            raise ValueError(f"{label} lead-in geometry unavailable for route '{route_name}'. Uncheck Include lead-in to estimate the main route only.")
+    return data
+
+
 def _load_wad_profile(
     route_name: str, world: Optional[str], include_leadin: bool,
-    route_id: Optional[str] = None, laps: int = 1,
+    route_id: Optional[str] = None, laps: int = 1, mode: Optional[str] = None,
 ) -> Optional[dict]:
     """Build a route profile from WAD ``zwift_routes`` geometry.
 
@@ -196,10 +219,7 @@ def _load_wad_profile(
     page renders, optionally prepending the lead-in leg. Returns ``None`` when
     no WAD geometry is available for the route.
     """
-    entry = _find_wad_route(route_name, world, route_id)
-    if entry is None:
-        return None
-    data = surface_map.get_route(entry["mapID"], entry["nameHash"])
+    data = load_route_map_data(route_id or "", route_name, world, include_leadin, mode)
     if data is None:
         return None
     main = data.get("route")
@@ -382,6 +402,15 @@ def list_routes() -> list[dict]:
 
         leadin_dist_m = info.get("leadinDistanceInMeters", 0) or 0
         leadin_ascent_m = info.get("leadinAscentInMeters", 0) or 0
+        start_options = surface_map.get_route_start_options(wad["mapID"], wad["nameHash"]) if wad else None
+        mode_fields = {"available_modes": start_options["available_modes"] if start_options else ["race"]}
+        if not start_options:
+            mode_fields["race_geometry_status"] = "missing_leadin"
+        for mode, options in (start_options or {}).get("leadin_by_mode", {}).items():
+            distance_m = options["distance_m"]
+            mode_fields[f"{mode}_leadin_distance_km"] = round(distance_m / 1000, 1) if distance_m is not None else None
+            mode_fields[f"{mode}_leadin_ascent_m"] = options["ascent_m"]
+            mode_fields[f"{mode}_geometry_status"] = options["geometry_status"]
         routes.append({
             "id": route_id,
             "name": name,
@@ -392,6 +421,7 @@ def list_routes() -> list[dict]:
             "leadin_distance_km": round(leadin_dist_m / 1000, 1),
             "leadin_ascent_m": round(leadin_ascent_m),
             "is_loop": route_is_loop(name, world, route_id),
+            **mode_fields,
         })
 
     return sorted(routes, key=lambda r: (r["world"], r["name"]))
@@ -492,6 +522,7 @@ def load_route_profile(
     world: Optional[str] = None,
     include_leadin: bool = True,
     laps: int = 1,
+    mode: Optional[str] = None,
 ) -> RouteProfile:
     """
     Load the real elevation profile for a route.
@@ -511,8 +542,9 @@ def load_route_profile(
             geometry only).
         laps: Number of laps to ride. For looped routes the main (non-lead-in)
             leg is repeated this many times; the lead-in is ridden once.
+        mode: Explicit Surface Map start version, or None for legacy geometry.
     """
-    wad = _load_wad_profile(route_name, world, include_leadin, route_id, laps)
+    wad = _load_wad_profile(route_name, world, include_leadin, route_id, laps, mode)
     if wad is not None:
         return RouteProfile(
             name=route_name,
@@ -524,6 +556,10 @@ def load_route_profile(
             source_ascent_m=wad["source_ascent_m"],
         )
 
+    if mode == "free_ride":
+        raise ValueError(f"Free-ride geometry unavailable for route '{route_name}'.")
+    if mode == "race" and include_leadin:
+        raise ValueError(f"Race lead-in geometry unavailable for route '{route_name}'. Uncheck Include lead-in to estimate the main route only.")
     slug = _route_name_to_slug(route_name)
     data = _load_route_geometry(slug)
     if data is None:

@@ -228,7 +228,7 @@ function cachedSettings() {
 function catalogResponse(url) {
     const data = {
         '/api/my_profile': { weight_kg: 70, height_cm: 170, ftp_w: 200 },
-        '/api/tt_pacing/routes': { routes: [
+        '/api/tt_pacing/routes?mode=free_ride': { routes: [
             { id: 'route', world: 'WATOPIA', world_name: 'Watopia', name: 'Test route',
                 distance_km: 10, ascent_m: 50, leadin_distance_km: 1, leadin_ascent_m: 5 },
         ] },
@@ -300,7 +300,7 @@ test('catalog failures do not erase cached choices for the unavailable data', as
     const settings = cachedSettings();
     const storage = new Map([['workoutRouteSettings', JSON.stringify(settings)]]);
     const page = pageContext(url => {
-        if (url === '/api/tt_pacing/routes' || url === '/api/workouts') {
+        if (url === '/api/tt_pacing/routes?mode=free_ride' || url === '/api/workouts') {
             return { ok: false, json: async () => ({ error: 'Catalog unavailable' }) };
         }
         return catalogResponse(url);
@@ -353,14 +353,14 @@ test('initial catalog loading does not overwrite cached choices or in-flight edi
     const serialized = JSON.stringify(settings);
     const storage = new Map([['workoutRouteSettings', serialized]]);
     let resolve;
-    const page = pageContext(url => url === '/api/tt_pacing/routes'
+    const page = pageContext(url => url === '/api/tt_pacing/routes?mode=free_ride'
         ? new Promise(done => { resolve = done; }) : catalogResponse(url), storage);
     const pending = page.initialize();
     page.element('ftp').value = '350';
     for (const callback of page.element('ftp').listeners.input) callback();
     for (const callback of page.element('estimateForm').listeners.input) callback();
     assert.equal(storage.get('workoutRouteSettings'), serialized);
-    resolve(catalogResponse('/api/tt_pacing/routes'));
+    resolve(catalogResponse('/api/tt_pacing/routes?mode=free_ride'));
     await pending;
     assert.equal(page.element('ftp').value, '350');
     assert.equal(JSON.parse(storage.get('workoutRouteSettings')).ftp, '350');

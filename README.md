@@ -129,13 +129,21 @@ does not require Zwift to be installed. Refresh it after a client update with:
 python tools\extract_zwift_workouts.py --zwift-dir "C:\Program Files (x86)\Zwift"
 ```
 
+### TT Pacing Planner
+
+- Choose **Free Ride** or **Race** starts at `/tt-pacing` (Race is the default); route totals, calculations, and maps use the same selected geometry
+- Start mode is remembered in browser settings and shared through the route link's `mode` parameter
+- Unavailable start modes are disabled. Missing lead-in geometry is reported explicitly; exclude the lead-in to plan the main route only
+- Timing segments do not use route start modes
+
 ### Workout Route Check
 
 - Open `/workout-route` while logged in to estimate whether a workout reaches a route finish
 - Load weight, height, and FTP from your Zwift profile; all remain editable, and missing values can be entered manually
 - Remember rider values, bike setup, route/lead-in choices, workout search and built-in selection, and untargeted-block power in browser local storage; saved rider values take precedence over profile values on reload. Custom workouts must be uploaded again
 - Choose a frame, wheels, upgrade level, route, and built-in workout, or upload a custom time-based cycling `.zwo`
-- Include the lead-in by default; unavailable lead-in geometry produces an explicit error rather than silently excluding it
+- Always use the **Free Ride** start, never the race paddock; routes without a free-ride version are excluded
+- Include the free-ride lead-in by default; unavailable lead-in geometry produces an explicit error rather than silently excluding it (the main route can still be selected without a lead-in)
 - Simulate a standing start, solo riding without drafting, surface-aware rolling resistance, and momentum over the existing route geometry
 - Scale prescribed targets by rider FTP, except fixed-reference tests; target ranges use midpoints, then all segment targets round to the nearest 5 W (halfway values round up). Ramps step between rounded targets in both simulation and chart
 - Set an explicit FTP percentage (default 75%) for free-ride, max-effort, and other blocks without power targets

@@ -170,7 +170,11 @@ function showRouteInfo() {
     const route = routeCatalog.find(item => String(item.id) === element('routeSelect').value);
     element('routeInfo').textContent = route
         ? `${route.distance_km} km, ${route.ascent_m} m ascent. ` +
-          (element('includeLeadin').checked ? `Plus lead-in: ${route.leadin_distance_km} km, ${route.leadin_ascent_m} m ascent.` : 'Lead-in excluded.')
+          (element('includeLeadin').checked
+              ? route.leadin_distance_km == null
+                  ? 'Free-ride lead-in geometry unavailable. Uncheck Include free-ride lead-in to estimate the main route only.'
+                  : `Plus free-ride lead-in: ${route.leadin_distance_km} km, ${route.leadin_ascent_m} m ascent.`
+              : 'Lead-in excluded.')
         : '';
     invalidateEstimate();
 }
@@ -246,7 +250,7 @@ function displayResult(result) {
         ? `Route finish at ${formatDuration(result.finish_time_sec)}, with ${formatDuration(result.workout_time_remaining_sec)} of workout remaining.`
         : `Predicted progress: ${result.distance_covered_km.toFixed(2)} km of ${result.route_distance_km.toFixed(2)} km. ${result.distance_remaining_km.toFixed(2)} km still to go.`;
     element('resultDetails').textContent =
-        `${result.route_name} ${result.include_leadin ? '(including lead-in)' : '(excluding lead-in)'} | ${result.workout_name} | ` +
+        `${result.route_name} ${result.include_leadin ? '(including free-ride lead-in)' : '(excluding lead-in)'} | ${result.workout_name} | ` +
         `Workout: ${formatDuration(result.workout_duration_sec)} | Rider FTP: ${result.rider_ftp_w} W | Target reference: ${result.reference_ftp_w} W | ` +
         `Modeled route distance: ${result.route_distance_km.toFixed(2)} km.`;
     renderWarnings('resultWarnings', result.warnings);
@@ -348,7 +352,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
             bikesLoaded = true;
         }),
-        fetchJSON('/api/tt_pacing/routes').then(data => {
+        fetchJSON('/api/tt_pacing/routes?mode=free_ride').then(data => {
             routeCatalog = data.routes;
             const worlds = new Map(routeCatalog.map(route => [route.world, route.world_name]));
             for (const [world, name] of worlds) element('worldFilter').appendChild(new Option(name, world));

@@ -574,6 +574,29 @@ def _route_profile_offset_m(route: dict) -> float:
     return round(offset, 2)
 
 
+def get_route_start_options(map_id: int, name_hash: int) -> dict | None:
+    """Return start-mode availability and lead-in totals without packing a map."""
+    route = next((r for r in _load_route_world(map_id).get("routes", [])
+                  if r.get("nameHash") == name_hash), None)
+    if route is None:
+        return None
+    versions = route.get("route_versions", {"race": {"available": True}})
+    options = {}
+    for mode, version in versions.items():
+        leg = version.get("leadin") if mode == "free_ride" else route.get("leadin")
+        distances = (leg or {}).get("d", [])
+        declared_distance = version.get("leadin_distance_m", route.get("leadin_distance_m", 0.0))
+        options[mode] = {
+            "distance_m": float(distances[-1]) if distances else (0.0 if declared_distance == 0 else None),
+            "ascent_m": version.get("leadin_ascent_m", route.get("leadin_ascent_m", 0.0)),
+            "geometry_status": version.get("geometry_status"),
+        }
+    return {
+        "available_modes": [mode for mode, version in versions.items() if version.get("available")],
+        "leadin_by_mode": options,
+    }
+
+
 def get_route(map_id: int, name_hash: int, mode: str | None = None) -> dict | None:
     """Return full geometry + elevation + per-point surface for one route."""
     routes = _load_route_world(map_id).get("routes", [])
