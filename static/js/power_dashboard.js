@@ -781,8 +781,6 @@ function statusCellHtml(activity) {
                 return '<span class="status-badge warning">Cached &middot; Weight unavailable</span>';
             }
             return '<span class="status-badge ok">&#10003; Cached</span>';
-        case 'cached-nodata':
-            return '<span class="status-badge muted">Cached &middot; No power data</span>';
         case 'loading':
             return '<span class="status-badge loading"><span class="mini-spinner"></span> Loading…</span>';
         case 'nodata':
@@ -972,14 +970,22 @@ function powerCurveCacheKey(activityId) {
     return `${POWER_CURVE_CACHE_PREFIX}${encodeURIComponent(activityId)}`;
 }
 
+function hasActivityPowerData(data) {
+    return data && data.has_power && Array.isArray(data.peak_watts) &&
+        data.peak_watts.some(Number.isFinite);
+}
+
 function readCachedActivityCurve(activityId) {
     try {
         const cached = JSON.parse(localStorage.getItem(powerCurveCacheKey(activityId)) || 'null');
-        if (!cached || !Array.isArray(cached.durations_sec) || !cached.data ||
-            !Array.isArray(cached.data.peak_watts) ||
+        if (!cached) {
+            return null;
+        }
+        if (!Array.isArray(cached.durations_sec) || !hasActivityPowerData(cached.data) ||
             cached.durations_sec.length !== durationsSec.length ||
             cached.data.peak_watts.length !== durationsSec.length ||
             !cached.durations_sec.every((duration, index) => duration === durationsSec[index])) {
+            localStorage.removeItem(powerCurveCacheKey(activityId));
             return null;
         }
         return cached.data;
@@ -989,6 +995,9 @@ function readCachedActivityCurve(activityId) {
 }
 
 function cacheActivityCurve(activityId, data) {
+    if (!hasActivityPowerData(data)) {
+        return;
+    }
     try {
         localStorage.setItem(powerCurveCacheKey(activityId), JSON.stringify({
             durations_sec: durationsSec,
@@ -1014,7 +1023,7 @@ function prunePowerCurveCache() {
 }
 
 function applyActivityCurveData(activity, data, fromCache = false) {
-    if (data.has_power && Array.isArray(data.peak_watts)) {
+    if (hasActivityPowerData(data)) {
         activity.peak_watts = data.peak_watts;
         activity.weight_kg = data.weight_kg ?? null;
         activity.avg_power = data.avg_power ?? null;
@@ -1023,7 +1032,7 @@ function applyActivityCurveData(activity, data, fromCache = false) {
         activity.event_id = data.event_id || null;
         activity.status = fromCache ? 'cached' : 'loaded';
     } else {
-        activity.status = fromCache ? 'cached-nodata' : 'nodata';
+        activity.status = 'nodata';
     }
 }
 
@@ -1042,8 +1051,6 @@ function clearPowerCurveCache() {
     activities.forEach((activity) => {
         if (activity.status === 'cached') {
             activity.status = 'loaded';
-        } else if (activity.status === 'cached-nodata') {
-            activity.status = 'nodata';
         }
     });
     renderActivityList();

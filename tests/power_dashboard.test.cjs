@@ -245,6 +245,7 @@ test('large cached loads yield between bounded batches without fetching or chang
 test('progressive loading still fetches cache misses and continues after failed activities', async () => {
     const requests = [];
     const writes = [];
+    const removals = [];
     const updates = [];
     const summaries = [];
     const context = dashboardContext({
@@ -259,6 +260,7 @@ test('progressive loading still fetches cache misses and continues after failed 
                 return key.endsWith('invalid') ? '{broken' : null;
             },
             setItem(key, value) { writes.push([key, JSON.parse(value)]); },
+            removeItem(key) { removals.push(key); },
         },
         async fetch(url) {
             requests.push(url);
@@ -278,12 +280,90 @@ test('progressive loading still fetches cache misses and continues after failed 
     `, context);
     await context.loadAllActivities();
     assert.deepEqual(Array.from(vm.runInContext('activities.map(activity => activity.status)', context)),
-        ['cached-nodata', 'loaded', 'error', 'loaded']);
-    assert.equal(requests.length, 3);
-    assert.equal(writes.length, 2);
+        ['loaded', 'loaded', 'error', 'loaded']);
+    assert.equal(requests.length, 4);
+    assert.equal(writes.length, 3);
+    assert.deepEqual(removals, ['powerDashboardCurveV1:nodata']);
     assert.deepEqual(updates.map(update => Array.from(update)), [
-        [0, 'cached-nodata'], [1, 'loading'], [1, 'loaded'],
+        [0, 'loading'], [0, 'loaded'], [1, 'loading'], [1, 'loaded'],
         [2, 'loading'], [2, 'error'], [3, 'loading'], [3, 'loaded'],
     ]);
     assert.deepEqual(summaries, [4]);
+});
+
+test('only curves containing actual numeric power are cached or reused', () => {
+    const entries = new Map();
+    const context = dashboardContext({
+        localStorage: {
+            getItem(key) { return entries.get(key) ?? null; },
+            setItem(key, value) { entries.set(key, value); },
+            removeItem(key) { entries.delete(key); },
+        },
+    });
+    vm.runInContext('durationsSec = [1, 300];', context);
+    const invalid = [
+        { has_power: false, peak_watts: [null, null] },
+        { has_power: false, peak_watts: [900, 250] },
+        { has_power: true, peak_watts: [null, null] },
+        { has_power: true, peak_watts: [] },
+        { has_power: true },
+        { has_power: true, peak_watts: ['900', null] },
+    ];
+    for (const data of invalid) {
+        context.cacheActivityCurve('ride', data);
+        assert.equal(entries.size, 0);
+        const key = context.powerCurveCacheKey('ride');
+        entries.set(key, JSON.stringify({ durations_sec: [1, 300], data }));
+        assert.equal(context.readCachedActivityCurve('ride'), null);
+        assert.equal(entries.has(key), false);
+        const activity = {};
+        context.applyActivityCurveData(activity, data);
+        assert.equal(activity.status, 'nodata');
+    }
+    for (const peak_watts of [[0, null], [-20, null], [2500, 300]]) {
+        context.cacheActivityCurve('ride', { has_power: true, peak_watts });
+        assert.deepEqual(Array.from(context.readCachedActivityCurve('ride').peak_watts), peak_watts);
+        entries.clear();
+    }
+});
+
+test('activities without power are fetched again and cached once power becomes available', async () => {
+    const entries = new Map();
+    let requests = 0;
+    const context = dashboardContext({
+        setTimeout(callback) { callback(); },
+        performance: { now() { return 0; } },
+        requestAnimationFrame() {},
+        localStorage: {
+            getItem(key) { return entries.get(key) ?? null; },
+            setItem(key, value) { entries.set(key, value); },
+            removeItem(key) { entries.delete(key); },
+        },
+        async fetch() {
+            requests += 1;
+            return {
+                status: 200, ok: true,
+                async json() {
+                    return requests === 1
+                        ? { has_power: false, peak_watts: [null] }
+                        : { has_power: true, peak_watts: [900] };
+                },
+            };
+        },
+    });
+    vm.runInContext(`
+        durationsSec = [1];
+        activities = [{ activity_id: 'ride', status: 'pending' }];
+        updateActivityRow = () => {};
+        updateLoadSummary = () => {};
+    `, context);
+    await context.loadAllActivities();
+    assert.equal(vm.runInContext('activities[0].status', context), 'nodata');
+    assert.equal(entries.size, 0);
+    await context.loadAllActivities();
+    assert.equal(vm.runInContext('activities[0].status', context), 'loaded');
+    assert.equal(entries.size, 1);
+    await context.loadAllActivities();
+    assert.equal(vm.runInContext('activities[0].status', context), 'cached');
+    assert.equal(requests, 2);
 });
