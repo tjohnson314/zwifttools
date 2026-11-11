@@ -142,6 +142,7 @@ python tools\extract_zwift_workouts.py --zwift-dir "C:\Program Files (x86)\Zwift
 
 - Open `/workout-route` while logged in to estimate whether a workout reaches a route finish
 - Load weight, height, and FTP from your Zwift profile; all remain editable, and missing values can be entered manually
+- Profile requests explicitly ask Zwift for JSON rather than its default binary format
 - Remember rider values, bike setup, route/lead-in choices, workout search and built-in selection, and untargeted-block power in browser local storage; saved rider values take precedence over profile values on reload. Custom workouts must be uploaded again
 - Choose a frame, wheels, upgrade level, route, and built-in workout, or upload a custom time-based cycling `.zwo`
 - Always use the **Free Ride** start, never the race paddock; routes without a free-ride version are excluded

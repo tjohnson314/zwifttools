@@ -249,7 +249,39 @@ def test_profile_exposes_current_ftp_without_breaking_measurements(monkeypatch, 
         def json(self):
             return {"firstName": "Test", "height": 1800, "weight": 75000, "ftp": ftp}
     monkeypatch.setattr(app_module, "get_headers", lambda: {"Authorization": "test"})
-    monkeypatch.setattr(app_module.requests, "get", lambda *args, **kwargs: ProfileResponse())
+    monkeypatch.setattr(app_module.requests, "request", lambda *args, **kwargs: ProfileResponse())
     response = app_module.app.test_client().get("/api/my_profile")
     assert response.status_code == 200
     assert response.get_json() == {"name": "Test", "height_cm": 180, "weight_kg": 75, "ftp_w": expected}
+
+
+def test_profile_requests_json_instead_of_zwift_default_binary(monkeypatch):
+    headers = {"Authorization": "test"}
+    calls = []
+
+    def upstream(method, url, **kwargs):
+        calls.append((method, url, kwargs))
+        response = requests.Response()
+        response.status_code = 200
+        if kwargs["headers"].get("Accept") == "application/json":
+            response._content = json.dumps({
+                "height": 1800, "weight": 75000, "ftp": 280,
+            }).encode()
+            response.headers["Content-Type"] = "application/json"
+        else:
+            response._content = b"\x08\x01"
+            response.headers["Content-Type"] = "application/x-protobuf-lite"
+        return response
+
+    monkeypatch.setattr(app_module, "get_headers", lambda: headers)
+    monkeypatch.setattr(app_module.requests, "get", lambda url, **kwargs: upstream("GET", url, **kwargs))
+    monkeypatch.setattr(app_module.requests, "request", upstream)
+    response = app_module.app.test_client().get("/api/my_profile")
+    assert response.status_code == 200
+    assert response.get_json() == {"name": "", "height_cm": 180, "weight_kg": 75, "ftp_w": 280}
+    assert len(calls) == 1
+    method, url, options = calls[0]
+    assert (method, url) == ("GET", f"{app_module.BASE_URL}/profiles/me")
+    assert options["headers"]["Accept"] == "application/json"
+    assert options["headers"]["Authorization"] == "test"
+    assert headers == {"Authorization": "test"}

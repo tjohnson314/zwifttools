@@ -2058,8 +2058,8 @@ def get_my_profile():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
-        resp = requests.get(
-            'https://us-or-rly101.zwift.com/api/profiles/me',
+        resp = _request_with_retry(
+            'GET', f'{BASE_URL}/profiles/me',
             headers=headers,
             timeout=10
         )
