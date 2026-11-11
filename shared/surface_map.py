@@ -585,10 +585,13 @@ def get_route_start_options(map_id: int, name_hash: int) -> dict | None:
     for mode, version in versions.items():
         leg = version.get("leadin") if mode == "free_ride" else route.get("leadin")
         distances = (leg or {}).get("d", [])
-        declared_distance = version.get("leadin_distance_m", route.get("leadin_distance_m", 0.0))
+        declared_distance = (version.get("leadin_distance_m") if mode == "free_ride" else
+                             version.get("leadin_distance_m", route.get("leadin_distance_m", 0.0)))
         options[mode] = {
             "distance_m": float(distances[-1]) if distances else (0.0 if declared_distance == 0 else None),
-            "ascent_m": version.get("leadin_ascent_m", route.get("leadin_ascent_m", 0.0)),
+            "declared_distance_m": declared_distance,
+            "ascent_m": (version.get("leadin_ascent_m") if mode == "free_ride" else
+                         version.get("leadin_ascent_m", route.get("leadin_ascent_m", 0.0))),
             "geometry_status": version.get("geometry_status"),
         }
     return {

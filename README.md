@@ -133,7 +133,7 @@ python tools\extract_zwift_workouts.py --zwift-dir "C:\Program Files (x86)\Zwift
 
 - Choose **Free Ride** or **Race** starts at `/tt-pacing` (Race is the default); route totals, calculations, and maps use the same selected geometry
 - Start mode is remembered in browser settings and shared through the route link's `mode` parameter
-- Unavailable start modes are disabled. Missing lead-in geometry is reported explicitly; exclude the lead-in to plan the main route only
+- Unavailable start modes are disabled. Missing lead-in geometry shows the declared lead-in distance and metadata totals with an explanation, rather than hiding known distances; exclude the lead-in to plan the main route only
 - Timing segments do not use route start modes
 
 ### Workout Route Check

@@ -409,6 +409,8 @@ def list_routes() -> list[dict]:
         for mode, options in (start_options or {}).get("leadin_by_mode", {}).items():
             distance_m = options["distance_m"]
             mode_fields[f"{mode}_leadin_distance_km"] = round(distance_m / 1000, 1) if distance_m is not None else None
+            declared_distance_m = options["declared_distance_m"]
+            mode_fields[f"{mode}_declared_leadin_distance_km"] = declared_distance_m / 1000 if declared_distance_m is not None else None
             mode_fields[f"{mode}_leadin_ascent_m"] = options["ascent_m"]
             mode_fields[f"{mode}_geometry_status"] = options["geometry_status"]
         routes.append({

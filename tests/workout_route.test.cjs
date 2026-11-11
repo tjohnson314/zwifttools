@@ -90,6 +90,21 @@ test('workout route reuses TT planner styles and control structure', () => {
         assert.ok(html.includes(`class="${className}"`), `Missing TT planner style: ${className}`);
     }
 });
+test('route info rounds lead-in ascent to the nearest meter without changing source data', () => {
+    const { context, element } = pageContext();
+    vm.runInContext(`routeCatalog = [{
+        id: 'route', distance_km: 17.5, ascent_m: 1044,
+        leadin_distance_km: 0.5, leadin_ascent_m: 7.4797048569,
+    }];`, context);
+    context.showRouteInfo();
+    assert.equal(element('routeInfo').textContent,
+        '17.5 km, 1044 m ascent. Plus free-ride lead-in: 0.5 km, 7 m ascent.');
+    assert.equal(vm.runInContext('routeCatalog[0].leadin_ascent_m', context), 7.4797048569);
+    vm.runInContext('routeCatalog[0].leadin_ascent_m = 7.5;', context);
+    context.showRouteInfo();
+    assert.match(element('routeInfo').textContent, /0\.5 km, 8 m ascent\.$/);
+});
+
 test('built-in and custom plans use the same inputs and mutually exclusive payloads', () => {
     const { context } = pageContext();
     context.showWorkout(plan());

@@ -350,6 +350,13 @@ function updateCourseUI() {
     updateRouteModeUI();
 }
 
+function getLeadinDistanceKm(route) {
+    return route[`${routeMode}_leadin_distance_km`]
+        ?? route[`${routeMode}_declared_leadin_distance_km`]
+        ?? (routeMode === 'race' ? route.leadin_distance_km : null)
+        ?? null;
+}
+
 function routeModeError() {
     if (planMode === 'segment' || !selectedRoute) return '';
     if (!(selectedRoute.available_modes || ['race']).includes(routeMode)) {
@@ -359,7 +366,10 @@ function routeModeError() {
         && (selectedRoute[`${routeMode}_geometry_status`] === 'missing_leadin'
             || (`${routeMode}_leadin_distance_km` in selectedRoute
                 && selectedRoute[`${routeMode}_leadin_distance_km`] == null))) {
-        return 'Selected lead-in geometry is unavailable. Uncheck Include lead-in or choose another start mode.';
+        const distance = getLeadinDistanceKm(selectedRoute);
+        const detail = distance == null ? 'Lead-in distance is unknown.'
+            : `${routeMode === 'free_ride' ? 'Free Ride' : 'Race'} lead-in: ${fmtDistance(distance, 3)} (declared distance).`;
+        return `${detail} Route data for this lead-in is missing, so it cannot be simulated. Uncheck Include lead-in or choose another start mode.`;
     }
     return '';
 }
@@ -552,20 +562,22 @@ function selectRouteFromUrl() {
 
 function showRouteStats(route) {
     document.getElementById('routeStats').style.display = 'flex';
-    if (routeModeError()) {
+    if (planMode === 'route' && !(route.available_modes || ['race']).includes(routeMode)) {
         document.getElementById('statDist').textContent = 'Unavailable';
         document.getElementById('statAscent').textContent = 'Unavailable';
         return;
     }
     const includeLeadin = planMode === 'route' && document.getElementById('includeLeadin').checked;
-    const leadinDistance = route[`${routeMode}_leadin_distance_km`] ?? (routeMode === 'race' ? route.leadin_distance_km : 0) ?? 0;
-    const leadinAscent = route[`${routeMode}_leadin_ascent_m`] ?? (routeMode === 'race' ? route.leadin_ascent_m : 0) ?? 0;
-    const dist = (includeLeadin ? leadinDistance : 0)
-        + route.distance_km * laps;
-    const ascent = (includeLeadin ? leadinAscent : 0)
-        + route.ascent_m * laps;
-    document.getElementById('statDist').textContent = fmtDistance(dist);
-    document.getElementById('statAscent').textContent = fmtElevation(ascent);
+    const leadinDistance = getLeadinDistanceKm(route);
+    const leadinAscent = route[`${routeMode}_leadin_ascent_m`] ?? (routeMode === 'race' ? route.leadin_ascent_m : null);
+    const dist = route.distance_km * laps;
+    const ascent = route.ascent_m * laps;
+    document.getElementById('statDist').textContent = includeLeadin && leadinDistance == null
+        ? `${fmtDistance(dist)} + unknown lead-in`
+        : fmtDistance(dist + (includeLeadin ? leadinDistance : 0));
+    document.getElementById('statAscent').textContent = includeLeadin && leadinAscent == null
+        ? `${fmtElevation(ascent)} + unknown lead-in`
+        : fmtElevation(ascent + (includeLeadin ? leadinAscent : 0));
 }
 
 function hideRouteStats() {

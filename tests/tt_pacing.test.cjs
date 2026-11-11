@@ -223,7 +223,8 @@ function selectStartRoute(context) {
             selectStartRoute(context);
             vm.runInContext(`selectedRoute.free_ride_leadin_distance_km = null;`, context);
             context.setRouteMode('free_ride');
-            assert.equal(elements.get('statDist').textContent, 'Unavailable');
+            assert.equal(elements.get('statDist').textContent, '10.0 km + unknown lead-in');
+            assert.match(elements.get('routeModeHint').textContent, /Lead-in distance is unknown/);
             assert.equal(elements.get('planBtn').disabled, true);
             vm.runInContext(`
                 document.getElementById('includeLeadin').checked = false;
@@ -298,3 +299,43 @@ function selectStartRoute(context) {
             assert.equal(elements.get('freeRideStart').disabled, false);
             assert.equal(elements.get('planBtn').disabled, true);
         });
+
+test('TT missing race geometry shows declared lead-in distance and totals in active units', async () => {
+    const { context, elements } = plannerContext();
+    selectStartRoute(context);
+    vm.runInContext(`
+        Object.assign(selectedRoute, {
+            distance_km: 17.5, ascent_m: 1044, leadin_distance_km: 0.1,
+            race_leadin_distance_km: null, race_declared_leadin_distance_km: 0.1034,
+            race_leadin_ascent_m: 0, race_geometry_status: 'missing_leadin',
+        });
+        updateRouteModeUI(); updatePlanButton(); showRouteStats(selectedRoute);
+    `, context);
+    assert.equal(elements.get('statDist').textContent, '17.6 km');
+    assert.equal(elements.get('statAscent').textContent, '1044 m');
+    assert.match(elements.get('routeModeHint').textContent, /Race lead-in: 0\.103 km \(declared distance\)/);
+    assert.match(elements.get('routeModeHint').textContent, /Route data for this lead-in is missing/);
+    assert.equal(elements.get('planBtn').disabled, true);
+    let requests = 0;
+    context.fetch = () => { requests++; };
+    await context.requestPlan();
+    assert.equal(requests, 0);
+    vm.runInContext(`currentUnit = 'imperial'; updateRouteModeUI(); showRouteStats(selectedRoute);`, context);
+    assert.match(elements.get('routeModeHint').textContent, /0\.064 mi/);
+    assert.equal(elements.get('statDist').textContent, '10.9 mi');
+});
+
+test('TT missing free-ride geometry uses its own declared distance only once across laps', () => {
+    const { context, elements } = plannerContext();
+    selectStartRoute(context);
+    vm.runInContext(`
+        selectedRoute.free_ride_leadin_distance_km = null;
+        selectedRoute.free_ride_declared_leadin_distance_km = 0.3828178405762;
+        laps = 2;
+    `, context);
+    context.setRouteMode('free_ride');
+    assert.equal(elements.get('statDist').textContent, '20.4 km');
+    assert.equal(elements.get('statAscent').textContent, '205 m');
+    assert.match(elements.get('routeModeHint').textContent, /Free Ride lead-in: 0\.383 km/);
+    assert.equal(elements.get('planBtn').disabled, true);
+});

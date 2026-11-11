@@ -173,7 +173,7 @@ function showRouteInfo() {
           (element('includeLeadin').checked
               ? route.leadin_distance_km == null
                   ? 'Free-ride lead-in geometry unavailable. Uncheck Include free-ride lead-in to estimate the main route only.'
-                  : `Plus free-ride lead-in: ${route.leadin_distance_km} km, ${route.leadin_ascent_m} m ascent.`
+                  : `Plus free-ride lead-in: ${route.leadin_distance_km} km, ${Math.round(route.leadin_ascent_m)} m ascent.`
               : 'Lead-in excluded.')
         : '';
     invalidateEstimate();

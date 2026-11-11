@@ -301,7 +301,9 @@ def test_start_options_distinguish_zero_leadin_from_missing_geometry(monkeypatch
     }]})
     options = surface_map.get_route_start_options(1, 123)["leadin_by_mode"]
     assert options["race"]["distance_m"] is None
+    assert options["race"]["declared_distance_m"] == 60.
     assert options["free_ride"]["distance_m"] == 0.
+    assert options["free_ride"]["declared_distance_m"] == 0.
 
 
 def test_missing_free_ride_approach_is_explicit_but_main_route_can_be_selected(start_modes, monkeypatch):
@@ -312,6 +314,18 @@ def test_missing_free_ride_approach_is_explicit_but_main_route_can_be_selected(s
     with pytest.raises(ValueError, match="Free-ride lead-in geometry unavailable"):
         planner.load_route_profile("123", "No approach", mode="free_ride")
     assert planner.load_route_profile("123", "No approach", mode="free_ride", include_leadin=False).distance_m[-1] == 100.
+
+
+def test_unknown_free_ride_metadata_does_not_borrow_race_distance_or_ascent(monkeypatch):
+    from shared import surface_map
+
+    monkeypatch.setattr(surface_map, "_load_route_world", lambda _: {"routes": [{
+        "nameHash": 123, "leadin_distance_m": 60., "leadin_ascent_m": 5.,
+        "route_versions": {"race": {"available": True}, "free_ride": {"available": True}},
+    }]})
+    options = surface_map.get_route_start_options(1, 123)["leadin_by_mode"]
+    assert options["free_ride"]["declared_distance_m"] is None
+    assert options["free_ride"]["ascent_m"] is None
 
 
 @pytest.mark.parametrize("mode", ["free_ride", "race"])
@@ -354,6 +368,17 @@ def test_free_ride_catalog_filters_unavailable_starts_and_uses_matching_totals()
     assert volcano["leadin_distance_km"] == volcano["free_ride_leadin_distance_km"]
     assert volcano["leadin_distance_km"] != volcano["race_leadin_distance_km"]
     assert client.get("/api/tt_pacing/routes?mode=invalid").status_code == 400
+
+
+def test_catalog_retains_declared_distances_without_claiming_missing_geometry_exists():
+    import app as module
+
+    routes = module.app.test_client().get("/api/tt_pacing/routes").get_json()["routes"]
+    road_to_sky = next(route for route in routes if route["name"] == "Road to Sky")
+    assert road_to_sky["race_geometry_status"] == "missing_leadin"
+    assert road_to_sky["race_leadin_distance_km"] is None
+    assert road_to_sky["race_declared_leadin_distance_km"] == pytest.approx(.1034)
+    assert road_to_sky["free_ride_declared_leadin_distance_km"] == pytest.approx(.3828178405762)
 
 
 def test_real_start_modes_keep_map_and_model_distance_axes_aligned():
