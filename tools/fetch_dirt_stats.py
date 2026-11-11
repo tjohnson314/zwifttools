@@ -46,7 +46,9 @@ BROWSER_WORKER = """async relay => {
             }
             const values = value => value == null ? null : {w: value.w ?? null, wkg: value.wkg ?? null};
             payload = {url: task.url, final_url: task.url, status: 200,
-                rider: {riderId: rider.riderId, velo: {factors: rider.velo?.factors ?? null}},
+                rider: {riderId: rider.riderId, velo: {
+                    race: rider.velo?.race ?? null, factors: rider.velo?.factors ?? null
+                }},
                 power: {riderId: power.riderId, curve: power.curve.map(row => ({
                     durationSec: row.durationSec, live: values(row.live), d90: values(row.d90)
                 }))}};
@@ -90,7 +92,10 @@ def parse_stats(rider: dict, power: dict, zwift_id: int) -> dict:
         }
     return {
         "zwift_id": zwift_id,
-        "velo": {category: metric((factors or {}).get(category)) for category in VELO_CATEGORIES},
+        "velo": {
+            "overall": metric((rider.get("velo") or {}).get("race")),
+            **{category: metric((factors or {}).get(category)) for category in VELO_CATEGORIES},
+        },
         "power": {
             str(duration): intervals.get(str(duration), {
                 "live": {"w": None, "wkg": None},
@@ -118,7 +123,10 @@ class StatsCollection(Collection):
             saved = json.loads(output.read_text(encoding="utf-8"))
             if saved.get("season") != 14 or saved.get("schema_version") != 1:
                 raise ValueError("Existing stats checkpoint has an unexpected season or schema.")
-            self.riders = {key: value for key, value in saved["riders"].items() if int(key) in self.ids}
+            self.riders = {
+                key: value for key, value in saved["riders"].items()
+                if int(key) in self.ids and (value.get("status") == "unavailable" or "overall" in value.get("velo", {}))
+            }
 
     def next_task(self) -> dict | None:
         self.task = next((

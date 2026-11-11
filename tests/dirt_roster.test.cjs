@@ -60,18 +60,24 @@ test('power uses source W/kg, never recalculating it from watts', () => {
     assert.equal(rows[0].power_1200_best_90d, 3.76);
 });
 
-test('vELO rows and CSV retain uncapped source precision', () => {
+test('vELO rows and CSV include overall live score and retain uncapped source precision', () => {
     const sprint = 1007.8017236673211;
-    const stats = {riders: {'7681059': {status: 'ok', velo: {sprint}}}};
+    const overall = 639.123456;
+    const stats = {riders: {'7681059': {status: 'ok', velo: {overall, sprint}}}};
     const rows = dirtStatsRows(dirtRows(teams), stats);
+    assert.equal(rows[0].velo_overall, overall);
+    assert.equal(rows[1].velo_overall, null);
+    assert.equal(rows[2].velo_overall, overall);
     assert.equal(rows[0].velo_sprint, sprint);
     assert.equal(rows[2].velo_sprint, sprint);
     assert.equal(stats.riders['7681059'].velo.sprint, sprint);
     assert.ok(dirtCSV(rows, dirtColumns('velo')).includes(`"${sprint}"`));
+    assert.ok(dirtCSV(rows, dirtColumns('velo')).includes(`"${overall}"`));
 });
 
 test('stats tables omit category while the roster keeps it', () => {
-    assert.equal(dirtColumns('velo').length, 8);
+    assert.equal(dirtColumns('velo').length, 9);
+    assert.deepEqual(dirtColumns('velo')[2], ['velo_overall', 'Overall']);
     for (const tab of ['velo', 'power']) assert.ok(!dirtColumns(tab).some(([key]) => key === 'category'));
     assert.ok(dirtColumns('roster').some(([key]) => key === 'category'));
 });
@@ -92,7 +98,7 @@ test('power columns and CSV show only the selected source for all seven interval
 });
 
 test('source coverage counts gaps but not pending profiles, unavailable profiles or zero metrics', () => {
-    const velo = Object.fromEntries(['endurance', 'pursuit', 'sprint', 'punch', 'climb', 'timeTrial'].map(key => [key, 0]));
+    const velo = Object.fromEntries(['overall', 'endurance', 'pursuit', 'sprint', 'punch', 'climb', 'timeTrial'].map(key => [key, 0]));
     const power = Object.fromEntries([5, 15, 30, 60, 120, 300, 1200].map(duration => [duration, {live: {w: 0, wkg: 0}, best_90d: {w: 0, wkg: 0}}]));
     assert.deepEqual(dirtStatsCoverage({riders: {
         1: {status: 'ok', velo, power},
@@ -100,4 +106,10 @@ test('source coverage counts gaps but not pending profiles, unavailable profiles
         3: {status: 'ok', velo: {}, power: {}},
     }}), {velo: 1, power: 1});
     assert.deepEqual(dirtStatsCoverage(null), {velo: 0, power: 0});
+});
+
+test('legacy snapshots do not report the not-yet-collected overall score as a source gap', () => {
+    const velo = Object.fromEntries(['endurance', 'pursuit', 'sprint', 'punch', 'climb', 'timeTrial'].map(key => [key, 0]));
+    assert.equal(dirtStatsCoverage({riders: {1: {status: 'ok', velo}}}).velo, 0);
+    assert.equal(dirtStatsCoverage({riders: {1: {status: 'ok', velo: {...velo, overall: null}}}}).velo, 1);
 });

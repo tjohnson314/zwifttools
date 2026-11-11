@@ -32,7 +32,7 @@ def test_missing_roster_returns_an_explicit_unavailable_status(tmp_path, monkeyp
 
 def test_stats_api_serves_saved_raw_metrics(tmp_path, monkeypatch):
     path = tmp_path / 'stats.json'
-    payload = {'season': 14, 'complete': False, 'riders': {'7681059': {'velo': {'sprint': -18.123456}, 'power': {'5': {'live': {'w': 9999.123456}}}}}}
+    payload = {'season': 14, 'complete': False, 'riders': {'7681059': {'velo': {'overall': 639.123456, 'sprint': -18.123456}, 'power': {'5': {'live': {'w': 9999.123456}}}}}}
     path.write_text(json.dumps(payload), encoding='utf-8')
     monkeypatch.setattr(app_module, '_DIRT_STATS_FILE', path)
     response = app_module.app.test_client().get('/api/dirt/stats')

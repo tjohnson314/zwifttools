@@ -8,7 +8,7 @@ from tools import fetch_dirt_stats as stats
 
 def payload():
     return (
-        {"riderId": 7681059, "velo": {"factors": {
+        {"riderId": 7681059, "velo": {"race": 639.123456, "factors": {
             "endurance": 548, "pursuit": 730, "sprint": 693.5,
             "punch": 853.8, "climb": 684.5, "timeTrial": 602,
         }}},
@@ -20,11 +20,12 @@ def payload():
     )
 
 
-def test_maps_six_scores_and_seven_intervals_without_deriving_or_rounding():
+def test_maps_overall_six_scores_and_seven_intervals_without_deriving_or_rounding():
     rider, power = payload()
     result = stats.parse_stats(rider, power, 7681059)
+    assert result["velo"]["overall"] == 639.123456
     assert result["velo"]["sprint"] == 693.5
-    assert len(result["velo"]) == 6
+    assert len(result["velo"]) == 7
     assert len(result["power"]) == 7
     assert result["power"]["300"] == {
         "live": {"w": 326.36, "wkg": 4.94},
@@ -45,6 +46,21 @@ def test_missing_values_are_not_replaced_with_zero_and_raw_extremes_are_preserve
     assert result["power"]["300"]["live"]["wkg"] == -1.5
 
 
+@pytest.mark.parametrize("value", [None, 0, -18.123456, 1007.8017236673211])
+def test_overall_uses_only_the_source_race_score_and_preserves_raw_values(value):
+    rider, power = payload()
+    rider["velo"]["race"] = value
+    assert stats.parse_stats(rider, power, 7681059)["velo"]["overall"] == value
+
+
+def test_missing_overall_is_not_inferred_from_category_scores():
+    rider, power = payload()
+    del rider["velo"]["race"]
+    assert stats.parse_stats(rider, power, 7681059)["velo"]["overall"] is None
+    rider["velo"] = None
+    assert all(value is None for value in stats.parse_stats(rider, power, 7681059)["velo"].values())
+
+
 def test_rejects_mismatched_rider_and_missing_power_loader():
     rider, power = payload()
     with pytest.raises(ValueError, match="rider ID"):
@@ -54,9 +70,13 @@ def test_rejects_mismatched_rider_and_missing_power_loader():
 
 
 @pytest.mark.parametrize("value", [True, float("nan"), float("inf"), "300"])
-def test_invalid_metrics_are_rejected(value):
+@pytest.mark.parametrize("field", ["overall", "factor"])
+def test_invalid_metrics_are_rejected(value, field):
     rider, power = payload()
-    rider["velo"]["factors"]["punch"] = value
+    if field == "overall":
+        rider["velo"]["race"] = value
+    else:
+        rider["velo"]["factors"]["punch"] = value
     with pytest.raises(ValueError, match="numeric"):
         stats.parse_stats(rider, power, 7681059)
 
@@ -80,6 +100,14 @@ def test_collection_requests_each_unique_id_once_and_resumes(tmp_path):
     assert resumed.next_task()["zwift_id"] == 8072730
     assert resumed.snapshot()["rider_count"] == 2
     assert resumed.snapshot()["fetched_count"] == 1
+
+
+def test_old_checkpoints_refetch_records_without_overall(tmp_path):
+    path = tmp_path / "stats.json"
+    collection = stats.StatsCollection(roster(), path)
+    collection.riders = {"7681059": {"status": "ok", "velo": {"sprint": 693.5}}}
+    collection.save()
+    assert stats.StatsCollection(roster(), path).next_task()["zwift_id"] == 7681059
 
 
 def test_unavailable_profile_is_explicit_and_does_not_invent_metrics(tmp_path):

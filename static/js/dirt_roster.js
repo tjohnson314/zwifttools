@@ -3,7 +3,7 @@
 const dirtFields = ['time_zone', 'league', 'category', 'team'];
 const dirtLabels = {time_zone: 'time zones', league: 'leagues', category: 'categories', team: 'teams'};
 const dirtEsc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[char]));
-const dirtVelo = [['endurance', 'Endurance'], ['pursuit', 'Pursuit'], ['sprint', 'Sprint'], ['punch', 'Punch'], ['climb', 'Climb'], ['timeTrial', 'Time Trial']];
+const dirtVelo = [['overall', 'Overall'], ['endurance', 'Endurance'], ['pursuit', 'Pursuit'], ['sprint', 'Sprint'], ['punch', 'Punch'], ['climb', 'Climb'], ['timeTrial', 'Time Trial']];
 const dirtIntervals = [[5, '5 seconds'], [15, '15 seconds'], [30, '30 seconds'], [60, '1 minute'], [120, '2 minutes'], [300, '5 minutes'], [1200, '20 minutes']];
 const dirtRosterColumns = [['name', 'Rider'], ['zwift_id', 'Zwift ID'], ['team', 'Team'], ['time_zone', 'Time zone'], ['league', 'League'], ['category', 'Category']];
 const dirtTeamColumns = [['name', 'Team'], ['time_zone', 'Time zone'], ['league', 'League'], ['category', 'Category'], ['rider_count', 'Riders']];
@@ -33,7 +33,7 @@ function dirtStatsRows(rows, stats, unit = 'w') {
 function dirtStatsCoverage(stats) {
     const records = Object.values(stats?.riders || {}).filter(record => record.status === 'ok');
     return {
-        velo: records.filter(record => dirtVelo.some(([key]) => record.velo?.[key] == null)).length,
+        velo: records.filter(record => dirtVelo.some(([key]) => record.velo?.[key] === null || (key !== 'overall' && record.velo?.[key] === undefined))).length,
         power: records.filter(record => dirtIntervals.some(([duration]) => ['live', 'best_90d'].some(source => ['w', 'wkg'].some(unit => record.power?.[duration]?.[source]?.[unit] == null)))).length,
     };
 }
@@ -129,7 +129,7 @@ async function initDirtRoster() {
             else if (statsLoading) warnings.push('Loading ZwiftRacing stats...');
             else if (!stats?.complete) warnings.push(`Stats collection in progress: ${stats?.fetched_count || 0} / ${stats?.rider_count || data.rider_count} riders.`);
             if (stats?.unavailable_count) warnings.push(`${stats.unavailable_count} ZwiftRacing profiles unavailable.`);
-            if (statsCoverage[tab]) warnings.push(`Series data: ${statsCoverage[tab]} ${statsCoverage[tab] === 1 ? 'rider has' : 'riders have'} ${tab === 'velo' ? 'missing category scores' : 'incomplete power data'} on ZwiftRacing.`);
+            if (statsCoverage[tab]) warnings.push(`Series data: ${statsCoverage[tab]} ${statsCoverage[tab] === 1 ? 'rider has' : 'riders have'} ${tab === 'velo' ? 'missing vELO scores' : 'incomplete power data'} on ZwiftRacing.`);
         }
         status.textContent = warnings.join(' ');
         status.hidden = !warnings.length;
@@ -150,7 +150,7 @@ async function initDirtRoster() {
         const columns = teamView ? dirtTeamColumns : dirtColumns(tab, unit, powerSource);
         const table = element('roster');
         table.className = rosterView ? '' : 'stats-table';
-        table.querySelector('caption').textContent = rosterView ? 'DIRT Racing Series season 14 team assignments' : tab === 'velo' ? 'Rider vELO category scores' : `Rider ${powerSource === 'live' ? 'live estimate' : '90-day best'} power in ${unit === 'wkg' ? 'watts per kilogram' : 'watts'}`;
+        table.querySelector('caption').textContent = rosterView ? 'DIRT Racing Series season 14 team assignments' : tab === 'velo' ? 'Rider overall and category vELO scores' : `Rider ${powerSource === 'live' ? 'live estimate' : '90-day best'} power in ${unit === 'wkg' ? 'watts per kilogram' : 'watts'}`;
         const header = element('roster').querySelector('thead');
         const columnLabel = (title, index) => tab === 'power' && index >= 2 ? dirtIntervals[index - 2][1].replace(' seconds', 's').replace(' minutes', 'min').replace(' minute', 'min') : title;
         const heading = ([key, title], index) => `<th scope="col"${sort.key === key ? ` aria-sort="${sort.direction === 1 ? 'ascending' : 'descending'}"` : ''}><button type="button" data-sort="${key}" aria-label="${dirtEsc(title)}" title="${dirtEsc(title)}">${columnLabel(title, index)}${sort.key === key ? (sort.direction === 1 ? ' &#8593;' : ' &#8595;') : ''}</button></th>`;

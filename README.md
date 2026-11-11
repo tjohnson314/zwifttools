@@ -22,7 +22,7 @@ unchanged.
 - Only current-series teams are collected. Team managers are not added from the separate managers section
 - Missing IDs and incomplete collection are reported explicitly; multiple team assignments are preserved
 - **Roster**, **vELO**, and **Power** tabs share filters and export their current metrics as CSV
-- vELO shows Endurance, Pursuit, Sprint, Punch, Climb, and Time Trial scores, capped at 1000 before rounding to nearest integers to match ZwiftRacing's display
+- vELO shows the overall live score plus Endurance, Pursuit, Sprint, Punch, Climb, and Time Trial scores, capped at 1000 before rounding to nearest integers to match ZwiftRacing's display
 - Power switches between Live estimates and 90-day bests for 5s, 15s, 30s, 1m, 2m, 5m, and 20m, in W or W/kg; the selected source is preserved in shared URLs and CSV exports
 - Stats tables omit Category (the category filter remains available), fit without horizontal scrolling, and stack labeled values on small screens
 - Snapshots and CSV preserve source numbers without rounding, clipping, or deriving W/kg from watts; absent values remain missing
@@ -58,7 +58,7 @@ python tools/fetch_dirt_stats.py --login
 The deployable snapshot is `dirt_s14_stats.json`, served at `/api/dirt/stats`.
 Collection is sequential, paced, and resumable after every rider; `--refresh`
 starts a fresh snapshot. The collector reads the authenticated Power route's
-loaded rider data, which also includes the six vELO scores, and reloads after
+loaded rider data, including the overall live and six category vELO scores, and reloads after
 each 60-rider batch. Authentication stays under
 `~/.zwifttools/zwiftracing-browser`, not in the snapshot. The browser-relay mode
 can serve its worker at `/worker` on its temporary local port. Stats collection
