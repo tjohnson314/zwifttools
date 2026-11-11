@@ -13,6 +13,57 @@ Leaderboard is available under **Archived** (`/?tab=archived`) and remains
 accessible at its existing `/zrl/leaderboard` URL with event loading and scoring
 unchanged.
 
+### DIRT Racing Series
+
+- Season 14 roster at `/dirt`, with riders, Zwift IDs, and team assignments
+- Filter by time zone, league, category, team, rider name, or Zwift ID
+- Switch between Riders and Teams, sort columns, share filtered URLs, and download filtered assignments as CSV
+- The public page reads `dirt_s14_roster.json`; visitors do not need a DIRT or Zwift login
+- Only current-series teams are collected. Team managers are not added from the separate managers section
+- Missing IDs and incomplete collection are reported explicitly; multiple team assignments are preserved
+- **Roster**, **vELO**, and **Power** tabs share filters and export their current metrics as CSV
+- vELO shows Endurance, Pursuit, Sprint, Punch, Climb, and Time Trial scores, capped at 1000 before rounding to nearest integers to match ZwiftRacing's display
+- Power switches between Live estimates and 90-day bests for 5s, 15s, 30s, 1m, 2m, 5m, and 20m, in W or W/kg; the selected source is preserved in shared URLs and CSV exports
+- Stats tables omit Category (the category filter remains available), fit without horizontal scrolling, and stack labeled values on small screens
+- Snapshots and CSV preserve source numbers without rounding, clipping, or deriving W/kg from watts; absent values remain missing
+
+Team and rider pages require a DIRT account. Install the optional collector
+dependencies, then sign in directly in the browser opened by the collector:
+
+```powershell
+python -m pip install -r requirements-scraping.txt
+python -m playwright install chromium
+python tools/fetch_dirt_roster.py --login --team "RtB Yaks" --output race_data/dirt_s14_yaks.json
+python tools/fetch_dirt_roster.py --login
+```
+
+Progress is saved after every page; repeat the command to resume. Use `--refresh`
+to refetch team membership and rider profiles for a new snapshot. Requests are
+sequential and paced at 0.5 seconds by default, with rate-limit backoff. Rider
+profiles must identify Series 14 before they are accepted. Authentication stays
+in a local browser profile under `~/.zwifttools/dirt-browser`, not in the roster
+or repository. Long runs reload the browser after each 100-page batch to release
+browser resources. `--browser-relay` supports collection from an already authenticated
+DIRT browser via the module's `BROWSER_WORKER` and a temporary localhost relay;
+only parsed roster data is saved.
+
+Collect the ZwiftRacing metrics separately, signing in directly in the opened
+browser. Each unique Zwift ID is requested once, regardless of team assignments:
+
+```powershell
+python tools/fetch_dirt_stats.py --login --rider-id 7681059 --output race_data/dirt_s14_stats_tim.json
+python tools/fetch_dirt_stats.py --login
+```
+
+The deployable snapshot is `dirt_s14_stats.json`, served at `/api/dirt/stats`.
+Collection is sequential, paced, and resumable after every rider; `--refresh`
+starts a fresh snapshot. The collector reads the authenticated Power route's
+loaded rider data, which also includes the six vELO scores, and reloads after
+each 60-rider batch. Authentication stays under
+`~/.zwifttools/zwiftracing-browser`, not in the snapshot. The browser-relay mode
+can serve its worker at `/worker` on its temporary local port. Stats collection
+status and unavailable profiles are reported without breaking the Roster tab.
+
 ### Bike Comparison
 
 - Load any Zwift activity by URL/ID or upload a .fit file

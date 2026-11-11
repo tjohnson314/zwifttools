@@ -15,7 +15,7 @@ def test_landing_shows_current_tools_by_default(query, monkeypatch):
     assert 'href="/?tab=archived"' in html
     assert 'href="/zrl/leaderboard"' not in html
     for path in (
-        "/bike-comparison", "/race-replay", "/surface-map", "/my-activities",
+        "/dirt", "/bike-comparison", "/race-replay", "/surface-map", "/my-activities",
         "/power", "/segment-prs", "/workout-analysis", "/ttt-analysis", "/ride-compare", "/critical-power",
         "/tt-pacing", "/ttt-pacing", "/top-performers",
     ):

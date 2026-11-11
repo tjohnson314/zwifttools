@@ -293,6 +293,44 @@ def race_replay():
     return render_template('race_replay.html', ra=race_analyzer)
 
 
+_DIRT_ROSTER_FILE = Path(__file__).parent / 'dirt_s14_roster.json'
+_DIRT_STATS_FILE = Path(__file__).parent / 'dirt_s14_stats.json'
+
+
+@app.route('/dirt')
+def dirt_roster():
+    """Browse the DIRT Racing Series season 14 roster."""
+    return render_template('dirt_roster.html')
+
+
+@app.route('/api/dirt/roster')
+def api_dirt_roster():
+    """Serve the collected roster without requiring visitors to sign in."""
+    try:
+        with _DIRT_ROSTER_FILE.open(encoding='utf-8') as handle:
+            roster = json.load(handle)
+    except FileNotFoundError:
+        return jsonify({'error': 'The season 14 roster has not been collected yet.'}), 503
+    except (OSError, json.JSONDecodeError):
+        logger.exception('Could not load DIRT roster')
+        return jsonify({'error': 'The season 14 roster is temporarily unavailable.'}), 503
+    return jsonify(roster)
+
+
+@app.route('/api/dirt/stats')
+def api_dirt_stats():
+    """Serve the saved ZwiftRacing ratings and power curves."""
+    try:
+        with _DIRT_STATS_FILE.open(encoding='utf-8') as handle:
+            stats = json.load(handle)
+    except FileNotFoundError:
+        return jsonify({'error': 'ZwiftRacing stats have not been collected yet.'}), 503
+    except (OSError, json.JSONDecodeError):
+        logger.exception('Could not load DIRT rider stats')
+        return jsonify({'error': 'ZwiftRacing stats are temporarily unavailable.'}), 503
+    return jsonify(stats)
+
+
 @app.route('/zrl/leaderboard')
 def zrl_leaderboard():
     """ZRL Stage 1 leaderboard shell until the official activities are loaded."""

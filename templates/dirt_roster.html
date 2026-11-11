@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DIRT Racing Series - Season 14 - Zwift Tools</title>
+    <link rel="icon" href="/static/img/favicon.ico">
+    <link rel="stylesheet" href="/static/css/dirt_roster.css">
+    <script src="/static/js/dirt_roster.js" defer></script>
+</head>
+<body>
+    <div class="container">
+        <a class="back-link" href="/">&larr; Zwift Tools</a>
+        <header>
+            <img class="series-logo" src="/static/img/dirt-logo.webp" alt="DIRT Racing Series" width="104" height="76">
+            <div class="series-title"><p class="eyebrow">SEASON 14</p><h1>DIRT Racing Series</h1></div>
+            <a class="source-link" href="https://dirtracingseries.com/riders/teams/all/" target="_blank" rel="noopener">Official series &nearr;</a>
+        </header>
+        <section class="summary" aria-label="Season totals">
+            <div><strong id="total-riders">-</strong><span>Riders</span></div>
+            <div><strong id="total-teams">-</strong><span>Teams</span></div>
+            <div><strong id="total-leagues">-</strong><span>Leagues</span></div>
+            <div class="snapshot"><span id="snapshot-state">Loading roster</span><time id="snapshot-date"></time></div>
+        </section>
+        <main>
+            <div class="section-heading"><h2>Season 14 Riders</h2><a id="download" class="download" href="#" download="dirt-season-14.csv" aria-disabled="true">Download CSV &darr;</a></div>
+            <div class="data-tabs" role="tablist" aria-label="Rider data">
+                <button type="button" id="roster-tab" role="tab" aria-selected="true" aria-controls="roster-panel">Roster</button>
+                <button type="button" id="velo-tab" role="tab" aria-selected="false" aria-controls="roster-panel" tabindex="-1">vELO</button>
+                <button type="button" id="power-tab" role="tab" aria-selected="false" aria-controls="roster-panel" tabindex="-1">Power</button>
+            </div>
+            <form id="filters" class="filters" role="search">
+                <label class="search-field">Search<input id="search" name="q" type="search" placeholder="Rider, team or Zwift ID" autocomplete="off"></label>
+                <label>Time zone<select id="time_zone" name="time_zone"><option value="">All time zones</option></select></label>
+                <label>League<select id="league" name="league"><option value="">All leagues</option></select></label>
+                <label>Category<select id="category" name="category"><option value="">All categories</option></select></label>
+                <label>Team<select id="team" name="team"><option value="">All teams</option></select></label>
+                <button id="clear" class="icon-button" type="button" title="Clear filters" aria-label="Clear filters">&times;</button>
+            </form>
+            <div class="table-toolbar">
+                <div id="roster-views" class="view-switch" role="group" aria-label="Roster view"><button type="button" id="riders-view" aria-pressed="true">Riders</button><button type="button" id="teams-view" aria-pressed="false">Teams</button></div>
+                <div id="power-controls" hidden>
+                    <fieldset id="power-source" class="power-units"><legend class="sr-only">Power values</legend><label><input type="radio" name="power-source" value="live" checked>Live</label><label><input type="radio" name="power-source" value="best_90d">90-day best</label></fieldset>
+                    <fieldset id="power-units" class="power-units"><legend class="sr-only">Power units</legend><label><input type="radio" name="power-unit" value="w" checked>W</label><label><input type="radio" name="power-unit" value="wkg">W/kg</label></fieldset>
+                </div>
+                <span id="result-count" role="status" aria-live="polite"></span>
+            </div>
+            <p id="status" role="status" aria-live="polite">Loading season 14 roster...</p>
+            <div id="roster-panel" role="tabpanel" aria-labelledby="roster-tab">
+                <div class="table-scroll" tabindex="0" role="region" aria-label="Season 14 rider table">
+                    <table id="roster"><caption class="sr-only">DIRT Racing Series season 14 team assignments</caption><thead></thead><tbody></tbody></table>
+                </div>
+            </div>
+        </main>
+    </div>
+</body>
+</html>
