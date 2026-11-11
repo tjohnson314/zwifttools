@@ -20,20 +20,26 @@
  "2": {
   "coef": [
    [
-    8.895464550980212e-06,
-    5.945781956019986e-08
+          9.047650005061789e-06,
+          2.980112559980249e-08
    ],
    [
-    -9.784561191134022e-08,
-    1.1308270955960598e-05
+          2.306217727118115e-08,
+          1.134839538106426e-05
    ],
    [
-    37.54292811524815,
-    -77.4374728322562
+          37.543011613968666,
+          -77.43738483811705
    ]
   ],
-  "route": "Richmond Rollercoaster",
-  "p95_m": 8.2
+     "route": "2015 Worlds Course",
+     "p95_m": 4.6,
+     "source_activity_id": "2260150967800512560",
+     "fit_method": "nearest-path affine refinement; first lap fit, second lap validation",
+     "fit_p95_m": 4.3,
+     "validation_p95_m": 4.6,
+     "fit_samples": 1552,
+     "validation_samples": 1656
  },
  "3": {
   "coef": [

@@ -5,6 +5,7 @@ const SEGMENT_PAGE_SIZE = 20;
 let segmentContext = null;
 let segmentActivities = [];
 let selectedSegment = new URLSearchParams(window.location.search).get('segment') || '';
+let selectedWorld = '';
 let segmentQuery = '';
 let segmentPage = 0;
 let segmentLoading = false;
@@ -93,8 +94,12 @@ function allSegmentRows() {
     })));
 }
 
+function worldSegmentRows() {
+    return allSegmentRows().filter(row => !selectedWorld || row.segment_id.split(':')[0] === selectedWorld);
+}
+
 function segmentTableRows() {
-    let rows = allSegmentRows();
+    let rows = worldSegmentRows();
     if (selectedSegment) {
         rows = rows.filter(row => row.segment_id === selectedSegment);
     } else {
@@ -175,9 +180,14 @@ function selectSegment(id) {
     renderSegmentTable();
 }
 
+function selectSegmentWorld(id) {
+    selectedWorld = id;
+    selectSegment(selectedWorld && selectedSegment.split(':')[0] !== selectedWorld ? '' : selectedSegment);
+}
+
 function renderSegmentTable() {
     updateSegmentSortHeaders();
-    const names = new Map(allSegmentRows().map(row => [row.segment_id, row.segment_name]));
+    const names = new Map(worldSegmentRows().map(row => [row.segment_id, row.segment_name]));
     const select = document.getElementById('segmentSelect');
     select.replaceChildren(new Option('Best time for each segment', ''));
     for (const [id, name] of [...names].sort((a, b) => a[1].localeCompare(b[1]))) {
@@ -352,6 +362,7 @@ document.addEventListener('DOMContentLoaded', () => {
         segmentPage = 0;
         renderSegmentTable();
     });
+    document.getElementById('worldSelect').addEventListener('change', event => selectSegmentWorld(event.target.value));
     document.getElementById('segmentSelect').addEventListener('change', event => selectSegment(event.target.value));
     document.getElementById('previousBtn').addEventListener('click', () => { segmentPage--; renderSegmentTable(); });
     document.getElementById('nextBtn').addEventListener('click', () => { segmentPage++; renderSegmentTable(); });

@@ -810,7 +810,8 @@ def power_dashboard():
 def segment_prs():
     if 'tokens' not in session:
         return redirect(url_for('auth_login', next=url_for('segment_prs')))
-    return render_template('segment_prs.html')
+    from shared.world_config import WORLD_NAMES
+    return render_template('segment_prs.html', world_names=WORLD_NAMES)
 
 
 @app.route('/api/segment_prs/activity/<activity_id>')

@@ -125,6 +125,58 @@ test('table includes duration but no entry-time column', () => {
     assert.match(template, /<th>Analyze<\/th>/);
 });
 
+test('world filtering narrows PRs and composes with search, sorting and drilldown', () => {
+    const { state } = context();
+    state.data = payload([
+        row('1:123', 10), row('2:123', 30), row('2:123', 20, 100), row('2:456', 40),
+    ]);
+    vm.runInContext('segmentActivities[0].data = data; selectedWorld = "2"; segmentSortKey = "total_time_sec";', state);
+    assert.deepEqual(Array.from(state.segmentTableRows(), item => item.segment_id), ['2:123', '2:456']);
+    assert.deepEqual(Array.from(state.segmentTableRows(), item => item.total_time_sec), [20, 40]);
+    vm.runInContext('selectedSegment = "2:123";', state);
+    assert.deepEqual(Array.from(state.segmentTableRows(), item => item.total_time_sec), [20, 30]);
+    vm.runInContext('segmentQuery = "SEGMENT 2:456"; selectedSegment = "";', state);
+    assert.deepEqual(Array.from(state.segmentTableRows(), item => item.segment_id), ['2:456']);
+    vm.runInContext('selectedWorld = ""; segmentQuery = "";', state);
+    assert.equal(state.segmentTableRows().length, 3);
+    assert.equal(state.allSegmentRows().length, 4);
+    vm.runInContext('selectedWorld = "13";', state);
+    assert.equal(state.segmentTableRows().length, 0);
+});
+
+test('world changes reset pagination and clear only incompatible segment selections', () => {
+    const elements = new Map();
+    const { state } = context({
+        Option: function(text, value) { return { textContent: text, value }; },
+        document: {
+            addEventListener() {},
+            getElementById(id) {
+                if (!elements.has(id)) elements.set(id, fakeElement());
+                return elements.get(id);
+            },
+            createElement: fakeElement,
+            querySelectorAll() { return []; },
+        },
+    });
+    state.data = payload([row('1:123', 10), row('2:123', 30), row('2:456', 40)]);
+    vm.runInContext('segmentActivities[0].data = data; selectedSegment = "1:123"; segmentPage = 3;', state);
+    state.selectSegmentWorld('2');
+    assert.equal(vm.runInContext('selectedSegment', state), '');
+    assert.equal(vm.runInContext('segmentPage', state), 0);
+    assert.deepEqual(elements.get('segmentSelect').children.map(option => option.value), ['', '2:123', '2:456']);
+    assert.match(elements.get('pageStatus').textContent, /^2 results/);
+    state.selectSegment('2:123');
+    state.selectSegmentWorld('2');
+    assert.equal(vm.runInContext('selectedSegment', state), '2:123');
+    state.selectSegmentWorld('');
+    assert.equal(vm.runInContext('selectedSegment', state), '2:123');
+    assert.equal(elements.get('segmentSelect').children.length, 4);
+    state.selectSegmentWorld('13');
+    assert.equal(vm.runInContext('selectedSegment', state), '');
+    assert.match(elements.get('pageStatus').textContent, /^0 results/);
+    assert.equal(state.allSegmentRows().length, 3);
+});
+
 test('every numeric data column sorts raw numbers ascending and descending', () => {
     const fields = [
         'total_time_sec', 'distance_m', 'elevation_change_m',

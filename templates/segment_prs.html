@@ -23,6 +23,12 @@
         <main id="dashboard" class="panel" hidden>
             <div class="segment-controls">
                 <label>Search segments <input id="segmentSearch" type="search" placeholder="Segment name"></label>
+                <label>World <select id="worldSelect">
+                    <option value="">All worlds</option>
+                    {% for id, name in world_names|dictsort(by='value') %}
+                    <option value="{{ id }}">{{ name }}</option>
+                    {% endfor %}
+                </select></label>
                 <label>View <select id="segmentSelect"><option value="">Best time for each segment</option></select></label>
                 <button id="refreshBtn" class="range-btn" type="button">Refresh activities</button>
                 <button id="clearCacheBtn" class="range-btn" type="button">Clear cache and reload</button>
