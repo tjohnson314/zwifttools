@@ -149,27 +149,27 @@ async function initDirtRoster() {
         element('teams-view').setAttribute('aria-pressed', String(view === 'teams'));
         const columns = teamView ? dirtTeamColumns : dirtColumns(tab, unit, powerSource);
         const table = element('roster');
-        table.className = rosterView ? '' : 'stats-table';
+        table.className = teamView ? '' : rosterView ? 'rider-table' : 'rider-table stats-table';
         table.querySelector('caption').textContent = rosterView ? 'DIRT Racing Series season 14 team assignments' : tab === 'velo' ? 'Rider overall and category vELO scores' : `Rider ${powerSource === 'live' ? 'live estimate' : '90-day best'} power in ${unit === 'wkg' ? 'watts per kilogram' : 'watts'}`;
         const header = element('roster').querySelector('thead');
         const columnLabel = (title, index) => tab === 'power' && index >= 2 ? dirtIntervals[index - 2][1].replace(' seconds', 's').replace(' minutes', 'min').replace(' minute', 'min') : title;
         const heading = ([key, title], index) => `<th scope="col"${sort.key === key ? ` aria-sort="${sort.direction === 1 ? 'ascending' : 'descending'}"` : ''}><button type="button" data-sort="${key}" aria-label="${dirtEsc(title)}" title="${dirtEsc(title)}">${columnLabel(title, index)}${sort.key === key ? (sort.direction === 1 ? ' &#8593;' : ' &#8595;') : ''}</button></th>`;
-        header.innerHTML = `<tr>${columns.map(heading).join('')}</tr>`;
+        header.innerHTML = `<tr>${teamView ? '' : '<th scope="col" class="row-number" aria-label="Row number">#</th>'}${columns.map(heading).join('')}</tr>`;
         const linkTeam = (id, name) => `<a href="/dirt?team=${id}" data-team="${id}">${dirtEsc(name)}</a>`;
         let rows;
         const metricRows = dirtStatsRows(assignments, stats, unit);
         if (teamView) {
             rows = dirtSorted(teams.map(team => ({...team, rider_count: team.roster_fetched ? team.riders.length : null})), sort.key, sort.direction).map(team => `<tr><td>${linkTeam(team.team_id, team.name)}</td><td>${dirtEsc(team.time_zone)}</td><td>${dirtEsc(team.league)}</td><td class="category">${dirtEsc(team.category)}</td><td>${team.roster_fetched ? team.riders.length : '<span class="muted">Pending</span>'}</td></tr>`);
         } else if (rosterView) {
-            rows = dirtSorted(assignments, sort.key, sort.direction).map(rider => `<tr><td><a href="https://dirtracingseries.com/riders/profile/${rider.rider_id}/" target="_blank" rel="noopener">${dirtEsc(rider.name)}</a></td><td>${rider.zwift_id == null ? `<span class="muted">${rider.profile_fetched ? 'Unavailable' : 'Pending'}</span>` : `<a href="https://zwiftpower.com/profile.php?z=${rider.zwift_id}" target="_blank" rel="noopener">${rider.zwift_id}</a>`}</td><td>${linkTeam(rider.team_id, rider.team)}</td><td>${dirtEsc(rider.time_zone)}</td><td>${dirtEsc(rider.league)}</td><td class="category">${dirtEsc(rider.category)}</td></tr>`);
+            rows = dirtSorted(assignments, sort.key, sort.direction).map((rider, rowIndex) => `<tr><td class="row-number">${rowIndex + 1}</td><td><a href="https://dirtracingseries.com/riders/profile/${rider.rider_id}/" target="_blank" rel="noopener">${dirtEsc(rider.name)}</a></td><td>${rider.zwift_id == null ? `<span class="muted">${rider.profile_fetched ? 'Unavailable' : 'Pending'}</span>` : `<a href="https://zwiftpower.com/profile.php?z=${rider.zwift_id}" target="_blank" rel="noopener">${rider.zwift_id}</a>`}</td><td>${linkTeam(rider.team_id, rider.team)}</td><td>${dirtEsc(rider.time_zone)}</td><td>${dirtEsc(rider.league)}</td><td class="category">${dirtEsc(rider.category)}</td></tr>`);
         } else {
-            rows = dirtSorted(metricRows, sort.key, sort.direction).map(rider => `<tr>${columns.map(([key, title], index) => {
+            rows = dirtSorted(metricRows, sort.key, sort.direction).map((rider, rowIndex) => `<tr><td class="row-number">${rowIndex + 1}</td>${columns.map(([key, title], index) => {
                 if (key === 'name') return `<td><a href="https://zwiftracing.app/riders/${rider.zwift_id}/${tab === 'velo' ? 'velo' : 'power'}" target="_blank" rel="noopener">${dirtEsc(rider.name)}</a>${rider.stats_status === 'ok' ? '' : `<span class="stats-state" title="${dirtEsc(rider.stats_reason)}">${rider.stats_status === 'unavailable' ? 'Unavailable' : 'Pending'}</span>`}</td>`;
                 if (key === 'team') return `<td>${linkTeam(rider.team_id, rider.team)}</td>`;
                 return `<td data-metric="${key}" data-label="${dirtEsc(columnLabel(title, index))}" class="metric">${rider[key] == null ? '<span class="muted" title="No value supplied">&mdash;</span>' : dirtEsc(tab === 'velo' ? Math.round(Math.min(rider[key], 1000)) : rider[key])}</td>`;
             }).join('')}</tr>`);
         }
-        element('roster').querySelector('tbody').innerHTML = rows.join('') || `<tr><td class="empty" colspan="${columns.length}">${!teamView && teams.length ? 'No riders on these team rosters.' : 'No matching results.'}</td></tr>`;
+        element('roster').querySelector('tbody').innerHTML = rows.join('') || `<tr><td class="empty" colspan="${columns.length + (teamView ? 0 : 1)}">${!teamView && teams.length ? 'No riders on these team rosters.' : 'No matching results.'}</td></tr>`;
         const nextParameters = new URLSearchParams();
         for (const [key, value] of Object.entries(filters)) if (value) nextParameters.set(key, value);
         if (view !== 'riders') nextParameters.set('view', view);

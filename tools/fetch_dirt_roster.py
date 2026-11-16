@@ -60,17 +60,19 @@ def parse_teams(html: str) -> list[dict]:
         if link is None:
             raise ValueError("Current-series team has no team-page link.")
         team_id = int(link["href"].strip("/").split("/")[-1])
-        if team_id in seen:
-            raise ValueError(f"Duplicate team ID {team_id} in DIRT team table.")
-        seen.add(team_id)
-        teams.append({
+        team = {
             "team_id": team_id,
             "name": link.get_text(" ", strip=True),
             "url": urljoin(BASE_URL, link["href"]),
             "time_zone": cells[2].get_text(" ", strip=True),
             "league": cells[3].get_text(" ", strip=True),
             "category": cells[4].get_text(" ", strip=True),
-        })
+        }
+        registration = (team_id, team["time_zone"], team["league"], team["category"])
+        if registration in seen:
+            raise ValueError(f"Duplicate series registration for team {team_id} in DIRT team table.")
+        seen.add(registration)
+        teams.append(team)
     if not teams:
         raise ValueError("No teams are marked as participating in the current series.")
     return teams

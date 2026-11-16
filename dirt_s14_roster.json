@@ -1,13 +1,13 @@
 {
   "season": 14,
   "source_url": "https://dirtracingseries.com/riders/teams/all/",
-  "fetched_at": "2026-11-12T22:25:07.489274+00:00",
+  "fetched_at": "2026-11-16T23:47:41.930647+00:00",
   "complete": true,
-  "team_count": 226,
-  "rosters_fetched": 226,
-  "assignment_count": 1131,
-  "rider_count": 1112,
-  "profiles_fetched": 1112,
+  "team_count": 238,
+  "rosters_fetched": 238,
+  "assignment_count": 1298,
+  "rider_count": 1258,
+  "profiles_fetched": 1258,
   "missing_zwift_ids": 0,
   "teams": [
     {
@@ -192,6 +192,30 @@
           "role": "Rider",
           "zwift_id": 4027564,
           "profile_fetched": true
+        },
+        {
+          "rider_id": 9886,
+          "name": "Rodrigo Cabrera",
+          "url": "https://dirtracingseries.com/riders/profile/9886/",
+          "role": "Rider",
+          "zwift_id": 7506042,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 9671,
+          "name": "Diego Fern\u00e1ndez",
+          "url": "https://dirtracingseries.com/riders/profile/9671/",
+          "role": "Rider",
+          "zwift_id": 3716833,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 9692,
+          "name": "RODOLFO FERRONI",
+          "url": "https://dirtracingseries.com/riders/profile/9692/",
+          "role": "Rider",
+          "zwift_id": 5428205,
+          "profile_fetched": true
         }
       ]
     },
@@ -218,6 +242,14 @@
           "url": "https://dirtracingseries.com/riders/profile/10256/",
           "role": "Captain",
           "zwift_id": 4489098,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10259,
+          "name": "Andy McSavage",
+          "url": "https://dirtracingseries.com/riders/profile/10259/",
+          "role": "Rider",
+          "zwift_id": 3225961,
           "profile_fetched": true
         },
         {
@@ -250,6 +282,14 @@
           "url": "https://dirtracingseries.com/riders/profile/10268/",
           "role": "Rider",
           "zwift_id": 2780065,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10304,
+          "name": "Jason Fowler",
+          "url": "https://dirtracingseries.com/riders/profile/10304/",
+          "role": "Rider",
+          "zwift_id": 555791,
           "profile_fetched": true
         }
       ]
@@ -392,8 +432,8 @@
       "team_id": 1868,
       "name": "Banda RC",
       "url": "https://dirtracingseries.com/riders/1868/",
-      "time_zone": "EMEA C",
-      "league": "Tortellini",
+      "time_zone": "EMEA W",
+      "league": "Rotini",
       "category": "06 Platinum",
       "roster_fetched": true,
       "riders": [
@@ -669,6 +709,22 @@
           "role": "Rider",
           "zwift_id": 428394,
           "profile_fetched": true
+        },
+        {
+          "rider_id": 7032,
+          "name": "Anthony Porter",
+          "url": "https://dirtracingseries.com/riders/profile/7032/",
+          "role": "Rider",
+          "zwift_id": 6574195,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 4798,
+          "name": "Kev Towning",
+          "url": "https://dirtracingseries.com/riders/profile/4798/",
+          "role": "Rider",
+          "zwift_id": 2305776,
+          "profile_fetched": true
         }
       ]
     },
@@ -728,14 +784,6 @@
           "role": "Rider",
           "zwift_id": 696821,
           "profile_fetched": true
-        },
-        {
-          "rider_id": 982,
-          "name": "Rod Hockin",
-          "url": "https://dirtracingseries.com/riders/profile/982/",
-          "role": "Captain",
-          "zwift_id": 459776,
-          "profile_fetched": true
         }
       ]
     },
@@ -748,14 +796,6 @@
       "category": "03 Emerald",
       "roster_fetched": true,
       "riders": [
-        {
-          "rider_id": 4798,
-          "name": "Kev Towning",
-          "url": "https://dirtracingseries.com/riders/profile/4798/",
-          "role": "Rider",
-          "zwift_id": 2305776,
-          "profile_fetched": true
-        },
         {
           "rider_id": 3037,
           "name": "Dennis van den Bosch",
@@ -787,32 +827,21 @@
           "role": "Rider",
           "zwift_id": 3248246,
           "profile_fetched": true
-        }
-      ]
-    },
-    {
-      "team_id": 811,
-      "name": "CLS Express",
-      "url": "https://dirtracingseries.com/riders/811/",
-      "time_zone": "EMEA W",
-      "league": "Rotini",
-      "category": "05 Amethyst",
-      "roster_fetched": true,
-      "riders": [
+        },
         {
-          "rider_id": 2294,
-          "name": "Chris Rick",
-          "url": "https://dirtracingseries.com/riders/profile/2294/",
-          "role": "Captain",
-          "zwift_id": 4633433,
+          "rider_id": 3817,
+          "name": "Darren Little",
+          "url": "https://dirtracingseries.com/riders/profile/3817/",
+          "role": "Rider",
+          "zwift_id": 609377,
           "profile_fetched": true
         },
         {
-          "rider_id": 3635,
-          "name": "Stephen Hoare",
-          "url": "https://dirtracingseries.com/riders/profile/3635/",
+          "rider_id": 10074,
+          "name": "paul duffy",
+          "url": "https://dirtracingseries.com/riders/profile/10074/",
           "role": "Rider",
-          "zwift_id": 418055,
+          "zwift_id": 282844,
           "profile_fetched": true
         }
       ]
@@ -902,14 +931,6 @@
       "roster_fetched": true,
       "riders": [
         {
-          "rider_id": 1710,
-          "name": "Lee Read",
-          "url": "https://dirtracingseries.com/riders/profile/1710/",
-          "role": "Rider",
-          "zwift_id": 560630,
-          "profile_fetched": true
-        },
-        {
           "rider_id": 5158,
           "name": "Martin Toye",
           "url": "https://dirtracingseries.com/riders/profile/5158/",
@@ -942,14 +963,6 @@
           "profile_fetched": true
         },
         {
-          "rider_id": 3635,
-          "name": "Stephen Hoare",
-          "url": "https://dirtracingseries.com/riders/profile/3635/",
-          "role": "Rider",
-          "zwift_id": 418055,
-          "profile_fetched": true
-        },
-        {
           "rider_id": 2908,
           "name": "Elliott Ward",
           "url": "https://dirtracingseries.com/riders/profile/2908/",
@@ -963,6 +976,14 @@
           "url": "https://dirtracingseries.com/riders/profile/1885/",
           "role": "Rider",
           "zwift_id": 108645,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 982,
+          "name": "Rod Hockin",
+          "url": "https://dirtracingseries.com/riders/profile/982/",
+          "role": "Captain",
+          "zwift_id": 459776,
           "profile_fetched": true
         }
       ]
@@ -982,6 +1003,22 @@
           "url": "https://dirtracingseries.com/riders/profile/3974/",
           "role": "Captain",
           "zwift_id": 5713638,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 4770,
+          "name": "Rob Mayes",
+          "url": "https://dirtracingseries.com/riders/profile/4770/",
+          "role": "Rider",
+          "zwift_id": 1287121,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 3983,
+          "name": "David Grindrod",
+          "url": "https://dirtracingseries.com/riders/profile/3983/",
+          "role": "Rider",
+          "zwift_id": 4220633,
           "profile_fetched": true
         }
       ]
@@ -1018,6 +1055,46 @@
           "role": "Rider",
           "zwift_id": 5382344,
           "profile_fetched": true
+        },
+        {
+          "rider_id": 9995,
+          "name": "Max Conway",
+          "url": "https://dirtracingseries.com/riders/profile/9995/",
+          "role": "Rider",
+          "zwift_id": 8562853,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 8016,
+          "name": "Ryan Liden",
+          "url": "https://dirtracingseries.com/riders/profile/8016/",
+          "role": "Rider",
+          "zwift_id": 315591,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 4319,
+          "name": "Vincent Davis",
+          "url": "https://dirtracingseries.com/riders/profile/4319/",
+          "role": "Rider",
+          "zwift_id": 87402,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 5064,
+          "name": "Jin Yamamoto",
+          "url": "https://dirtracingseries.com/riders/profile/5064/",
+          "role": "Rider",
+          "zwift_id": 2140418,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 5752,
+          "name": "Andrew Broadmoore",
+          "url": "https://dirtracingseries.com/riders/profile/5752/",
+          "role": "Rider",
+          "zwift_id": 5266228,
+          "profile_fetched": true
         }
       ]
     },
@@ -1034,7 +1111,7 @@
           "rider_id": 8123,
           "name": "Lee Amlicke",
           "url": "https://dirtracingseries.com/riders/profile/8123/",
-          "role": "Rider",
+          "role": "Captain",
           "zwift_id": 6585,
           "profile_fetched": true
         },
@@ -1063,14 +1140,40 @@
           "profile_fetched": true
         },
         {
-          "rider_id": 9759,
-          "name": "Kevin Bukowski",
-          "url": "https://dirtracingseries.com/riders/profile/9759/",
-          "role": "Captain",
-          "zwift_id": 5792857,
+          "rider_id": 7358,
+          "name": "Charlie Li",
+          "url": "https://dirtracingseries.com/riders/profile/7358/",
+          "role": "Rider",
+          "zwift_id": 6766741,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 9824,
+          "name": "Davey Ross",
+          "url": "https://dirtracingseries.com/riders/profile/9824/",
+          "role": "Rider",
+          "zwift_id": 7762908,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 9740,
+          "name": "Evan Roesch",
+          "url": "https://dirtracingseries.com/riders/profile/9740/",
+          "role": "Rider",
+          "zwift_id": 2840468,
           "profile_fetched": true
         }
       ]
+    },
+    {
+      "team_id": 991,
+      "name": "COALITION Chaos",
+      "url": "https://dirtracingseries.com/riders/991/",
+      "time_zone": "EMEA W",
+      "league": "Rotini",
+      "category": "03 Emerald",
+      "roster_fetched": true,
+      "riders": []
     },
     {
       "team_id": 989,
@@ -1095,6 +1198,14 @@
           "url": "https://dirtracingseries.com/riders/profile/5738/",
           "role": "Rider",
           "zwift_id": 6934646,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 6076,
+          "name": "Dan Klopfer",
+          "url": "https://dirtracingseries.com/riders/profile/6076/",
+          "role": "Captain",
+          "zwift_id": 1562251,
           "profile_fetched": true
         }
       ]
@@ -1149,11 +1260,11 @@
           "profile_fetched": true
         },
         {
-          "rider_id": 9516,
-          "name": "Reid Veto",
-          "url": "https://dirtracingseries.com/riders/profile/9516/",
+          "rider_id": 6884,
+          "name": "Simon Rozenberg",
+          "url": "https://dirtracingseries.com/riders/profile/6884/",
           "role": "Rider",
-          "zwift_id": 264557,
+          "zwift_id": 7110078,
           "profile_fetched": true
         }
       ]
@@ -1176,11 +1287,51 @@
           "profile_fetched": true
         },
         {
-          "rider_id": 2982,
-          "name": "Brice Gary",
-          "url": "https://dirtracingseries.com/riders/profile/2982/",
+          "rider_id": 9765,
+          "name": "Chris McKenna",
+          "url": "https://dirtracingseries.com/riders/profile/9765/",
           "role": "Rider",
-          "zwift_id": 259907,
+          "zwift_id": 835438,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10228,
+          "name": "Claudia Ohly",
+          "url": "https://dirtracingseries.com/riders/profile/10228/",
+          "role": "Rider",
+          "zwift_id": 6569815,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10151,
+          "name": "Liz Bradfield",
+          "url": "https://dirtracingseries.com/riders/profile/10151/",
+          "role": "Captain",
+          "zwift_id": 5588901,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 2269,
+          "name": "Simon Marks",
+          "url": "https://dirtracingseries.com/riders/profile/2269/",
+          "role": "Rider",
+          "zwift_id": 2997488,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10249,
+          "name": "Jen Panteluk",
+          "url": "https://dirtracingseries.com/riders/profile/10249/",
+          "role": "Rider",
+          "zwift_id": 3750369,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10243,
+          "name": "Samantha Vieira",
+          "url": "https://dirtracingseries.com/riders/profile/10243/",
+          "role": "Rider",
+          "zwift_id": 4170454,
           "profile_fetched": true
         }
       ]
@@ -1193,7 +1344,48 @@
       "league": "Linguine",
       "category": "08 Silver - Bronze - Copper",
       "roster_fetched": true,
-      "riders": []
+      "riders": [
+        {
+          "rider_id": 9390,
+          "name": "Amanda Rossi",
+          "url": "https://dirtracingseries.com/riders/profile/9390/",
+          "role": "Rider",
+          "zwift_id": 6928924,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 9618,
+          "name": "Bobby Picou",
+          "url": "https://dirtracingseries.com/riders/profile/9618/",
+          "role": "Rider",
+          "zwift_id": 5993524,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 9815,
+          "name": "Chris Mark",
+          "url": "https://dirtracingseries.com/riders/profile/9815/",
+          "role": "Rider",
+          "zwift_id": 8092988,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 7839,
+          "name": "Damir Krstic",
+          "url": "https://dirtracingseries.com/riders/profile/7839/",
+          "role": "Captain",
+          "zwift_id": 2759811,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 6288,
+          "name": "Dee Barbic",
+          "url": "https://dirtracingseries.com/riders/profile/6288/",
+          "role": "Rider",
+          "zwift_id": 229459,
+          "profile_fetched": true
+        }
+      ]
     },
     {
       "team_id": 1263,
@@ -1210,6 +1402,30 @@
           "url": "https://dirtracingseries.com/riders/profile/1697/",
           "role": "Rider",
           "zwift_id": 183308,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 5920,
+          "name": "Angie Michalik",
+          "url": "https://dirtracingseries.com/riders/profile/5920/",
+          "role": "Rider",
+          "zwift_id": 79450,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10198,
+          "name": "Celine Sauvage",
+          "url": "https://dirtracingseries.com/riders/profile/10198/",
+          "role": "Rider",
+          "zwift_id": 6164399,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 9407,
+          "name": "Jack Bolton",
+          "url": "https://dirtracingseries.com/riders/profile/9407/",
+          "role": "Rider",
+          "zwift_id": 4670445,
           "profile_fetched": true
         }
       ]
@@ -1270,6 +1486,22 @@
           "role": "Rider",
           "zwift_id": 1419627,
           "profile_fetched": true
+        },
+        {
+          "rider_id": 7653,
+          "name": "Dj Esposito-Kelley",
+          "url": "https://dirtracingseries.com/riders/profile/7653/",
+          "role": "Rider",
+          "zwift_id": 4372516,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10115,
+          "name": "Joseph Mascaro",
+          "url": "https://dirtracingseries.com/riders/profile/10115/",
+          "role": "Rider",
+          "zwift_id": 7714310,
+          "profile_fetched": true
         }
       ]
     },
@@ -1302,8 +1534,32 @@
           "rider_id": 5118,
           "name": "Dustin Moburg",
           "url": "https://dirtracingseries.com/riders/profile/5118/",
-          "role": "Rider",
+          "role": "Captain",
           "zwift_id": 177107,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 9516,
+          "name": "Reid Veto",
+          "url": "https://dirtracingseries.com/riders/profile/9516/",
+          "role": "Rider",
+          "zwift_id": 264557,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10153,
+          "name": "Adam Spears",
+          "url": "https://dirtracingseries.com/riders/profile/10153/",
+          "role": "Rider",
+          "zwift_id": 11285,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10142,
+          "name": "Andy Wagner",
+          "url": "https://dirtracingseries.com/riders/profile/10142/",
+          "role": "Rider",
+          "zwift_id": 3120646,
           "profile_fetched": true
         }
       ]
@@ -1323,6 +1579,41 @@
           "url": "https://dirtracingseries.com/riders/profile/9432/",
           "role": "Rider",
           "zwift_id": 190743,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10079,
+          "name": "Leon Clement",
+          "url": "https://dirtracingseries.com/riders/profile/10079/",
+          "role": "Rider",
+          "zwift_id": 7560052,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 7549,
+          "name": "Andrei Hreapca",
+          "url": "https://dirtracingseries.com/riders/profile/7549/",
+          "role": "Rider",
+          "zwift_id": 189547,
+          "profile_fetched": true
+        }
+      ]
+    },
+    {
+      "team_id": 830,
+      "name": "COALITION Tartarus",
+      "url": "https://dirtracingseries.com/riders/830/",
+      "time_zone": "Atlantic",
+      "league": "Fettuccine",
+      "category": "01 Diamond - Ruby - Emerald",
+      "roster_fetched": true,
+      "riders": [
+        {
+          "rider_id": 2877,
+          "name": "Garreth Druce",
+          "url": "https://dirtracingseries.com/riders/profile/2877/",
+          "role": "Rider",
+          "zwift_id": 4303652,
           "profile_fetched": true
         }
       ]
@@ -1390,6 +1681,14 @@
           "url": "https://dirtracingseries.com/riders/profile/5734/",
           "role": "Rider",
           "zwift_id": 1028764,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10236,
+          "name": "Dajana Balletshofer",
+          "url": "https://dirtracingseries.com/riders/profile/10236/",
+          "role": "Rider",
+          "zwift_id": 3246869,
           "profile_fetched": true
         }
       ]
@@ -1575,6 +1874,33 @@
       ]
     },
     {
+      "team_id": 1871,
+      "name": "Cheshire Cycle Racing",
+      "url": "https://dirtracingseries.com/riders/1871/",
+      "time_zone": "US E",
+      "league": "Linguine",
+      "category": "04 Sapphire - Amethyst",
+      "roster_fetched": true,
+      "riders": [
+        {
+          "rider_id": 4626,
+          "name": "Christian Duncan",
+          "url": "https://dirtracingseries.com/riders/profile/4626/",
+          "role": "Captain",
+          "zwift_id": 1574023,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10321,
+          "name": "Steffen Huber",
+          "url": "https://dirtracingseries.com/riders/profile/10321/",
+          "role": "Rider",
+          "zwift_id": 573420,
+          "profile_fetched": true
+        }
+      ]
+    },
+    {
       "team_id": 1841,
       "name": "Contestanos HISP",
       "url": "https://dirtracingseries.com/riders/1841/",
@@ -1630,6 +1956,14 @@
           "role": "Rider",
           "zwift_id": 2258349,
           "profile_fetched": true
+        },
+        {
+          "rider_id": 9577,
+          "name": "Juan Bass",
+          "url": "https://dirtracingseries.com/riders/profile/9577/",
+          "role": "Rider",
+          "zwift_id": 6545981,
+          "profile_fetched": true
         }
       ]
     },
@@ -1648,6 +1982,14 @@
           "url": "https://dirtracingseries.com/riders/profile/2018/",
           "role": "Captain",
           "zwift_id": 1098672,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 2350,
+          "name": "Fletcher Davis",
+          "url": "https://dirtracingseries.com/riders/profile/2350/",
+          "role": "Rider",
+          "zwift_id": 3873917,
           "profile_fetched": true
         }
       ]
@@ -1737,14 +2079,6 @@
       "roster_fetched": true,
       "riders": [
         {
-          "rider_id": 7009,
-          "name": "David Lewis",
-          "url": "https://dirtracingseries.com/riders/profile/7009/",
-          "role": "Rider",
-          "zwift_id": 5512895,
-          "profile_fetched": true
-        },
-        {
           "rider_id": 4847,
           "name": "Geoff Desmond",
           "url": "https://dirtracingseries.com/riders/profile/4847/",
@@ -1774,6 +2108,14 @@
           "url": "https://dirtracingseries.com/riders/profile/6526/",
           "role": "Rider",
           "zwift_id": 336742,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 2547,
+          "name": "Kris Wadrop",
+          "url": "https://dirtracingseries.com/riders/profile/2547/",
+          "role": "Rider",
+          "zwift_id": 3023695,
           "profile_fetched": true
         }
       ]
@@ -1809,6 +2151,14 @@
           "url": "https://dirtracingseries.com/riders/profile/7230/",
           "role": "Rider",
           "zwift_id": 4782136,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 1176,
+          "name": "Shane Jarrell",
+          "url": "https://dirtracingseries.com/riders/profile/1176/",
+          "role": "Rider",
+          "zwift_id": 3220648,
           "profile_fetched": true
         },
         {
@@ -1893,6 +2243,14 @@
           "role": "Rider",
           "zwift_id": 5320327,
           "profile_fetched": true
+        },
+        {
+          "rider_id": 8179,
+          "name": "Stuart Bayliss",
+          "url": "https://dirtracingseries.com/riders/profile/8179/",
+          "role": "Rider",
+          "zwift_id": 7018812,
+          "profile_fetched": true
         }
       ]
     },
@@ -1911,14 +2269,6 @@
           "url": "https://dirtracingseries.com/riders/profile/10009/",
           "role": "Rider",
           "zwift_id": 400502,
-          "profile_fetched": true
-        },
-        {
-          "rider_id": 5456,
-          "name": "Mark Airey",
-          "url": "https://dirtracingseries.com/riders/profile/5456/",
-          "role": "Rider",
-          "zwift_id": 3052912,
           "profile_fetched": true
         },
         {
@@ -1951,6 +2301,14 @@
           "url": "https://dirtracingseries.com/riders/profile/6162/",
           "role": "Rider",
           "zwift_id": 239956,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 6432,
+          "name": "Matthew White",
+          "url": "https://dirtracingseries.com/riders/profile/6432/",
+          "role": "Rider",
+          "zwift_id": 5635774,
           "profile_fetched": true
         }
       ]
@@ -1989,6 +2347,14 @@
           "profile_fetched": true
         },
         {
+          "rider_id": 1146,
+          "name": "Florian Florian",
+          "url": "https://dirtracingseries.com/riders/profile/1146/",
+          "role": "Rider",
+          "zwift_id": 987271,
+          "profile_fetched": true
+        },
+        {
           "rider_id": 266,
           "name": "Snowy Pruett",
           "url": "https://dirtracingseries.com/riders/profile/266/",
@@ -2003,6 +2369,14 @@
           "role": "Rider",
           "zwift_id": 9625,
           "profile_fetched": true
+        },
+        {
+          "rider_id": 610,
+          "name": "Rob Book",
+          "url": "https://dirtracingseries.com/riders/profile/610/",
+          "role": "Rider",
+          "zwift_id": 3377459,
+          "profile_fetched": true
         }
       ]
     },
@@ -2015,14 +2389,6 @@
       "category": "07 Gold",
       "roster_fetched": true,
       "riders": [
-        {
-          "rider_id": 1240,
-          "name": "Kurt Stueber",
-          "url": "https://dirtracingseries.com/riders/profile/1240/",
-          "role": "Captain",
-          "zwift_id": 2974731,
-          "profile_fetched": true
-        },
         {
           "rider_id": 3,
           "name": "Justin Milligan",
@@ -2054,6 +2420,14 @@
           "role": "Rider",
           "zwift_id": 3669559,
           "profile_fetched": true
+        },
+        {
+          "rider_id": 54,
+          "name": "Martin Gill",
+          "url": "https://dirtracingseries.com/riders/profile/54/",
+          "role": "Rider",
+          "zwift_id": 2417653,
+          "profile_fetched": true
         }
       ]
     },
@@ -2075,11 +2449,43 @@
           "profile_fetched": true
         },
         {
+          "rider_id": 67,
+          "name": "Cl\u00e9ment Desl\u00e9",
+          "url": "https://dirtracingseries.com/riders/profile/67/",
+          "role": "Rider",
+          "zwift_id": 2533198,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 382,
+          "name": "Hollie Burgin",
+          "url": "https://dirtracingseries.com/riders/profile/382/",
+          "role": "Rider",
+          "zwift_id": 1921340,
+          "profile_fetched": true
+        },
+        {
           "rider_id": 4039,
           "name": "Peter Sands",
           "url": "https://dirtracingseries.com/riders/profile/4039/",
           "role": "Rider",
           "zwift_id": 3167977,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 156,
+          "name": "Pablo Lucero",
+          "url": "https://dirtracingseries.com/riders/profile/156/",
+          "role": "Rider",
+          "zwift_id": 1685615,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 5456,
+          "name": "Mark Airey",
+          "url": "https://dirtracingseries.com/riders/profile/5456/",
+          "role": "Rider",
+          "zwift_id": 3052912,
           "profile_fetched": true
         }
       ]
@@ -2115,14 +2521,6 @@
           "url": "https://dirtracingseries.com/riders/profile/678/",
           "role": "Rider",
           "zwift_id": 2755916,
-          "profile_fetched": true
-        },
-        {
-          "rider_id": 382,
-          "name": "Hollie Burgin",
-          "url": "https://dirtracingseries.com/riders/profile/382/",
-          "role": "Rider",
-          "zwift_id": 1921340,
           "profile_fetched": true
         },
         {
@@ -2287,14 +2685,6 @@
           "profile_fetched": true
         },
         {
-          "rider_id": 10095,
-          "name": "Graham Pritchatd",
-          "url": "https://dirtracingseries.com/riders/profile/10095/",
-          "role": "Rider",
-          "zwift_id": 3876424,
-          "profile_fetched": true
-        },
-        {
           "rider_id": 125,
           "name": "Tom Lane",
           "url": "https://dirtracingseries.com/riders/profile/125/",
@@ -2367,6 +2757,14 @@
           "url": "https://dirtracingseries.com/riders/profile/7600/",
           "role": "Rider",
           "zwift_id": 292632,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 2056,
+          "name": "Stephan Lavoie",
+          "url": "https://dirtracingseries.com/riders/profile/2056/",
+          "role": "Rider",
+          "zwift_id": 1076722,
           "profile_fetched": true
         }
       ]
@@ -2486,6 +2884,14 @@
           "role": "Rider",
           "zwift_id": 1970746,
           "profile_fetched": true
+        },
+        {
+          "rider_id": 3898,
+          "name": "James Turner",
+          "url": "https://dirtracingseries.com/riders/profile/3898/",
+          "role": "Rider",
+          "zwift_id": 1098357,
+          "profile_fetched": true
         }
       ]
     },
@@ -2520,14 +2926,6 @@
           "url": "https://dirtracingseries.com/riders/profile/1349/",
           "role": "Rider",
           "zwift_id": 358301,
-          "profile_fetched": true
-        },
-        {
-          "rider_id": 43,
-          "name": "Dean Nordhielm",
-          "url": "https://dirtracingseries.com/riders/profile/43/",
-          "role": "Captain",
-          "zwift_id": 4705365,
           "profile_fetched": true
         },
         {
@@ -2681,14 +3079,6 @@
           "profile_fetched": true
         },
         {
-          "rider_id": 41,
-          "name": "Ally Loney",
-          "url": "https://dirtracingseries.com/riders/profile/41/",
-          "role": "Rider",
-          "zwift_id": 2524919,
-          "profile_fetched": true
-        },
-        {
           "rider_id": 2906,
           "name": "Jason KRUMMEL",
           "url": "https://dirtracingseries.com/riders/profile/2906/",
@@ -2710,6 +3100,14 @@
           "url": "https://dirtracingseries.com/riders/profile/851/",
           "role": "Rider",
           "zwift_id": 643156,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10311,
+          "name": "Jason Radosevich",
+          "url": "https://dirtracingseries.com/riders/profile/10311/",
+          "role": "Rider",
+          "zwift_id": 5717,
           "profile_fetched": true
         }
       ]
@@ -2829,6 +3227,14 @@
           "role": "Rider",
           "zwift_id": 1537432,
           "profile_fetched": true
+        },
+        {
+          "rider_id": 2130,
+          "name": "Ronald Damme",
+          "url": "https://dirtracingseries.com/riders/profile/2130/",
+          "role": "Rider",
+          "zwift_id": 901874,
+          "profile_fetched": true
         }
       ]
     },
@@ -2887,6 +3293,22 @@
           "url": "https://dirtracingseries.com/riders/profile/7350/",
           "role": "Rider",
           "zwift_id": 7260086,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10095,
+          "name": "Graham Pritchatd",
+          "url": "https://dirtracingseries.com/riders/profile/10095/",
+          "role": "Rider",
+          "zwift_id": 3876424,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 41,
+          "name": "Ally Loney",
+          "url": "https://dirtracingseries.com/riders/profile/41/",
+          "role": "Rider",
+          "zwift_id": 2524919,
           "profile_fetched": true
         }
       ]
@@ -2984,40 +3406,24 @@
           "profile_fetched": true
         },
         {
-          "rider_id": 3898,
-          "name": "James Turner",
-          "url": "https://dirtracingseries.com/riders/profile/3898/",
+          "rider_id": 10330,
+          "name": "Mark Egerton",
+          "url": "https://dirtracingseries.com/riders/profile/10330/",
           "role": "Rider",
-          "zwift_id": 1098357,
+          "zwift_id": 2047531,
           "profile_fetched": true
         }
       ]
     },
     {
       "team_id": 1692,
-      "name": "DNSTY ONE",
+      "name": "DNSTY",
       "url": "https://dirtracingseries.com/riders/1692/",
       "time_zone": "EMEA C",
       "league": "Tortellini",
-      "category": "01 Diamond - Ruby",
+      "category": "03 Emerald",
       "roster_fetched": true,
       "riders": [
-        {
-          "rider_id": 2595,
-          "name": "Daniel Kehrer",
-          "url": "https://dirtracingseries.com/riders/profile/2595/",
-          "role": "Rider",
-          "zwift_id": 1454483,
-          "profile_fetched": true
-        },
-        {
-          "rider_id": 5508,
-          "name": "Martin Briegnitz",
-          "url": "https://dirtracingseries.com/riders/profile/5508/",
-          "role": "Rider",
-          "zwift_id": 6210763,
-          "profile_fetched": true
-        },
         {
           "rider_id": 8539,
           "name": "Michael Gerstenberger",
@@ -3035,11 +3441,54 @@
           "profile_fetched": true
         },
         {
-          "rider_id": 9745,
-          "name": "Andreas Boss",
-          "url": "https://dirtracingseries.com/riders/profile/9745/",
+          "rider_id": 9294,
+          "name": "Gerald S",
+          "url": "https://dirtracingseries.com/riders/profile/9294/",
           "role": "Rider",
-          "zwift_id": 4604923,
+          "zwift_id": 3155344,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 8327,
+          "name": "Tobias Schmitt",
+          "url": "https://dirtracingseries.com/riders/profile/8327/",
+          "role": "Rider",
+          "zwift_id": 6750689,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10350,
+          "name": "Danilo Nisse",
+          "url": "https://dirtracingseries.com/riders/profile/10350/",
+          "role": "Rider",
+          "zwift_id": 1648844,
+          "profile_fetched": true
+        }
+      ]
+    },
+    {
+      "team_id": 1692,
+      "name": "DNSTY",
+      "url": "https://dirtracingseries.com/riders/1692/",
+      "time_zone": "EMEA W",
+      "league": "Rotini",
+      "category": "03 Emerald",
+      "roster_fetched": true,
+      "riders": [
+        {
+          "rider_id": 8539,
+          "name": "Michael Gerstenberger",
+          "url": "https://dirtracingseries.com/riders/profile/8539/",
+          "role": "Rider",
+          "zwift_id": 1043216,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 9744,
+          "name": "Tobias Wei",
+          "url": "https://dirtracingseries.com/riders/profile/9744/",
+          "role": "Rider",
+          "zwift_id": 946737,
           "profile_fetched": true
         },
         {
@@ -3051,19 +3500,19 @@
           "profile_fetched": true
         },
         {
-          "rider_id": 8232,
-          "name": "Stephan Mi\u00dffeldt",
-          "url": "https://dirtracingseries.com/riders/profile/8232/",
-          "role": "Rider",
-          "zwift_id": 3786968,
-          "profile_fetched": true
-        },
-        {
           "rider_id": 8327,
           "name": "Tobias Schmitt",
           "url": "https://dirtracingseries.com/riders/profile/8327/",
           "role": "Rider",
           "zwift_id": 6750689,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10350,
+          "name": "Danilo Nisse",
+          "url": "https://dirtracingseries.com/riders/profile/10350/",
+          "role": "Rider",
+          "zwift_id": 1648844,
           "profile_fetched": true
         }
       ]
@@ -3309,6 +3758,22 @@
           "role": "Rider",
           "zwift_id": 8041791,
           "profile_fetched": true
+        },
+        {
+          "rider_id": 10301,
+          "name": "Zach Sheff",
+          "url": "https://dirtracingseries.com/riders/profile/10301/",
+          "role": "Rider",
+          "zwift_id": 7848913,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 227,
+          "name": "Nate Holme",
+          "url": "https://dirtracingseries.com/riders/profile/227/",
+          "role": "Rider",
+          "zwift_id": 2202491,
+          "profile_fetched": true
         }
       ]
     },
@@ -3377,6 +3842,14 @@
           "url": "https://dirtracingseries.com/riders/profile/62/",
           "role": "Rider",
           "zwift_id": 5574,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 5274,
+          "name": "Craig Michie",
+          "url": "https://dirtracingseries.com/riders/profile/5274/",
+          "role": "Rider",
+          "zwift_id": 13655,
           "profile_fetched": true
         }
       ]
@@ -3646,6 +4119,14 @@
           "role": "Rider",
           "zwift_id": 2117100,
           "profile_fetched": true
+        },
+        {
+          "rider_id": 1696,
+          "name": "Paddy Farwell",
+          "url": "https://dirtracingseries.com/riders/profile/1696/",
+          "role": "Rider",
+          "zwift_id": 1315904,
+          "profile_fetched": true
         }
       ]
     },
@@ -3680,6 +4161,22 @@
           "url": "https://dirtracingseries.com/riders/profile/571/",
           "role": "Captain",
           "zwift_id": 1376362,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 174,
+          "name": "Kenny Girvan",
+          "url": "https://dirtracingseries.com/riders/profile/174/",
+          "role": "Rider",
+          "zwift_id": 1451274,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 1655,
+          "name": "colin Davidson",
+          "url": "https://dirtracingseries.com/riders/profile/1655/",
+          "role": "Rider",
+          "zwift_id": 470190,
           "profile_fetched": true
         }
       ]
@@ -3734,6 +4231,14 @@
           "profile_fetched": true
         },
         {
+          "rider_id": 8060,
+          "name": "Simon Deakin",
+          "url": "https://dirtracingseries.com/riders/profile/8060/",
+          "role": "Rider",
+          "zwift_id": 352229,
+          "profile_fetched": true
+        },
+        {
           "rider_id": 662,
           "name": "Innes Doig",
           "url": "https://dirtracingseries.com/riders/profile/662/",
@@ -3753,11 +4258,35 @@
       "roster_fetched": true,
       "riders": [
         {
-          "rider_id": 747,
-          "name": "Paul Bridgman",
-          "url": "https://dirtracingseries.com/riders/profile/747/",
+          "rider_id": 2150,
+          "name": "Nick Crowson",
+          "url": "https://dirtracingseries.com/riders/profile/2150/",
+          "role": "Captain",
+          "zwift_id": 3819483,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 4295,
+          "name": "Daniel Gooding",
+          "url": "https://dirtracingseries.com/riders/profile/4295/",
           "role": "Rider",
-          "zwift_id": 330950,
+          "zwift_id": 591374,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 175,
+          "name": "James James Marsden",
+          "url": "https://dirtracingseries.com/riders/profile/175/",
+          "role": "Rider",
+          "zwift_id": 526964,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 844,
+          "name": "Matthew Davidson-Loubet",
+          "url": "https://dirtracingseries.com/riders/profile/844/",
+          "role": "Rider",
+          "zwift_id": 3013595,
           "profile_fetched": true
         },
         {
@@ -3769,11 +4298,11 @@
           "profile_fetched": true
         },
         {
-          "rider_id": 2150,
-          "name": "Nick Crowson",
-          "url": "https://dirtracingseries.com/riders/profile/2150/",
+          "rider_id": 658,
+          "name": "Tom Fitton",
+          "url": "https://dirtracingseries.com/riders/profile/658/",
           "role": "Rider",
-          "zwift_id": 3819483,
+          "zwift_id": 2460567,
           "profile_fetched": true
         }
       ]
@@ -3788,14 +4317,6 @@
       "roster_fetched": true,
       "riders": [
         {
-          "rider_id": 759,
-          "name": "Douglas Cook",
-          "url": "https://dirtracingseries.com/riders/profile/759/",
-          "role": "Captain",
-          "zwift_id": 64890,
-          "profile_fetched": true
-        },
-        {
           "rider_id": 3883,
           "name": "Peter Errens",
           "url": "https://dirtracingseries.com/riders/profile/3883/",
@@ -3804,11 +4325,51 @@
           "profile_fetched": true
         },
         {
-          "rider_id": 169,
-          "name": "Kirsty Reynolds",
-          "url": "https://dirtracingseries.com/riders/profile/169/",
+          "rider_id": 3278,
+          "name": "Sam Boocock",
+          "url": "https://dirtracingseries.com/riders/profile/3278/",
+          "role": "Captain",
+          "zwift_id": 2217661,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 3281,
+          "name": "Matthew Matthew Thistlewood",
+          "url": "https://dirtracingseries.com/riders/profile/3281/",
           "role": "Rider",
-          "zwift_id": 1344447,
+          "zwift_id": 413737,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 9123,
+          "name": "Mark Bircham",
+          "url": "https://dirtracingseries.com/riders/profile/9123/",
+          "role": "Rider",
+          "zwift_id": 427154,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 1735,
+          "name": "John Hughes",
+          "url": "https://dirtracingseries.com/riders/profile/1735/",
+          "role": "Rider",
+          "zwift_id": 1354923,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 592,
+          "name": "Susan Lyle",
+          "url": "https://dirtracingseries.com/riders/profile/592/",
+          "role": "Rider",
+          "zwift_id": 2875688,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 9865,
+          "name": "Niall Mckee",
+          "url": "https://dirtracingseries.com/riders/profile/9865/",
+          "role": "Rider",
+          "zwift_id": 4797414,
           "profile_fetched": true
         }
       ]
@@ -3823,51 +4384,19 @@
       "roster_fetched": true,
       "riders": [
         {
-          "rider_id": 7312,
-          "name": "Bart Van Brabant (VELOS)",
-          "url": "https://dirtracingseries.com/riders/profile/7312/",
-          "role": "Rider",
-          "zwift_id": 3786609,
-          "profile_fetched": true
-        },
-        {
-          "rider_id": 7287,
-          "name": "Dave Poulton",
-          "url": "https://dirtracingseries.com/riders/profile/7287/",
-          "role": "Rider",
-          "zwift_id": 4569193,
-          "profile_fetched": true
-        },
-        {
-          "rider_id": 7718,
-          "name": "Vincent Van Gestel",
-          "url": "https://dirtracingseries.com/riders/profile/7718/",
-          "role": "Captain",
-          "zwift_id": 305841,
-          "profile_fetched": true
-        },
-        {
-          "rider_id": 7854,
-          "name": "ED Van Malle",
-          "url": "https://dirtracingseries.com/riders/profile/7854/",
-          "role": "Rider",
-          "zwift_id": 5561550,
-          "profile_fetched": true
-        },
-        {
-          "rider_id": 8164,
-          "name": "Kent Rune Klungerbo",
-          "url": "https://dirtracingseries.com/riders/profile/8164/",
-          "role": "Rider",
-          "zwift_id": 3237021,
-          "profile_fetched": true
-        },
-        {
           "rider_id": 9658,
           "name": "Jeroen Van Gestel",
           "url": "https://dirtracingseries.com/riders/profile/9658/",
           "role": "Rider",
           "zwift_id": 972356,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 6653,
+          "name": "JW Bell",
+          "url": "https://dirtracingseries.com/riders/profile/6653/",
+          "role": "Rider",
+          "zwift_id": 5976730,
           "profile_fetched": true
         }
       ]
@@ -3930,11 +4459,19 @@
           "profile_fetched": true
         },
         {
-          "rider_id": 3550,
-          "name": "Grahame Mckenzie",
-          "url": "https://dirtracingseries.com/riders/profile/3550/",
+          "rider_id": 7606,
+          "name": "Marcus Illingworth",
+          "url": "https://dirtracingseries.com/riders/profile/7606/",
           "role": "Rider",
-          "zwift_id": 77990,
+          "zwift_id": 96834,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 7539,
+          "name": "Dan Chubb",
+          "url": "https://dirtracingseries.com/riders/profile/7539/",
+          "role": "Rider",
+          "zwift_id": 3394673,
           "profile_fetched": true
         }
       ]
@@ -4018,52 +4555,6 @@
       ]
     },
     {
-      "team_id": 1768,
-      "name": "GTR Gold Overflow",
-      "url": "https://dirtracingseries.com/riders/1768/",
-      "time_zone": "EMEA C",
-      "league": "Tortellini",
-      "category": "07 Gold",
-      "roster_fetched": true,
-      "riders": [
-        {
-          "rider_id": 2712,
-          "name": "Linda Winkens",
-          "url": "https://dirtracingseries.com/riders/profile/2712/",
-          "role": "Rider",
-          "zwift_id": 973534,
-          "profile_fetched": true
-        }
-      ]
-    },
-    {
-      "team_id": 1811,
-      "name": "GTR Hobson",
-      "url": "https://dirtracingseries.com/riders/1811/",
-      "time_zone": "EMEA C",
-      "league": "Tortellini",
-      "category": "03 Emerald",
-      "roster_fetched": true,
-      "riders": [
-        {
-          "rider_id": 6260,
-          "name": "Daniel Daniel Hobson",
-          "url": "https://dirtracingseries.com/riders/profile/6260/",
-          "role": "Rider",
-          "zwift_id": 6851974,
-          "profile_fetched": true
-        },
-        {
-          "rider_id": 5212,
-          "name": "Ion Rodriguez",
-          "url": "https://dirtracingseries.com/riders/profile/5212/",
-          "role": "Rider",
-          "zwift_id": 5871693,
-          "profile_fetched": true
-        }
-      ]
-    },
-    {
       "team_id": 1701,
       "name": "GTR Pine Martens",
       "url": "https://dirtracingseries.com/riders/1701/",
@@ -4121,11 +4612,19 @@
           "profile_fetched": true
         },
         {
-          "rider_id": 7635,
-          "name": "Max Axmin",
-          "url": "https://dirtracingseries.com/riders/profile/7635/",
+          "rider_id": 1415,
+          "name": "Francis Gryson",
+          "url": "https://dirtracingseries.com/riders/profile/1415/",
           "role": "Rider",
-          "zwift_id": 6812405,
+          "zwift_id": 317845,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 7641,
+          "name": "JOSE CHECO",
+          "url": "https://dirtracingseries.com/riders/profile/7641/",
+          "role": "Rider",
+          "zwift_id": 7483307,
           "profile_fetched": true
         }
       ]
@@ -4223,6 +4722,14 @@
           "url": "https://dirtracingseries.com/riders/profile/10129/",
           "role": "Rider",
           "zwift_id": 8072252,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10341,
+          "name": "Andy Parsons",
+          "url": "https://dirtracingseries.com/riders/profile/10341/",
+          "role": "Rider",
+          "zwift_id": 8403935,
           "profile_fetched": true
         }
       ]
@@ -4396,6 +4903,14 @@
           "role": "Rider",
           "zwift_id": 67596,
           "profile_fetched": true
+        },
+        {
+          "rider_id": 1524,
+          "name": "James Freed",
+          "url": "https://dirtracingseries.com/riders/profile/1524/",
+          "role": "Rider",
+          "zwift_id": 898819,
+          "profile_fetched": true
         }
       ]
     },
@@ -4454,6 +4969,14 @@
           "url": "https://dirtracingseries.com/riders/profile/4725/",
           "role": "Rider",
           "zwift_id": 5946436,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 4364,
+          "name": "Chris Cunningham",
+          "url": "https://dirtracingseries.com/riders/profile/4364/",
+          "role": "Rider",
+          "zwift_id": 5652740,
           "profile_fetched": true
         }
       ]
@@ -4522,6 +5045,14 @@
           "role": "Rider",
           "zwift_id": 1800123,
           "profile_fetched": true
+        },
+        {
+          "rider_id": 1079,
+          "name": "Stein Arvid Lid",
+          "url": "https://dirtracingseries.com/riders/profile/1079/",
+          "role": "Rider",
+          "zwift_id": 7829,
+          "profile_fetched": true
         }
       ]
     },
@@ -4565,6 +5096,30 @@
           "role": "Rider",
           "zwift_id": 4558551,
           "profile_fetched": true
+        },
+        {
+          "rider_id": 9971,
+          "name": "Ismail Javid",
+          "url": "https://dirtracingseries.com/riders/profile/9971/",
+          "role": "Rider",
+          "zwift_id": 5907211,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 5766,
+          "name": "Alan Murray (GXY)",
+          "url": "https://dirtracingseries.com/riders/profile/5766/",
+          "role": "Rider",
+          "zwift_id": 1971606,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 9890,
+          "name": "Tobie Botha",
+          "url": "https://dirtracingseries.com/riders/profile/9890/",
+          "role": "Rider",
+          "zwift_id": 5639415,
+          "profile_fetched": true
         }
       ]
     },
@@ -4607,6 +5162,30 @@
           "url": "https://dirtracingseries.com/riders/profile/5866/",
           "role": "Rider",
           "zwift_id": 5999891,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 9311,
+          "name": "Trev C",
+          "url": "https://dirtracingseries.com/riders/profile/9311/",
+          "role": "Rider",
+          "zwift_id": 7961526,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 3844,
+          "name": "Jeroen Romijn",
+          "url": "https://dirtracingseries.com/riders/profile/3844/",
+          "role": "Rider",
+          "zwift_id": 1398858,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 8207,
+          "name": "Roger Gural",
+          "url": "https://dirtracingseries.com/riders/profile/8207/",
+          "role": "Rider",
+          "zwift_id": 361912,
           "profile_fetched": true
         }
       ]
@@ -4956,6 +5535,43 @@
       ]
     },
     {
+      "team_id": 1874,
+      "name": "HCT Emerald league",
+      "url": "https://dirtracingseries.com/riders/1874/",
+      "time_zone": "EMEA W",
+      "league": "Rotini",
+      "category": "03 Emerald",
+      "roster_fetched": true,
+      "riders": [
+        {
+          "rider_id": 6749,
+          "name": "Jason Hewitt",
+          "url": "https://dirtracingseries.com/riders/profile/6749/",
+          "role": "Captain",
+          "zwift_id": 968012,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 7375,
+          "name": "Simon Hall",
+          "url": "https://dirtracingseries.com/riders/profile/7375/",
+          "role": "Captain",
+          "zwift_id": 650708,
+          "profile_fetched": true
+        }
+      ]
+    },
+    {
+      "team_id": 1460,
+      "name": "HCT Hornets",
+      "url": "https://dirtracingseries.com/riders/1460/",
+      "time_zone": "EMEA W",
+      "league": "Rotini",
+      "category": "03 Emerald",
+      "roster_fetched": true,
+      "riders": []
+    },
+    {
       "team_id": 1684,
       "name": "JLI",
       "url": "https://dirtracingseries.com/riders/1684/",
@@ -5045,33 +5661,6 @@
           "url": "https://dirtracingseries.com/riders/profile/10283/",
           "role": "Rider",
           "zwift_id": 3531359,
-          "profile_fetched": true
-        }
-      ]
-    },
-    {
-      "team_id": 1373,
-      "name": "Just Us",
-      "url": "https://dirtracingseries.com/riders/1373/",
-      "time_zone": "US W",
-      "league": "Penne",
-      "category": "01 Diamond - Ruby - Emerald",
-      "roster_fetched": true,
-      "riders": [
-        {
-          "rider_id": 6446,
-          "name": "Sam H",
-          "url": "https://dirtracingseries.com/riders/profile/6446/",
-          "role": "Captain",
-          "zwift_id": 6479656,
-          "profile_fetched": true
-        },
-        {
-          "rider_id": 6588,
-          "name": "Dan Stefanson",
-          "url": "https://dirtracingseries.com/riders/profile/6588/",
-          "role": "Rider",
-          "zwift_id": 2237249,
           "profile_fetched": true
         }
       ]
@@ -5182,6 +5771,14 @@
           "url": "https://dirtracingseries.com/riders/profile/2166/",
           "role": "Rider",
           "zwift_id": 2952748,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 3675,
+          "name": "Paul Chew",
+          "url": "https://dirtracingseries.com/riders/profile/3675/",
+          "role": "Rider",
+          "zwift_id": 40924,
           "profile_fetched": true
         }
       ]
@@ -5330,6 +5927,14 @@
           "profile_fetched": true
         },
         {
+          "rider_id": 9643,
+          "name": "Joseba Txingurri",
+          "url": "https://dirtracingseries.com/riders/profile/9643/",
+          "role": "Rider",
+          "zwift_id": 6549334,
+          "profile_fetched": true
+        },
+        {
           "rider_id": 9636,
           "name": "Eric Esteve Albertos",
           "url": "https://dirtracingseries.com/riders/profile/9636/",
@@ -5359,6 +5964,14 @@
           "url": "https://dirtracingseries.com/riders/profile/10282/",
           "role": "Rider",
           "zwift_id": 841839,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10337,
+          "name": "Fabi\u00e1n Artime",
+          "url": "https://dirtracingseries.com/riders/profile/10337/",
+          "role": "Rider",
+          "zwift_id": 3421944,
           "profile_fetched": true
         }
       ]
@@ -5494,14 +6107,6 @@
       "roster_fetched": true,
       "riders": [
         {
-          "rider_id": 4583,
-          "name": "Cameron Raynor",
-          "url": "https://dirtracingseries.com/riders/profile/4583/",
-          "role": "Rider",
-          "zwift_id": 3640218,
-          "profile_fetched": true
-        },
-        {
           "rider_id": 4297,
           "name": "Rob Broekhuis",
           "url": "https://dirtracingseries.com/riders/profile/4297/",
@@ -5526,19 +6131,38 @@
           "profile_fetched": true
         },
         {
-          "rider_id": 2040,
-          "name": "Pike Reardon",
-          "url": "https://dirtracingseries.com/riders/profile/2040/",
+          "rider_id": 2675,
+          "name": "Christopher Walker",
+          "url": "https://dirtracingseries.com/riders/profile/2675/",
           "role": "Rider",
-          "zwift_id": 549371,
+          "zwift_id": 1836494,
+          "profile_fetched": true
+        }
+      ]
+    },
+    {
+      "team_id": 1038,
+      "name": "On The Rivet Cutters",
+      "url": "https://dirtracingseries.com/riders/1038/",
+      "time_zone": "US W",
+      "league": "Penne",
+      "category": "06 Platinum - Gold",
+      "roster_fetched": true,
+      "riders": [
+        {
+          "rider_id": 1575,
+          "name": "Jeff Tsang",
+          "url": "https://dirtracingseries.com/riders/profile/1575/",
+          "role": "Rider",
+          "zwift_id": 1168536,
           "profile_fetched": true
         },
         {
-          "rider_id": 1646,
-          "name": "Greg Lewis",
-          "url": "https://dirtracingseries.com/riders/profile/1646/",
+          "rider_id": 7619,
+          "name": "Levi Gibson",
+          "url": "https://dirtracingseries.com/riders/profile/7619/",
           "role": "Rider",
-          "zwift_id": 39415,
+          "zwift_id": 647442,
           "profile_fetched": true
         }
       ]
@@ -5609,6 +6233,143 @@
           "url": "https://dirtracingseries.com/riders/profile/3028/",
           "role": "Rider",
           "zwift_id": 1571544,
+          "profile_fetched": true
+        }
+      ]
+    },
+    {
+      "team_id": 1014,
+      "name": "On the Rivet Wolfpack",
+      "url": "https://dirtracingseries.com/riders/1014/",
+      "time_zone": "US E",
+      "league": "Linguine",
+      "category": "04 Sapphire - Amethyst",
+      "roster_fetched": true,
+      "riders": [
+        {
+          "rider_id": 5640,
+          "name": "Kevin Orlowski",
+          "url": "https://dirtracingseries.com/riders/profile/5640/",
+          "role": "Rider",
+          "zwift_id": 1022725,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 2871,
+          "name": "Jen Moroz",
+          "url": "https://dirtracingseries.com/riders/profile/2871/",
+          "role": "Captain",
+          "zwift_id": 2240029,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 2120,
+          "name": "albert chan",
+          "url": "https://dirtracingseries.com/riders/profile/2120/",
+          "role": "Rider",
+          "zwift_id": 492994,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 1527,
+          "name": "Roy Imahara",
+          "url": "https://dirtracingseries.com/riders/profile/1527/",
+          "role": "Rider",
+          "zwift_id": 2240767,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 1625,
+          "name": "Stephen Fischer",
+          "url": "https://dirtracingseries.com/riders/profile/1625/",
+          "role": "Captain",
+          "zwift_id": 3091444,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 7133,
+          "name": "William Lloyd",
+          "url": "https://dirtracingseries.com/riders/profile/7133/",
+          "role": "Rider",
+          "zwift_id": 4978559,
+          "profile_fetched": true
+        }
+      ]
+    },
+    {
+      "team_id": 1164,
+      "name": "PainCavesHeroes Ruby (EMEA C)",
+      "url": "https://dirtracingseries.com/riders/1164/",
+      "time_zone": "EMEA C",
+      "league": "Tortellini",
+      "category": "01 Diamond - Ruby",
+      "roster_fetched": true,
+      "riders": [
+        {
+          "rider_id": 5870,
+          "name": "Werner Loos",
+          "url": "https://dirtracingseries.com/riders/profile/5870/",
+          "role": "Rider",
+          "zwift_id": 660464,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 7079,
+          "name": "Anders Haringsma",
+          "url": "https://dirtracingseries.com/riders/profile/7079/",
+          "role": "Rider",
+          "zwift_id": 6190959,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 7106,
+          "name": "Michiel Kroes",
+          "url": "https://dirtracingseries.com/riders/profile/7106/",
+          "role": "Rider",
+          "zwift_id": 5339403,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 5296,
+          "name": "Iain Fullarton",
+          "url": "https://dirtracingseries.com/riders/profile/5296/",
+          "role": "Rider",
+          "zwift_id": 5277906,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 1902,
+          "name": "Alan Smithee",
+          "url": "https://dirtracingseries.com/riders/profile/1902/",
+          "role": "Rider",
+          "zwift_id": 4397790,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 1015,
+          "name": "Grzegorz Michalski",
+          "url": "https://dirtracingseries.com/riders/profile/1015/",
+          "role": "Rider",
+          "zwift_id": 870096,
+          "profile_fetched": true
+        }
+      ]
+    },
+    {
+      "team_id": 1094,
+      "name": "PainCavesHeroes Ruby (EMEA W)",
+      "url": "https://dirtracingseries.com/riders/1094/",
+      "time_zone": "EMEA W",
+      "league": "Rotini",
+      "category": "01 Diamond - Ruby",
+      "roster_fetched": true,
+      "riders": [
+        {
+          "rider_id": 5296,
+          "name": "Iain Fullarton",
+          "url": "https://dirtracingseries.com/riders/profile/5296/",
+          "role": "Rider",
+          "zwift_id": 5277906,
           "profile_fetched": true
         }
       ]
@@ -5708,20 +6469,44 @@
       ]
     },
     {
-      "team_id": 1765,
+      "team_id": 1872,
       "name": "RR Nitro Rhinos",
-      "url": "https://dirtracingseries.com/riders/1765/",
+      "url": "https://dirtracingseries.com/riders/1872/",
       "time_zone": "US E",
       "league": "Linguine",
-      "category": "06 Platinum - Gold",
+      "category": "04 Sapphire - Amethyst",
       "roster_fetched": true,
       "riders": [
         {
-          "rider_id": 7548,
-          "name": "Kamden Rose-O\u2019Brien",
-          "url": "https://dirtracingseries.com/riders/profile/7548/",
+          "rider_id": 6355,
+          "name": "Anthony Brugiroux",
+          "url": "https://dirtracingseries.com/riders/profile/6355/",
           "role": "Rider",
-          "zwift_id": 6456703,
+          "zwift_id": 4620982,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 6772,
+          "name": "Scott Michalik",
+          "url": "https://dirtracingseries.com/riders/profile/6772/",
+          "role": "Rider",
+          "zwift_id": 22957,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 6361,
+          "name": "Stefan Turkheimer",
+          "url": "https://dirtracingseries.com/riders/profile/6361/",
+          "role": "Rider",
+          "zwift_id": 2298832,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 7973,
+          "name": "Thomas Soeder",
+          "url": "https://dirtracingseries.com/riders/profile/7973/",
+          "role": "Rider",
+          "zwift_id": 5528611,
           "profile_fetched": true
         }
       ]
@@ -5803,19 +6588,27 @@
       "roster_fetched": true,
       "riders": [
         {
-          "rider_id": 6134,
-          "name": "Ed Ferebee",
-          "url": "https://dirtracingseries.com/riders/profile/6134/",
+          "rider_id": 6233,
+          "name": "Bryan Hampson",
+          "url": "https://dirtracingseries.com/riders/profile/6233/",
           "role": "Captain",
-          "zwift_id": 6842342,
+          "zwift_id": 6324440,
           "profile_fetched": true
         },
         {
-          "rider_id": 7162,
-          "name": "Brent Weinberg",
-          "url": "https://dirtracingseries.com/riders/profile/7162/",
+          "rider_id": 8505,
+          "name": "Greg Wiese",
+          "url": "https://dirtracingseries.com/riders/profile/8505/",
           "role": "Rider",
-          "zwift_id": 7472476,
+          "zwift_id": 7660918,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10334,
+          "name": "Bryce MacKinnon",
+          "url": "https://dirtracingseries.com/riders/profile/10334/",
+          "role": "Rider",
+          "zwift_id": 7671213,
           "profile_fetched": true
         }
       ]
@@ -5859,6 +6652,65 @@
           "url": "https://dirtracingseries.com/riders/profile/4242/",
           "role": "Rider",
           "zwift_id": 1592970,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 237,
+          "name": "Peter Kilby",
+          "url": "https://dirtracingseries.com/riders/profile/237/",
+          "role": "Rider",
+          "zwift_id": 1322226,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 5222,
+          "name": "David McKinley",
+          "url": "https://dirtracingseries.com/riders/profile/5222/",
+          "role": "Rider",
+          "zwift_id": 3064786,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10306,
+          "name": "Finn Gasch",
+          "url": "https://dirtracingseries.com/riders/profile/10306/",
+          "role": "Rider",
+          "zwift_id": 7650607,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 3989,
+          "name": "Will Miller",
+          "url": "https://dirtracingseries.com/riders/profile/3989/",
+          "role": "Rider",
+          "zwift_id": 4690567,
+          "profile_fetched": true
+        }
+      ]
+    },
+    {
+      "team_id": 1765,
+      "name": "RR Rumbling Rhinos",
+      "url": "https://dirtracingseries.com/riders/1765/",
+      "time_zone": "US E",
+      "league": "Linguine",
+      "category": "08 Silver - Bronze - Copper",
+      "roster_fetched": true,
+      "riders": [
+        {
+          "rider_id": 6134,
+          "name": "Ed Ferebee",
+          "url": "https://dirtracingseries.com/riders/profile/6134/",
+          "role": "Captain",
+          "zwift_id": 6842342,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10348,
+          "name": "Thomas Robichaud",
+          "url": "https://dirtracingseries.com/riders/profile/10348/",
+          "role": "Rider",
+          "zwift_id": 8480584,
           "profile_fetched": true
         }
       ]
@@ -6099,6 +6951,30 @@
           "role": "Rider",
           "zwift_id": 7899803,
           "profile_fetched": true
+        },
+        {
+          "rider_id": 10312,
+          "name": "Jake Daniele",
+          "url": "https://dirtracingseries.com/riders/profile/10312/",
+          "role": "Rider",
+          "zwift_id": 6397707,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10158,
+          "name": "Jan-Willem van Leeuwen",
+          "url": "https://dirtracingseries.com/riders/profile/10158/",
+          "role": "Rider",
+          "zwift_id": 5696824,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 7778,
+          "name": "Tor J\u00f6rgensborg",
+          "url": "https://dirtracingseries.com/riders/profile/7778/",
+          "role": "Rider",
+          "zwift_id": 7468029,
+          "profile_fetched": true
         }
       ]
     },
@@ -6117,14 +6993,6 @@
           "url": "https://dirtracingseries.com/riders/profile/10177/",
           "role": "Rider",
           "zwift_id": 202137,
-          "profile_fetched": true
-        },
-        {
-          "rider_id": 10158,
-          "name": "Jan-Willem van Leeuwen",
-          "url": "https://dirtracingseries.com/riders/profile/10158/",
-          "role": "Rider",
-          "zwift_id": 5696824,
           "profile_fetched": true
         },
         {
@@ -6157,6 +7025,30 @@
           "url": "https://dirtracingseries.com/riders/profile/10165/",
           "role": "Rider",
           "zwift_id": 5049382,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10302,
+          "name": "Maarten van Maldegem",
+          "url": "https://dirtracingseries.com/riders/profile/10302/",
+          "role": "Rider",
+          "zwift_id": 1423459,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10327,
+          "name": "Erik Wie\u00dfner",
+          "url": "https://dirtracingseries.com/riders/profile/10327/",
+          "role": "Rider",
+          "zwift_id": 7212615,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10331,
+          "name": "Gregor Rehtier",
+          "url": "https://dirtracingseries.com/riders/profile/10331/",
+          "role": "Rider",
+          "zwift_id": 7847181,
           "profile_fetched": true
         }
       ]
@@ -6216,6 +7108,14 @@
           "url": "https://dirtracingseries.com/riders/profile/10179/",
           "role": "Rider",
           "zwift_id": 6127271,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10323,
+          "name": "Andr\u00e9 Jones",
+          "url": "https://dirtracingseries.com/riders/profile/10323/",
+          "role": "Rider",
+          "zwift_id": 5428334,
           "profile_fetched": true
         }
       ]
@@ -6297,14 +7197,6 @@
           "profile_fetched": true
         },
         {
-          "rider_id": 10166,
-          "name": "Peter Huiskamp",
-          "url": "https://dirtracingseries.com/riders/profile/10166/",
-          "role": "Rider",
-          "zwift_id": 7538989,
-          "profile_fetched": true
-        },
-        {
           "rider_id": 10189,
           "name": "Chris Hosbach",
           "url": "https://dirtracingseries.com/riders/profile/10189/",
@@ -6326,6 +7218,30 @@
           "url": "https://dirtracingseries.com/riders/profile/10152/",
           "role": "Rider",
           "zwift_id": 7471860,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10296,
+          "name": "Petter westye Svendsen",
+          "url": "https://dirtracingseries.com/riders/profile/10296/",
+          "role": "Rider",
+          "zwift_id": 6495117,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10313,
+          "name": "Hans Kr\u00e4mer",
+          "url": "https://dirtracingseries.com/riders/profile/10313/",
+          "role": "Rider",
+          "zwift_id": 7588077,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 6505,
+          "name": "Mitch Richards",
+          "url": "https://dirtracingseries.com/riders/profile/6505/",
+          "role": "Rider",
+          "zwift_id": 6767075,
           "profile_fetched": true
         }
       ]
@@ -6378,6 +7294,14 @@
           "role": "Rider",
           "zwift_id": 4658001,
           "profile_fetched": true
+        },
+        {
+          "rider_id": 10166,
+          "name": "Peter Huiskamp",
+          "url": "https://dirtracingseries.com/riders/profile/10166/",
+          "role": "Rider",
+          "zwift_id": 7538989,
+          "profile_fetched": true
         }
       ]
     },
@@ -6404,49 +7328,6 @@
           "url": "https://dirtracingseries.com/riders/profile/10015/",
           "role": "Rider",
           "zwift_id": 286961,
-          "profile_fetched": true
-        }
-      ]
-    },
-    {
-      "team_id": 851,
-      "name": "T VELOSity",
-      "url": "https://dirtracingseries.com/riders/851/",
-      "time_zone": "EMEA W",
-      "league": "Rotini",
-      "category": "05 Amethyst",
-      "roster_fetched": true,
-      "riders": [
-        {
-          "rider_id": 3655,
-          "name": "Gary Collinson",
-          "url": "https://dirtracingseries.com/riders/profile/3655/",
-          "role": "Rider",
-          "zwift_id": 488652,
-          "profile_fetched": true
-        },
-        {
-          "rider_id": 9608,
-          "name": "Fubs Noclan",
-          "url": "https://dirtracingseries.com/riders/profile/9608/",
-          "role": "Rider",
-          "zwift_id": 7215608,
-          "profile_fetched": true
-        },
-        {
-          "rider_id": 2993,
-          "name": "Andrew Wright",
-          "url": "https://dirtracingseries.com/riders/profile/2993/",
-          "role": "Rider",
-          "zwift_id": 874171,
-          "profile_fetched": true
-        },
-        {
-          "rider_id": 4772,
-          "name": "Gannon Merrell",
-          "url": "https://dirtracingseries.com/riders/profile/4772/",
-          "role": "Rider",
-          "zwift_id": 714668,
           "profile_fetched": true
         }
       ]
@@ -6603,14 +7484,6 @@
       "roster_fetched": true,
       "riders": [
         {
-          "rider_id": 8583,
-          "name": "David Farr",
-          "url": "https://dirtracingseries.com/riders/profile/8583/",
-          "role": "Rider",
-          "zwift_id": 1153693,
-          "profile_fetched": true
-        },
-        {
           "rider_id": 8545,
           "name": "Christopher Beattie",
           "url": "https://dirtracingseries.com/riders/profile/8545/",
@@ -6630,7 +7503,7 @@
           "rider_id": 5912,
           "name": "Drew Sroczynski",
           "url": "https://dirtracingseries.com/riders/profile/5912/",
-          "role": "Rider",
+          "role": "Captain",
           "zwift_id": 982398,
           "profile_fetched": true
         },
@@ -6664,6 +7537,14 @@
           "url": "https://dirtracingseries.com/riders/profile/3064/",
           "role": "Rider",
           "zwift_id": 1001978,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10147,
+          "name": "Scott Clark",
+          "url": "https://dirtracingseries.com/riders/profile/10147/",
+          "role": "Rider",
+          "zwift_id": 4374690,
           "profile_fetched": true
         }
       ]
@@ -6870,6 +7751,41 @@
       ]
     },
     {
+      "team_id": 1873,
+      "name": "TFC Fire Chickens",
+      "url": "https://dirtracingseries.com/riders/1873/",
+      "time_zone": "US E",
+      "league": "Linguine",
+      "category": "01 Diamond - Ruby - Emerald",
+      "roster_fetched": true,
+      "riders": [
+        {
+          "rider_id": 1617,
+          "name": "Sam Mack",
+          "url": "https://dirtracingseries.com/riders/profile/1617/",
+          "role": "Captain",
+          "zwift_id": 2235233,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 3510,
+          "name": "Gary Forbes",
+          "url": "https://dirtracingseries.com/riders/profile/3510/",
+          "role": "Captain",
+          "zwift_id": 1216589,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 9193,
+          "name": "Cameron Goins",
+          "url": "https://dirtracingseries.com/riders/profile/9193/",
+          "role": "Rider",
+          "zwift_id": 1439400,
+          "profile_fetched": true
+        }
+      ]
+    },
+    {
       "team_id": 1694,
       "name": "TFC MERCENARIES",
       "url": "https://dirtracingseries.com/riders/1694/",
@@ -6952,17 +7868,9 @@
       "url": "https://dirtracingseries.com/riders/1667/",
       "time_zone": "US W",
       "league": "Penne",
-      "category": "01 Diamond - Ruby - Emerald",
+      "category": "04 Sapphire - Amethyst",
       "roster_fetched": true,
       "riders": [
-        {
-          "rider_id": 1617,
-          "name": "Sam Mack",
-          "url": "https://dirtracingseries.com/riders/profile/1617/",
-          "role": "Rider",
-          "zwift_id": 2235233,
-          "profile_fetched": true
-        },
         {
           "rider_id": 8492,
           "name": "Zafar Siddiqui",
@@ -6996,19 +7904,27 @@
           "profile_fetched": true
         },
         {
-          "rider_id": 9908,
-          "name": "Dexter Eichhorst",
-          "url": "https://dirtracingseries.com/riders/profile/9908/",
-          "role": "Rider",
-          "zwift_id": 6672274,
-          "profile_fetched": true
-        },
-        {
           "rider_id": 4784,
           "name": "Josh Nordell",
           "url": "https://dirtracingseries.com/riders/profile/4784/",
           "role": "Rider",
           "zwift_id": 1381321,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 1547,
+          "name": "Erik John",
+          "url": "https://dirtracingseries.com/riders/profile/1547/",
+          "role": "Rider",
+          "zwift_id": 2030298,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 3166,
+          "name": "Jon Meals",
+          "url": "https://dirtracingseries.com/riders/profile/3166/",
+          "role": "Captain",
+          "zwift_id": 12162,
           "profile_fetched": true
         }
       ]
@@ -7023,14 +7939,6 @@
       "roster_fetched": true,
       "riders": [
         {
-          "rider_id": 9625,
-          "name": "G\u00e9rard Hoeberigs",
-          "url": "https://dirtracingseries.com/riders/profile/9625/",
-          "role": "Captain",
-          "zwift_id": 1505746,
-          "profile_fetched": true
-        },
-        {
           "rider_id": 5526,
           "name": "John Woods",
           "url": "https://dirtracingseries.com/riders/profile/5526/",
@@ -7039,51 +7947,59 @@
           "profile_fetched": true
         },
         {
-          "rider_id": 5300,
-          "name": "Simon Boyle",
-          "url": "https://dirtracingseries.com/riders/profile/5300/",
-          "role": "Rider",
-          "zwift_id": 1337627,
-          "profile_fetched": true
-        },
-        {
           "rider_id": 5536,
           "name": "Charles Hutchings",
           "url": "https://dirtracingseries.com/riders/profile/5536/",
-          "role": "Rider",
+          "role": "Captain",
           "zwift_id": 6442132,
           "profile_fetched": true
         },
         {
-          "rider_id": 9875,
-          "name": "Damon Parker",
-          "url": "https://dirtracingseries.com/riders/profile/9875/",
+          "rider_id": 5388,
+          "name": "David Holland",
+          "url": "https://dirtracingseries.com/riders/profile/5388/",
           "role": "Rider",
-          "zwift_id": 674358,
+          "zwift_id": 1350506,
           "profile_fetched": true
         },
         {
-          "rider_id": 5356,
-          "name": "Nick Keat",
-          "url": "https://dirtracingseries.com/riders/profile/5356/",
+          "rider_id": 5527,
+          "name": "Jamie Best",
+          "url": "https://dirtracingseries.com/riders/profile/5527/",
           "role": "Rider",
-          "zwift_id": 462221,
+          "zwift_id": 661851,
           "profile_fetched": true
         },
         {
-          "rider_id": 6310,
-          "name": "Dan Fletcher",
-          "url": "https://dirtracingseries.com/riders/profile/6310/",
+          "rider_id": 5523,
+          "name": "David David Hill",
+          "url": "https://dirtracingseries.com/riders/profile/5523/",
           "role": "Rider",
-          "zwift_id": 1918456,
+          "zwift_id": 964610,
           "profile_fetched": true
         },
         {
-          "rider_id": 2640,
-          "name": "Paul Beaumont",
-          "url": "https://dirtracingseries.com/riders/profile/2640/",
+          "rider_id": 2910,
+          "name": "Jonathan Smith",
+          "url": "https://dirtracingseries.com/riders/profile/2910/",
           "role": "Rider",
-          "zwift_id": 294573,
+          "zwift_id": 319222,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 6306,
+          "name": "Derrill Stepp",
+          "url": "https://dirtracingseries.com/riders/profile/6306/",
+          "role": "Rider",
+          "zwift_id": 759515,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 3064,
+          "name": "Eric Lorenz",
+          "url": "https://dirtracingseries.com/riders/profile/3064/",
+          "role": "Rider",
+          "zwift_id": 1001978,
           "profile_fetched": true
         }
       ]
@@ -7133,14 +8049,6 @@
       "roster_fetched": true,
       "riders": [
         {
-          "rider_id": 6211,
-          "name": "MARZIO vanoni",
-          "url": "https://dirtracingseries.com/riders/profile/6211/",
-          "role": "Rider",
-          "zwift_id": 706065,
-          "profile_fetched": true
-        },
-        {
           "rider_id": 10118,
           "name": "Thomas Grill",
           "url": "https://dirtracingseries.com/riders/profile/10118/",
@@ -7162,14 +8070,6 @@
           "url": "https://dirtracingseries.com/riders/profile/8269/",
           "role": "Rider",
           "zwift_id": 677861,
-          "profile_fetched": true
-        },
-        {
-          "rider_id": 10136,
-          "name": "Angelo Del Sesto",
-          "url": "https://dirtracingseries.com/riders/profile/10136/",
-          "role": "Rider",
-          "zwift_id": 7237035,
           "profile_fetched": true
         },
         {
@@ -7246,6 +8146,14 @@
           "role": "Rider",
           "zwift_id": 5298686,
           "profile_fetched": true
+        },
+        {
+          "rider_id": 10271,
+          "name": "Luca Zimbalatti",
+          "url": "https://dirtracingseries.com/riders/profile/10271/",
+          "role": "Rider",
+          "zwift_id": 5467509,
+          "profile_fetched": true
         }
       ]
     },
@@ -7313,6 +8221,14 @@
           "role": "Rider",
           "zwift_id": 2091369,
           "profile_fetched": true
+        },
+        {
+          "rider_id": 10286,
+          "name": "Andrea Innocenti",
+          "url": "https://dirtracingseries.com/riders/profile/10286/",
+          "role": "Rider",
+          "zwift_id": 2338907,
+          "profile_fetched": true
         }
       ]
     },
@@ -7347,6 +8263,38 @@
           "url": "https://dirtracingseries.com/riders/profile/10241/",
           "role": "Rider",
           "zwift_id": 6019515,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 9796,
+          "name": "Aaron Gemmell",
+          "url": "https://dirtracingseries.com/riders/profile/9796/",
+          "role": "Rider",
+          "zwift_id": 3843789,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 6211,
+          "name": "MARZIO vanoni",
+          "url": "https://dirtracingseries.com/riders/profile/6211/",
+          "role": "Rider",
+          "zwift_id": 706065,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 8259,
+          "name": "Colella Ivan",
+          "url": "https://dirtracingseries.com/riders/profile/8259/",
+          "role": "Rider",
+          "zwift_id": 1395252,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10136,
+          "name": "Angelo Del Sesto",
+          "url": "https://dirtracingseries.com/riders/profile/10136/",
+          "role": "Rider",
+          "zwift_id": 7237035,
           "profile_fetched": true
         }
       ]
@@ -7474,6 +8422,14 @@
           "role": "Rider",
           "zwift_id": 6944697,
           "profile_fetched": true
+        },
+        {
+          "rider_id": 10299,
+          "name": "LUIGI SALIMBENI",
+          "url": "https://dirtracingseries.com/riders/profile/10299/",
+          "role": "Rider",
+          "zwift_id": 1786716,
+          "profile_fetched": true
         }
       ]
     },
@@ -7532,6 +8488,14 @@
           "url": "https://dirtracingseries.com/riders/profile/6217/",
           "role": "Rider",
           "zwift_id": 1843287,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 6209,
+          "name": "Renato Finotello",
+          "url": "https://dirtracingseries.com/riders/profile/6209/",
+          "role": "Rider",
+          "zwift_id": 3442570,
           "profile_fetched": true
         }
       ]
@@ -7879,14 +8843,6 @@
       "roster_fetched": true,
       "riders": [
         {
-          "rider_id": 7032,
-          "name": "Anthony Porter",
-          "url": "https://dirtracingseries.com/riders/profile/7032/",
-          "role": "Rider",
-          "zwift_id": 6574195,
-          "profile_fetched": true
-        },
-        {
           "rider_id": 6605,
           "name": "Ian Graham",
           "url": "https://dirtracingseries.com/riders/profile/6605/",
@@ -7908,6 +8864,30 @@
           "url": "https://dirtracingseries.com/riders/profile/10267/",
           "role": "Rider",
           "zwift_id": 975377,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 3405,
+          "name": "David BK",
+          "url": "https://dirtracingseries.com/riders/profile/3405/",
+          "role": "Rider",
+          "zwift_id": 2958618,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 1710,
+          "name": "Lee Read",
+          "url": "https://dirtracingseries.com/riders/profile/1710/",
+          "role": "Rider",
+          "zwift_id": 560630,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 9802,
+          "name": "Pedro Palma",
+          "url": "https://dirtracingseries.com/riders/profile/9802/",
+          "role": "Rider",
+          "zwift_id": 5863659,
           "profile_fetched": true
         }
       ]
@@ -7987,6 +8967,97 @@
           "role": "Captain",
           "zwift_id": 2930317,
           "profile_fetched": true
+        },
+        {
+          "rider_id": 10127,
+          "name": "Calvin Vriends",
+          "url": "https://dirtracingseries.com/riders/profile/10127/",
+          "role": "Rider",
+          "zwift_id": 421560,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 5892,
+          "name": "Daniel Tellekamp",
+          "url": "https://dirtracingseries.com/riders/profile/5892/",
+          "role": "Rider",
+          "zwift_id": 4225345,
+          "profile_fetched": true
+        }
+      ]
+    },
+    {
+      "team_id": 1870,
+      "name": "Team NL Platinum",
+      "url": "https://dirtracingseries.com/riders/1870/",
+      "time_zone": "EMEA W",
+      "league": "Rotini",
+      "category": "06 Platinum",
+      "roster_fetched": true,
+      "riders": [
+        {
+          "rider_id": 5428,
+          "name": "Jeroen Diepenbroek",
+          "url": "https://dirtracingseries.com/riders/profile/5428/",
+          "role": "Rider",
+          "zwift_id": 150437,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 1555,
+          "name": "Ralph Kolmschate",
+          "url": "https://dirtracingseries.com/riders/profile/1555/",
+          "role": "Rider",
+          "zwift_id": 1680312,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10295,
+          "name": "kevin Lebis",
+          "url": "https://dirtracingseries.com/riders/profile/10295/",
+          "role": "Rider",
+          "zwift_id": 233070,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 2661,
+          "name": "Sverre Oelen",
+          "url": "https://dirtracingseries.com/riders/profile/2661/",
+          "role": "Rider",
+          "zwift_id": 396624,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 1554,
+          "name": "Sake Kampen",
+          "url": "https://dirtracingseries.com/riders/profile/1554/",
+          "role": "Rider",
+          "zwift_id": 1414652,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10110,
+          "name": "Maarten Beljaars",
+          "url": "https://dirtracingseries.com/riders/profile/10110/",
+          "role": "Rider",
+          "zwift_id": 121506,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10297,
+          "name": "Jason Gillissen",
+          "url": "https://dirtracingseries.com/riders/profile/10297/",
+          "role": "Rider",
+          "zwift_id": 7977327,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10309,
+          "name": "Klaas Auke Dijkstra",
+          "url": "https://dirtracingseries.com/riders/profile/10309/",
+          "role": "Rider",
+          "zwift_id": 8583680,
+          "profile_fetched": true
         }
       ]
     },
@@ -7999,14 +9070,6 @@
       "category": "08 Silver",
       "roster_fetched": true,
       "riders": [
-        {
-          "rider_id": 7143,
-          "name": "Rhonus Wolthuis",
-          "url": "https://dirtracingseries.com/riders/profile/7143/",
-          "role": "Rider",
-          "zwift_id": 3063376,
-          "profile_fetched": true
-        },
         {
           "rider_id": 1314,
           "name": "Kees Koster",
@@ -8029,6 +9092,14 @@
           "url": "https://dirtracingseries.com/riders/profile/2924/",
           "role": "Rider",
           "zwift_id": 2918842,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 1558,
+          "name": "Pieter van der Gulik",
+          "url": "https://dirtracingseries.com/riders/profile/1558/",
+          "role": "Rider",
+          "zwift_id": 1864049,
           "profile_fetched": true
         }
       ]
@@ -8183,6 +9254,14 @@
           "role": "Rider",
           "zwift_id": 1511742,
           "profile_fetched": true
+        },
+        {
+          "rider_id": 9314,
+          "name": "Andrew Percival",
+          "url": "https://dirtracingseries.com/riders/profile/9314/",
+          "role": "Rider",
+          "zwift_id": 5494770,
+          "profile_fetched": true
         }
       ]
     },
@@ -8204,6 +9283,14 @@
           "profile_fetched": true
         },
         {
+          "rider_id": 6971,
+          "name": "David Johnson",
+          "url": "https://dirtracingseries.com/riders/profile/6971/",
+          "role": "Rider",
+          "zwift_id": 478958,
+          "profile_fetched": true
+        },
+        {
           "rider_id": 6984,
           "name": "Adam Barszczowski",
           "url": "https://dirtracingseries.com/riders/profile/6984/",
@@ -8220,11 +9307,27 @@
           "profile_fetched": true
         },
         {
+          "rider_id": 3146,
+          "name": "Daniel Kent",
+          "url": "https://dirtracingseries.com/riders/profile/3146/",
+          "role": "Rider",
+          "zwift_id": 5119381,
+          "profile_fetched": true
+        },
+        {
           "rider_id": 3630,
           "name": "Rob Robert McEwan",
           "url": "https://dirtracingseries.com/riders/profile/3630/",
           "role": "Rider",
           "zwift_id": 619770,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10329,
+          "name": "Tom Ross",
+          "url": "https://dirtracingseries.com/riders/profile/10329/",
+          "role": "Rider",
+          "zwift_id": 374410,
           "profile_fetched": true
         }
       ]
@@ -8490,6 +9593,25 @@
       ]
     },
     {
+      "team_id": 1190,
+      "name": "Team Ukraine Mariupol",
+      "url": "https://dirtracingseries.com/riders/1190/",
+      "time_zone": "EMEA C",
+      "league": "Tortellini",
+      "category": "06 Platinum",
+      "roster_fetched": true,
+      "riders": [
+        {
+          "rider_id": 5338,
+          "name": "Julia Rudnik-Hrynkiv",
+          "url": "https://dirtracingseries.com/riders/profile/5338/",
+          "role": "Captain",
+          "zwift_id": 4791960,
+          "profile_fetched": true
+        }
+      ]
+    },
+    {
       "team_id": 1,
       "name": "TeamNL Cloud9 Bandits",
       "url": "https://dirtracingseries.com/riders/1/",
@@ -8734,6 +9856,92 @@
       ]
     },
     {
+      "team_id": 851,
+      "name": "Terminal VELOSity",
+      "url": "https://dirtracingseries.com/riders/851/",
+      "time_zone": "EMEA C",
+      "league": "Tortellini",
+      "category": "05 Amethyst",
+      "roster_fetched": true,
+      "riders": [
+        {
+          "rider_id": 7718,
+          "name": "Vincent Van Gestel",
+          "url": "https://dirtracingseries.com/riders/profile/7718/",
+          "role": "Rider",
+          "zwift_id": 305841,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 7854,
+          "name": "ED Van Malle",
+          "url": "https://dirtracingseries.com/riders/profile/7854/",
+          "role": "Rider",
+          "zwift_id": 5561550,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 8164,
+          "name": "Kent Rune Klungerbo",
+          "url": "https://dirtracingseries.com/riders/profile/8164/",
+          "role": "Rider",
+          "zwift_id": 3237021,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 7216,
+          "name": "Alex Allison",
+          "url": "https://dirtracingseries.com/riders/profile/7216/",
+          "role": "Rider",
+          "zwift_id": 5491469,
+          "profile_fetched": true
+        }
+      ]
+    },
+    {
+      "team_id": 851,
+      "name": "Terminal VELOSity",
+      "url": "https://dirtracingseries.com/riders/851/",
+      "time_zone": "EMEA W",
+      "league": "Rotini",
+      "category": "05 Amethyst",
+      "roster_fetched": true,
+      "riders": [
+        {
+          "rider_id": 7718,
+          "name": "Vincent Van Gestel",
+          "url": "https://dirtracingseries.com/riders/profile/7718/",
+          "role": "Rider",
+          "zwift_id": 305841,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 7854,
+          "name": "ED Van Malle",
+          "url": "https://dirtracingseries.com/riders/profile/7854/",
+          "role": "Rider",
+          "zwift_id": 5561550,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 8164,
+          "name": "Kent Rune Klungerbo",
+          "url": "https://dirtracingseries.com/riders/profile/8164/",
+          "role": "Rider",
+          "zwift_id": 3237021,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 7216,
+          "name": "Alex Allison",
+          "url": "https://dirtracingseries.com/riders/profile/7216/",
+          "role": "Rider",
+          "zwift_id": 5491469,
+          "profile_fetched": true
+        }
+      ]
+    },
+    {
       "team_id": 772,
       "name": "Tezh Racing",
       "url": "https://dirtracingseries.com/riders/772/",
@@ -8815,49 +10023,6 @@
           "url": "https://dirtracingseries.com/riders/profile/7241/",
           "role": "Rider",
           "zwift_id": 305074,
-          "profile_fetched": true
-        }
-      ]
-    },
-    {
-      "team_id": 1074,
-      "name": "VELOS BuZZards",
-      "url": "https://dirtracingseries.com/riders/1074/",
-      "time_zone": "EMEA W",
-      "league": "Rotini",
-      "category": "07 Gold",
-      "roster_fetched": true,
-      "riders": [
-        {
-          "rider_id": 7447,
-          "name": "Martin White",
-          "url": "https://dirtracingseries.com/riders/profile/7447/",
-          "role": "Rider",
-          "zwift_id": 6183049,
-          "profile_fetched": true
-        },
-        {
-          "rider_id": 7231,
-          "name": "Kirk Lewis",
-          "url": "https://dirtracingseries.com/riders/profile/7231/",
-          "role": "Rider",
-          "zwift_id": 4514868,
-          "profile_fetched": true
-        },
-        {
-          "rider_id": 4828,
-          "name": "Ron Gibbs",
-          "url": "https://dirtracingseries.com/riders/profile/4828/",
-          "role": "Rider",
-          "zwift_id": 4605909,
-          "profile_fetched": true
-        },
-        {
-          "rider_id": 4780,
-          "name": "Niels van den Bovenkamp",
-          "url": "https://dirtracingseries.com/riders/profile/4780/",
-          "role": "Rider",
-          "zwift_id": 3859130,
           "profile_fetched": true
         }
       ]
@@ -8998,19 +10163,27 @@
           "profile_fetched": true
         },
         {
-          "rider_id": 3862,
-          "name": "Peter Lankenfeld",
-          "url": "https://dirtracingseries.com/riders/profile/3862/",
-          "role": "Rider",
-          "zwift_id": 2890239,
+          "rider_id": 3049,
+          "name": "Adrian Adrian Ray",
+          "url": "https://dirtracingseries.com/riders/profile/3049/",
+          "role": "Captain",
+          "zwift_id": 870215,
           "profile_fetched": true
         },
         {
-          "rider_id": 235,
-          "name": "Mr. Pink",
-          "url": "https://dirtracingseries.com/riders/profile/235/",
-          "role": "Captain",
-          "zwift_id": 1503740,
+          "rider_id": 5403,
+          "name": "Tony Cass",
+          "url": "https://dirtracingseries.com/riders/profile/5403/",
+          "role": "Rider",
+          "zwift_id": 871351,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 2853,
+          "name": "Anthony Wooldridge",
+          "url": "https://dirtracingseries.com/riders/profile/2853/",
+          "role": "Rider",
+          "zwift_id": 1096059,
           "profile_fetched": true
         }
       ]
@@ -9025,38 +10198,86 @@
       "roster_fetched": true,
       "riders": [
         {
-          "rider_id": 7342,
-          "name": "Richard Storrie",
-          "url": "https://dirtracingseries.com/riders/profile/7342/",
-          "role": "Rider",
-          "zwift_id": 850210,
+          "rider_id": 235,
+          "name": "Mr. Pink",
+          "url": "https://dirtracingseries.com/riders/profile/235/",
+          "role": "Captain",
+          "zwift_id": 1503740,
           "profile_fetched": true
         },
         {
-          "rider_id": 7408,
-          "name": "Bruce Metheringham",
-          "url": "https://dirtracingseries.com/riders/profile/7408/",
+          "rider_id": 3862,
+          "name": "Peter Lankenfeld",
+          "url": "https://dirtracingseries.com/riders/profile/3862/",
           "role": "Rider",
-          "zwift_id": 3073861,
+          "zwift_id": 2890239,
           "profile_fetched": true
         }
       ]
     },
     {
-      "team_id": 920,
-      "name": "VELOSiRaBtors",
-      "url": "https://dirtracingseries.com/riders/920/",
+      "team_id": 900,
+      "name": "VELOSirAptors",
+      "url": "https://dirtracingseries.com/riders/900/",
       "time_zone": "EMEA C",
       "league": "Tortellini",
       "category": "01 Diamond - Ruby",
       "roster_fetched": true,
       "riders": [
         {
-          "rider_id": 3996,
-          "name": "Nick Hanly",
-          "url": "https://dirtracingseries.com/riders/profile/3996/",
+          "rider_id": 7344,
+          "name": "Andrej Umnik",
+          "url": "https://dirtracingseries.com/riders/profile/7344/",
           "role": "Rider",
-          "zwift_id": 5757415,
+          "zwift_id": 3340405,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 2847,
+          "name": "Chris Cayford",
+          "url": "https://dirtracingseries.com/riders/profile/2847/",
+          "role": "Rider",
+          "zwift_id": 2802797,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 2855,
+          "name": "Richard Teare",
+          "url": "https://dirtracingseries.com/riders/profile/2855/",
+          "role": "Rider",
+          "zwift_id": 1462774,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 4272,
+          "name": "Sam Loughton",
+          "url": "https://dirtracingseries.com/riders/profile/4272/",
+          "role": "Rider",
+          "zwift_id": 1395370,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 2271,
+          "name": "Bart Deleij",
+          "url": "https://dirtracingseries.com/riders/profile/2271/",
+          "role": "Rider",
+          "zwift_id": 1140243,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 516,
+          "name": "Jos Medema",
+          "url": "https://dirtracingseries.com/riders/profile/516/",
+          "role": "Rider",
+          "zwift_id": 857547,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 4702,
+          "name": "Adrian Kerrigan",
+          "url": "https://dirtracingseries.com/riders/profile/4702/",
+          "role": "Rider",
+          "zwift_id": 2871925,
           "profile_fetched": true
         }
       ]
@@ -9243,6 +10464,30 @@
           "role": "Rider",
           "zwift_id": 110752,
           "profile_fetched": true
+        },
+        {
+          "rider_id": 6383,
+          "name": "Niene Niene",
+          "url": "https://dirtracingseries.com/riders/profile/6383/",
+          "role": "Rider",
+          "zwift_id": 1464527,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 4572,
+          "name": "John Gray",
+          "url": "https://dirtracingseries.com/riders/profile/4572/",
+          "role": "Rider",
+          "zwift_id": 1370666,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10344,
+          "name": "Yannick D",
+          "url": "https://dirtracingseries.com/riders/profile/10344/",
+          "role": "Rider",
+          "zwift_id": 2170939,
+          "profile_fetched": true
         }
       ]
     },
@@ -9286,6 +10531,14 @@
           "role": "Rider",
           "zwift_id": 1824485,
           "profile_fetched": true
+        },
+        {
+          "rider_id": 10322,
+          "name": "Alberto Gil",
+          "url": "https://dirtracingseries.com/riders/profile/10322/",
+          "role": "Rider",
+          "zwift_id": 8690191,
+          "profile_fetched": true
         }
       ]
     },
@@ -9315,14 +10568,6 @@
           "profile_fetched": true
         },
         {
-          "rider_id": 2853,
-          "name": "Anthony Wooldridge",
-          "url": "https://dirtracingseries.com/riders/profile/2853/",
-          "role": "Rider",
-          "zwift_id": 1096059,
-          "profile_fetched": true
-        },
-        {
           "rider_id": 4684,
           "name": "Andy Andy Turner",
           "url": "https://dirtracingseries.com/riders/profile/4684/",
@@ -9349,6 +10594,100 @@
       ]
     },
     {
+      "team_id": 833,
+      "name": "VirtuSlo Dan D",
+      "url": "https://dirtracingseries.com/riders/833/",
+      "time_zone": "EMEA C",
+      "league": "Tortellini",
+      "category": "04 Sapphire",
+      "roster_fetched": true,
+      "riders": [
+        {
+          "rider_id": 4331,
+          "name": "Alex Beber",
+          "url": "https://dirtracingseries.com/riders/profile/4331/",
+          "role": "Captain",
+          "zwift_id": 4486452,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 4723,
+          "name": "Matej Mercina",
+          "url": "https://dirtracingseries.com/riders/profile/4723/",
+          "role": "Rider",
+          "zwift_id": 410906,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 7862,
+          "name": "Toma\u017e Vampl",
+          "url": "https://dirtracingseries.com/riders/profile/7862/",
+          "role": "Rider",
+          "zwift_id": 87121,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 4753,
+          "name": "Tadej Zacharias",
+          "url": "https://dirtracingseries.com/riders/profile/4753/",
+          "role": "Rider",
+          "zwift_id": 1378190,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10314,
+          "name": "Jan Megli\u010d",
+          "url": "https://dirtracingseries.com/riders/profile/10314/",
+          "role": "Rider",
+          "zwift_id": 6812474,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10336,
+          "name": "An\u017ee Brus",
+          "url": "https://dirtracingseries.com/riders/profile/10336/",
+          "role": "Rider",
+          "zwift_id": 1116990,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 4724,
+          "name": "Leon Kogovsek (VSlo4E)",
+          "url": "https://dirtracingseries.com/riders/profile/4724/",
+          "role": "Rider",
+          "zwift_id": 5294189,
+          "profile_fetched": true
+        }
+      ]
+    },
+    {
+      "team_id": 899,
+      "name": "VirtuSlo Kingston",
+      "url": "https://dirtracingseries.com/riders/899/",
+      "time_zone": "EMEA C",
+      "league": "Tortellini",
+      "category": "04 Sapphire",
+      "roster_fetched": true,
+      "riders": [
+        {
+          "rider_id": 10339,
+          "name": "Marko Sinobad",
+          "url": "https://dirtracingseries.com/riders/profile/10339/",
+          "role": "Rider",
+          "zwift_id": 5897865,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10342,
+          "name": "Tadej Blatnik",
+          "url": "https://dirtracingseries.com/riders/profile/10342/",
+          "role": "Rider",
+          "zwift_id": 263905,
+          "profile_fetched": true
+        }
+      ]
+    },
+    {
       "team_id": 898,
       "name": "VirtuSlo Orleki",
       "url": "https://dirtracingseries.com/riders/898/",
@@ -9356,7 +10695,115 @@
       "league": "Tortellini",
       "category": "07 Gold",
       "roster_fetched": true,
-      "riders": []
+      "riders": [
+        {
+          "rider_id": 4739,
+          "name": "Dean \u017ditnik",
+          "url": "https://dirtracingseries.com/riders/profile/4739/",
+          "role": "Rider",
+          "zwift_id": 3364054,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 4525,
+          "name": "Andrej Oresek",
+          "url": "https://dirtracingseries.com/riders/profile/4525/",
+          "role": "Rider",
+          "zwift_id": 2325321,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 4490,
+          "name": "Miha Novak",
+          "url": "https://dirtracingseries.com/riders/profile/4490/",
+          "role": "Rider",
+          "zwift_id": 4503772,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10293,
+          "name": "Luka Krivec",
+          "url": "https://dirtracingseries.com/riders/profile/10293/",
+          "role": "Rider",
+          "zwift_id": 4507406,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10305,
+          "name": "Nina Cas Jesenicnik",
+          "url": "https://dirtracingseries.com/riders/profile/10305/",
+          "role": "Rider",
+          "zwift_id": 6416891,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10300,
+          "name": "Zoran Hovnik",
+          "url": "https://dirtracingseries.com/riders/profile/10300/",
+          "role": "Rider",
+          "zwift_id": 6917424,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10346,
+          "name": "Grega Kordez",
+          "url": "https://dirtracingseries.com/riders/profile/10346/",
+          "role": "Rider",
+          "zwift_id": 3369926,
+          "profile_fetched": true
+        }
+      ]
+    },
+    {
+      "team_id": 832,
+      "name": "VirtuSlo The Stroj",
+      "url": "https://dirtracingseries.com/riders/832/",
+      "time_zone": "EMEA C",
+      "league": "Tortellini",
+      "category": "03 Emerald",
+      "roster_fetched": true,
+      "riders": [
+        {
+          "rider_id": 4300,
+          "name": "Dejan Presen",
+          "url": "https://dirtracingseries.com/riders/profile/4300/",
+          "role": "Captain",
+          "zwift_id": 1462613,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10315,
+          "name": "Matic Kveder",
+          "url": "https://dirtracingseries.com/riders/profile/10315/",
+          "role": "Rider",
+          "zwift_id": 8347712,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 4311,
+          "name": "Vid Balek",
+          "url": "https://dirtracingseries.com/riders/profile/4311/",
+          "role": "Rider",
+          "zwift_id": 824380,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10338,
+          "name": "Rok Jurkov\u0161ek",
+          "url": "https://dirtracingseries.com/riders/profile/10338/",
+          "role": "Rider",
+          "zwift_id": 3046779,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 4337,
+          "name": "blaz praper",
+          "url": "https://dirtracingseries.com/riders/profile/4337/",
+          "role": "Rider",
+          "zwift_id": 4612257,
+          "profile_fetched": true
+        }
+      ]
     },
     {
       "team_id": 12,
@@ -9736,14 +11183,6 @@
           "role": "Rider",
           "zwift_id": 3756629,
           "profile_fetched": true
-        },
-        {
-          "rider_id": 4816,
-          "name": "Kris Cooper",
-          "url": "https://dirtracingseries.com/riders/profile/4816/",
-          "role": "Rider",
-          "zwift_id": 14626,
-          "profile_fetched": true
         }
       ]
     },
@@ -9960,8 +11399,8 @@
       "team_id": 1192,
       "name": "ZRScot Amethyst",
       "url": "https://dirtracingseries.com/riders/1192/",
-      "time_zone": "EMEA C",
-      "league": "Tortellini",
+      "time_zone": "EMEA W",
+      "league": "Rotini",
       "category": "05 Amethyst",
       "roster_fetched": true,
       "riders": [
@@ -10076,11 +11515,27 @@
           "profile_fetched": true
         },
         {
+          "rider_id": 2765,
+          "name": "Andy Barrie",
+          "url": "https://dirtracingseries.com/riders/profile/2765/",
+          "role": "Rider",
+          "zwift_id": 248557,
+          "profile_fetched": true
+        },
+        {
           "rider_id": 4128,
           "name": "Neil Corben",
           "url": "https://dirtracingseries.com/riders/profile/4128/",
           "role": "Rider",
           "zwift_id": 373004,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 3009,
+          "name": "Karim Kmicha",
+          "url": "https://dirtracingseries.com/riders/profile/3009/",
+          "role": "Rider",
+          "zwift_id": 995365,
           "profile_fetched": true
         }
       ]
@@ -10119,14 +11574,6 @@
           "profile_fetched": true
         },
         {
-          "rider_id": 7650,
-          "name": "Sean Smale",
-          "url": "https://dirtracingseries.com/riders/profile/7650/",
-          "role": "Rider",
-          "zwift_id": 7480673,
-          "profile_fetched": true
-        },
-        {
           "rider_id": 10199,
           "name": "Gary Ingram",
           "url": "https://dirtracingseries.com/riders/profile/10199/",
@@ -10148,6 +11595,22 @@
           "url": "https://dirtracingseries.com/riders/profile/1720/",
           "role": "Rider",
           "zwift_id": 1157175,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 2505,
+          "name": "Andrew McGuigan",
+          "url": "https://dirtracingseries.com/riders/profile/2505/",
+          "role": "Rider",
+          "zwift_id": 1920205,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 7650,
+          "name": "Sean Smale",
+          "url": "https://dirtracingseries.com/riders/profile/7650/",
+          "role": "Rider",
+          "zwift_id": 7480673,
           "profile_fetched": true
         }
       ]
@@ -10330,49 +11793,6 @@
       ]
     },
     {
-      "team_id": 1303,
-      "name": "ZSUNR Bootleggers",
-      "url": "https://dirtracingseries.com/riders/1303/",
-      "time_zone": "EMEA W",
-      "league": "Rotini",
-      "category": "03 Emerald",
-      "roster_fetched": true,
-      "riders": [
-        {
-          "rider_id": 6182,
-          "name": "Alex Thomson",
-          "url": "https://dirtracingseries.com/riders/profile/6182/",
-          "role": "Rider",
-          "zwift_id": 1055812,
-          "profile_fetched": true
-        },
-        {
-          "rider_id": 3504,
-          "name": "Xander Crawshaw",
-          "url": "https://dirtracingseries.com/riders/profile/3504/",
-          "role": "Rider",
-          "zwift_id": 2419188,
-          "profile_fetched": true
-        },
-        {
-          "rider_id": 9849,
-          "name": "Connor Reaney",
-          "url": "https://dirtracingseries.com/riders/profile/9849/",
-          "role": "Rider",
-          "zwift_id": 5283755,
-          "profile_fetched": true
-        },
-        {
-          "rider_id": 6663,
-          "name": "Sjoerd Delnooz",
-          "url": "https://dirtracingseries.com/riders/profile/6663/",
-          "role": "Rider",
-          "zwift_id": 448756,
-          "profile_fetched": true
-        }
-      ]
-    },
-    {
       "team_id": 1866,
       "name": "ZSUNR Copperheads",
       "url": "https://dirtracingseries.com/riders/1866/",
@@ -10411,6 +11831,22 @@
           "url": "https://dirtracingseries.com/riders/profile/1090/",
           "role": "Rider",
           "zwift_id": 1363894,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 7310,
+          "name": "Patrick Toay",
+          "url": "https://dirtracingseries.com/riders/profile/7310/",
+          "role": "Rider",
+          "zwift_id": 886688,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 7280,
+          "name": "Tamra Roberts",
+          "url": "https://dirtracingseries.com/riders/profile/7280/",
+          "role": "Rider",
+          "zwift_id": 988172,
           "profile_fetched": true
         },
         {
@@ -10508,14 +11944,6 @@
           "profile_fetched": true
         },
         {
-          "rider_id": 6939,
-          "name": "Brian Hagan",
-          "url": "https://dirtracingseries.com/riders/profile/6939/",
-          "role": "Rider",
-          "zwift_id": 102945,
-          "profile_fetched": true
-        },
-        {
           "rider_id": 9881,
           "name": "Conor Wall",
           "url": "https://dirtracingseries.com/riders/profile/9881/",
@@ -10529,6 +11957,30 @@
           "url": "https://dirtracingseries.com/riders/profile/9572/",
           "role": "Rider",
           "zwift_id": 7460730,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 9792,
+          "name": "Bill Henson",
+          "url": "https://dirtracingseries.com/riders/profile/9792/",
+          "role": "Rider",
+          "zwift_id": 5726145,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 6838,
+          "name": "Kent Johnson",
+          "url": "https://dirtracingseries.com/riders/profile/6838/",
+          "role": "Rider",
+          "zwift_id": 618585,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10310,
+          "name": "Vova Timaev",
+          "url": "https://dirtracingseries.com/riders/profile/10310/",
+          "role": "Rider",
+          "zwift_id": 5730868,
           "profile_fetched": true
         }
       ]
@@ -10664,14 +12116,6 @@
           "profile_fetched": true
         },
         {
-          "rider_id": 6607,
-          "name": "Stephen Russell",
-          "url": "https://dirtracingseries.com/riders/profile/6607/",
-          "role": "Rider",
-          "zwift_id": 3818228,
-          "profile_fetched": true
-        },
-        {
           "rider_id": 5434,
           "name": "Dave Konicek",
           "url": "https://dirtracingseries.com/riders/profile/5434/",
@@ -10693,6 +12137,22 @@
           "url": "https://dirtracingseries.com/riders/profile/6542/",
           "role": "Rider",
           "zwift_id": 2873877,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10006,
+          "name": "Michael Hechenberger",
+          "url": "https://dirtracingseries.com/riders/profile/10006/",
+          "role": "Rider",
+          "zwift_id": 4650799,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 6607,
+          "name": "Stephen Russell",
+          "url": "https://dirtracingseries.com/riders/profile/6607/",
+          "role": "Rider",
+          "zwift_id": 3818228,
           "profile_fetched": true
         }
       ]
@@ -10747,27 +12207,19 @@
           "profile_fetched": true
         },
         {
-          "rider_id": 9792,
-          "name": "Bill Henson",
-          "url": "https://dirtracingseries.com/riders/profile/9792/",
-          "role": "Rider",
-          "zwift_id": 5726145,
-          "profile_fetched": true
-        },
-        {
-          "rider_id": 6838,
-          "name": "Kent Johnson",
-          "url": "https://dirtracingseries.com/riders/profile/6838/",
-          "role": "Rider",
-          "zwift_id": 618585,
-          "profile_fetched": true
-        },
-        {
           "rider_id": 9800,
           "name": "Kevin Douglas",
           "url": "https://dirtracingseries.com/riders/profile/9800/",
           "role": "Rider",
           "zwift_id": 2667769,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 6939,
+          "name": "Brian Hagan",
+          "url": "https://dirtracingseries.com/riders/profile/6939/",
+          "role": "Rider",
+          "zwift_id": 102945,
           "profile_fetched": true
         }
       ]
@@ -10895,6 +12347,14 @@
           "role": "Rider",
           "zwift_id": 1627485,
           "profile_fetched": true
+        },
+        {
+          "rider_id": 10325,
+          "name": "Lukas 12FN",
+          "url": "https://dirtracingseries.com/riders/profile/10325/",
+          "role": "Rider",
+          "zwift_id": 6060238,
+          "profile_fetched": true
         }
       ]
     },
@@ -10955,6 +12415,14 @@
           "url": "https://dirtracingseries.com/riders/profile/7281/",
           "role": "Rider",
           "zwift_id": 1587638,
+          "profile_fetched": true
+        },
+        {
+          "rider_id": 10317,
+          "name": "Mathias Haslund",
+          "url": "https://dirtracingseries.com/riders/profile/10317/",
+          "role": "Rider",
+          "zwift_id": 404168,
           "profile_fetched": true
         }
       ]
@@ -11213,7 +12681,7 @@
           "rider_id": 6008,
           "name": "Carsten Reinartz",
           "url": "https://dirtracingseries.com/riders/profile/6008/",
-          "role": "Rider",
+          "role": "Captain",
           "zwift_id": 1405168,
           "profile_fetched": true
         }

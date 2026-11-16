@@ -25,6 +25,27 @@ def test_unexpected_team_pages_are_not_silently_saved_as_empty(html):
         dirt.parse_teams(html)
 
 
+def test_team_registered_in_two_leagues_preserves_both_assignments():
+    html = '''<table id="teams-table"><tbody>
+        <tr data-in-series="true"><td><a href="/riders/1692/">DNSTY</a></td>
+            <td>Manager</td><td>EMEA C</td><td>Tortellini</td><td>03 Emerald</td></tr>
+        <tr data-in-series="true"><td><a href="/riders/1692/">DNSTY</a></td>
+            <td>Manager</td><td>EMEA W</td><td>Rotini</td><td>03 Emerald</td></tr>
+        </tbody></table>'''
+    teams = dirt.parse_teams(html)
+    assert [team["team_id"] for team in teams] == [1692, 1692]
+    assert [(team["time_zone"], team["league"]) for team in teams] == [
+        ("EMEA C", "Tortellini"), ("EMEA W", "Rotini"),
+    ]
+
+
+def test_duplicate_team_registration_is_rejected():
+    row = '''<tr data-in-series="true"><td><a href="/riders/1692/">DNSTY</a></td>
+        <td>Manager</td><td>EMEA C</td><td>Tortellini</td><td>03 Emerald</td></tr>'''
+    with pytest.raises(ValueError, match="Duplicate series registration"):
+        dirt.parse_teams(f'<table id="teams-table"><tbody>{row}{row}</tbody></table>')
+
+
 def test_roster_excludes_managers_and_reads_only_the_roster_table():
     html = '''<a href="/riders/profile/6667/">Manager</a>
         <table><thead><tr><th>Rider Name</th><th>Team Role</th></tr></thead>
