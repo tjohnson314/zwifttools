@@ -24,6 +24,10 @@ Activities, Power Dashboard, and Segment PRs use the active rider. Profile-based
 inputs remain editable; activity analysis uses the activity owner's profile,
 which may differ from the active rider. Race Replay, Ride Compare, static tools,
 and manual planners do not require a selected rider.
+My Activities caches computed normalized power and average heart rate, along
+with race-link information, in browser local storage per rider and activity.
+Entries are refreshed when the activity's listed date, distance, or duration
+changes; clearing browser site data removes them.
 
 API access uses a dedicated server-side account and only publicly available
 data. Private or unavailable data is reported rather than treated as zero;

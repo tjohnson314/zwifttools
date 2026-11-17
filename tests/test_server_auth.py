@@ -216,6 +216,27 @@ def test_power_no_power_is_distinct_from_failed_fetch(service, monkeypatch):
     assert "has_power" not in result.get_json()
 
 
+@pytest.mark.parametrize("telemetry,error,available", [
+    ({"samples": True}, None, True),
+    (None, "Telemetry error: upstream unavailable", False),
+])
+def test_activity_enrichment_marks_telemetry_availability(service, monkeypatch, telemetry, error, available):
+    monkeypatch.setattr(app_module, "get_activity_details", lambda *args: (
+        {"eventInfo": {"eventSubGroupId": 2, "id": 3}, "routeId": 1}, None))
+    monkeypatch.setattr(app_module, "get_route_info", lambda *args: None)
+    monkeypatch.setattr(app_module, "fetch_rider_telemetry", lambda *args: (telemetry, {}, error))
+    monkeypatch.setattr(app_module, "convert_telemetry_to_dataframe", lambda data: pd.DataFrame({
+        "power_watts": [100, 200], "hr_bpm": [0, 150],
+    }))
+    result = app_module.app.test_client().get("/api/activity_enrichment/11")
+    assert result.status_code == 200
+    data = result.get_json()
+    assert data["telemetry_available"] is available
+    assert data["is_race"] is True
+    assert data["event_id"] == 3
+    assert data["avg_hr"] == (150 if available else None)
+
+
 def test_captured_headers_renew_expired_tokens_and_retry_401_once(service, monkeypatch):
     manager, _ = service
     captured = app_module.get_headers()

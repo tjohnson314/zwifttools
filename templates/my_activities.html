@@ -26,6 +26,7 @@
             </div>
             <div id="errorState" class="error-msg" style="display:none;"></div>
             <div id="emptyState" class="empty-msg" style="display:none;">No activities found.</div>
+            <div id="cacheWarning" class="cache-warning" role="status" hidden></div>
 
             <div id="tableContainer" class="table-container" style="display:none;">
                 <table>
@@ -54,9 +55,70 @@
         let currentStart = 0;
         const PAGE_SIZE = 30;
         const ENRICH_CONCURRENCY = 3;
+        const ENRICH_CACHE_PREFIX = 'myActivitiesEnrichmentV1:';
         let allLoaded = false;
 
         // ---- Helpers ----
+        function enrichmentCacheKey(activityId) {
+            const rider = window.ZwiftRider.get();
+            return rider ? `${ENRICH_CACHE_PREFIX}${rider.id}:${activityId}` : null;
+        }
+
+        function cacheWarning(error) {
+            console.warn('Activity cache unavailable:', error);
+            const warning = document.getElementById('cacheWarning');
+            warning.textContent = 'Browser cache is unavailable or full. Activity values will be fetched again.';
+            warning.hidden = false;
+        }
+
+        function readEnrichmentCache(tr) {
+            const key = enrichmentCacheKey(tr.dataset.activityId);
+            if (!key) return null;
+            try {
+                const raw = localStorage.getItem(key);
+                if (!raw) return null;
+                let cached;
+                try {
+                    cached = JSON.parse(raw);
+                } catch (error) {
+                    console.warn('Invalid activity cache entry:', error);
+                    localStorage.removeItem(key);
+                    return null;
+                }
+                const data = cached && cached.data;
+                if (cached && cached.signature === tr.dataset.cacheSignature && data &&
+                    ['normalized_power', 'avg_hr'].every(field =>
+                        data[field] === null || Number.isFinite(data[field])) &&
+                    typeof data.is_race === 'boolean' &&
+                    (data.event_id === null || typeof data.event_id === 'string' ||
+                     Number.isFinite(data.event_id))) {
+                    return data;
+                }
+                localStorage.removeItem(key);
+            } catch (error) {
+                cacheWarning(error);
+            }
+            return null;
+        }
+
+        function saveEnrichmentCache(tr, data) {
+            const key = enrichmentCacheKey(tr.dataset.activityId);
+            if (!key || !data.telemetry_available) return;
+            try {
+                localStorage.setItem(key, JSON.stringify({
+                    signature: tr.dataset.cacheSignature,
+                    data: {
+                        normalized_power: data.normalized_power,
+                        avg_hr: data.avg_hr,
+                        is_race: data.is_race,
+                        event_id: data.event_id ?? null,
+                    },
+                }));
+            } catch (error) {
+                cacheWarning(error);
+            }
+        }
+
         function formatDuration(sec) {
             if (!sec) return '—';
             const h = Math.floor(sec / 3600);
@@ -94,6 +156,7 @@
         function renderRow(act) {
             const tr = document.createElement('tr');
             tr.dataset.activityId = act.id || '';
+            tr.dataset.cacheSignature = JSON.stringify([act.date, act.distance_km, act.duration_sec]);
 
             // Date
             const tdDate = document.createElement('td');
@@ -177,17 +240,23 @@
             if (!activityId) return;
 
             try {
-                const resp = await fetch(`/api/activity_enrichment/${activityId}`);
-                const data = await resp.json();
-                if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+                let data = readEnrichmentCache(tr);
+                if (!data) {
+                    const resp = await fetch(`/api/activity_enrichment/${encodeURIComponent(activityId)}`);
+                    data = await resp.json();
+                    if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+                    saveEnrichmentCache(tr, data);
+                }
 
                 // NP
                 const tdNP = tr.querySelector('.col-np');
-                tdNP.textContent = data.normalized_power ? `${Math.round(data.normalized_power)} W` : '—';
+                tdNP.textContent = data.telemetry_available === false ? 'Unavailable' :
+                    data.normalized_power != null ? `${Math.round(data.normalized_power)} W` : '—';
 
                 // Avg HR
                 const tdHR = tr.querySelector('.col-hr');
-                tdHR.textContent = data.avg_hr ? `${Math.round(data.avg_hr)} bpm` : '—';
+                tdHR.textContent = data.telemetry_available === false ? 'Unavailable' :
+                    data.avg_hr != null ? `${Math.round(data.avg_hr)} bpm` : '—';
 
                 // Race badge + Race Replay link (flag icon)
                 const tdName = tr.querySelector('.col-name');

@@ -1033,6 +1033,9 @@ def api_activity_enrichment(activity_id):
 
         # --- Step 2: Telemetry (NP + avg HR) ---
         telem_data, _, telem_error = fetch_rider_telemetry(int(activity_id), headers)
+        result['telemetry_available'] = bool(telem_data) and not telem_error
+        if telem_error:
+            logger.warning("Activity %s telemetry unavailable: %s", activity_id, telem_error)
         if telem_data:
             df = convert_telemetry_to_dataframe(telem_data)
             if len(df) > 0:
