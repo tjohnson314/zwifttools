@@ -24,6 +24,7 @@
             <button type="button" class="unit-btn active" data-unit="metric" onclick="setUnits('metric')">Metric</button>
             <button type="button" class="unit-btn" data-unit="imperial" onclick="setUnits('imperial')">Imperial</button>
         </div>
+        {% include '_rider_header.html' %}
     </div>
 
     <!-- Input panels -->
@@ -97,6 +98,7 @@
         <!-- Rider -->
         <div class="panel">
             <h2>🧍 Rider</h2>
+            <p id="riderProfileStatus" class="field-hint" role="status">Choose an active rider to prefill measurements, or enter them manually.</p>
 
             <div class="form-group">
                 <label for="riderWeight" id="weightLabel">Weight (kg)</label>

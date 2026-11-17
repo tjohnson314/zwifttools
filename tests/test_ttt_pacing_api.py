@@ -36,13 +36,13 @@ def test_ttt_page_renders():
     assert b'id="dropRules" hidden' in response.data
 
 
-def test_rider_lookup_requires_login(monkeypatch):
+def test_rider_lookup_requires_available_service(monkeypatch):
     monkeypatch.setattr(app_module, "get_headers", lambda: None)
 
     response = app_module.app.test_client().post(
         "/api/ttt_pacing/riders", json={"zwift_ids": ["123"]})
 
-    assert response.status_code == 401
+    assert response.status_code == 503
 
 
 def test_rider_lookup_uses_profile_height_weight_and_zftp(monkeypatch):
@@ -52,8 +52,8 @@ def test_rider_lookup_uses_profile_height_weight_and_zftp(monkeypatch):
                                   "weight": 68000, "ftp": 290}),
         "222": FakeResponse(404, {}),
     }
-    monkeypatch.setattr(app_module.requests, "get",
-                        lambda url, **kwargs: profiles[url.rsplit("/", 1)[-1]])
+    monkeypatch.setattr(app_module, "_request_with_retry",
+                        lambda method, url, **kwargs: profiles[url.rsplit("/", 1)[-1]])
 
     response = app_module.app.test_client().post(
         "/api/ttt_pacing/riders", json={"zwift_ids": ["111", " 222 ", "111"]})
@@ -78,7 +78,7 @@ def test_rider_lookup_rejects_non_numeric_ids(monkeypatch):
 @pytest.mark.parametrize("ftp, expected", [("290.0", 290), ("unavailable", None)])
 def test_rider_lookup_keeps_measurements_with_missing_name_or_invalid_ftp(monkeypatch, ftp, expected):
     monkeypatch.setattr(app_module, "get_headers", lambda: {"Authorization": "Bearer x"})
-    monkeypatch.setattr(app_module.requests, "get", lambda *args, **kwargs:
+    monkeypatch.setattr(app_module, "_request_with_retry", lambda *args, **kwargs:
                         FakeResponse(200, {"heightInCentimeters": "175", "weightInGrams": "68000",
                                            "ftp": ftp}))
 

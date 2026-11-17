@@ -445,10 +445,7 @@
                 <h1><span style="-webkit-text-fill-color:initial">&#x1F3C1;</span> TTT Analysis</h1>
                 <p class="subtitle">Analyze Team Time Trial efficiency &mdash; draft savings, lead speed &amp; team cohesion</p>
             </div>
-            <div class="auth-section">
-                <span id="authStatus" class="auth-status">Checking&hellip;</span>
-                <button id="authBtn" class="btn-auth" onclick="handleAuth()" style="display:none">Login with Zwift</button>
-            </div>
+            {% include '_rider_header.html' %}
         </div>
 
         <div class="input-section">
@@ -612,29 +609,6 @@
     </div>
 
     <script>
-    // ---- Auth ----
-    async function checkAuth() {
-        try {
-            const resp = await fetch('/auth/status');
-            const data = await resp.json();
-            const el = document.getElementById('authStatus');
-            const btn = document.getElementById('authBtn');
-            if (data.authenticated) {
-                el.textContent = `Logged in as ${data.name || 'Zwift User'}`;
-                el.className = 'auth-status logged-in';
-                btn.style.display = 'none';
-            } else {
-                el.textContent = 'Not logged in';
-                btn.style.display = 'inline-block';
-                btn.textContent = 'Login with Zwift';
-            }
-        } catch {
-            document.getElementById('authStatus').textContent = 'Auth check failed';
-        }
-    }
-    function handleAuth() { window.location.href = '/auth/login'; }
-    checkAuth();
-
     // ---- Input tab switching ----
     function switchInputTab(mode) {
         document.getElementById('tabApi').classList.toggle('active', mode === 'api');

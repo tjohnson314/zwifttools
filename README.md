@@ -8,6 +8,32 @@ A web app for analyzing Zwift rides. Includes **Bike Comparison**, **Race Replay
 
 ## Features
 
+### Active rider and public data
+
+Visitors never enter a Zwift password. Every page header has an **Active rider**
+Zwift ID selector that resolves and displays the rider's name and ID. Confirmed
+selections are remembered in browser local storage; **Clear** forgets the rider.
+Changing riders reloads the page (and updates other open tabs), discarding any
+in-memory uploaded analysis. `?zwift_id=<id>` links select a specific rider.
+Critical Power inputs and saved CP/W′ are stored per selected Zwift ID. Calculations
+still work without a selection but are not saved. Previous unassigned inputs can
+be explicitly imported for the selected rider; they are never assigned automatically.
+Race Replay applies saved CP/W′ only to the rider with the matching ID.
+
+Activities, Power Dashboard, and Segment PRs use the active rider. Profile-based
+inputs remain editable; activity analysis uses the activity owner's profile,
+which may differ from the active rider. Race Replay, Ride Compare, static tools,
+and manual planners do not require a selected rider.
+
+API access uses a dedicated server-side account and only publicly available
+data. Private or unavailable data is reported rather than treated as zero;
+results may be incomplete. This is a rider lookup, not proof of account ownership.
+ZRL Leaderboard, TTT Analysis, and Ride Compare skip inaccessible activities and
+indicate when telemetry is missing; service-wide failures are reported.
+FIT uploads remain an alternative in Bike Comparison: uploaded files, telemetry,
+and derived analysis are not persistently cached on the server or in the browser,
+and must be uploaded again after reloading.
+
 The homepage separates current **Tools** from **Archived** tools. The ZRL
 Leaderboard is available under **Archived** (`/?tab=archived`) and remains
 accessible at its existing `/zrl/leaderboard` URL with event loading and scoring
@@ -145,7 +171,7 @@ python tools\extract_zwift_routes.py --world world4
 
 ### Segment PRs
 
-- Open `/segment-prs` while logged in to progressively analyze all activities from the past 90 days
+- Choose an active rider and open `/segment-prs` to progressively analyze accessible activities from the past 90 days
 - Detect complete, forward traversals against the calibrated segment paths and timing boundaries used by Surface Map; repeated passes in a ride are separate attempts
 - A nearby road can cross a segment's finish-line plane before the true finish (for example Dos d'Âne Sprint Reverse on Croissant); later crossings are checked until one satisfies the recorded-distance and ordered-path checks, without relaxing those checks
 - Directional crossing lines accept interpolated crossings up to 20 m from their reference points, including at interior route-validation gates; recorded-distance and ordered-path checks still reject incomplete or wrong-route traversals
@@ -191,7 +217,7 @@ python tools\extract_zwift_workouts.py --zwift-dir "C:\Program Files (x86)\Zwift
 
 ### Workout Route Check
 
-- Open `/workout-route` while logged in to estimate whether a workout reaches a route finish
+- Open `/workout-route` to estimate whether a workout reaches a route finish; rider selection is optional for manual inputs
 - Load weight, height, and FTP from your Zwift profile; all remain editable, and missing values can be entered manually
 - Profile requests explicitly ask Zwift for JSON rather than its default binary format
 - Remember rider values, bike setup, route/lead-in choices, workout search and built-in selection, and untargeted-block power in browser local storage; saved rider values take precedence over profile values on reload. Custom workouts must be uploaded again
@@ -209,6 +235,7 @@ python tools\extract_zwift_workouts.py --zwift-dir "C:\Program Files (x86)\Zwift
 ### TTT Analysis
 
 - Analyze team time trial races by event subgroup ID
+- Sauce telemetry CSV uploads still work when optional event or profile lookups fail; warnings identify estimated route/distance and default rider measurements
 - Auto-detects teams from rider name tags (e.g. `[V]`, `(RtB)`) or accepts manual team tags
 - **Lead Rider Speed** chart — who is on the front at each point on the course, with elevation overlay
 - **Lead Rider Power** chart — watts or W/kg, plus pull statistics per rider (pull count, avg duration, total front time)
@@ -280,7 +307,7 @@ load road geometry directly from Sauce rather than bundling repository route dat
 - **Backend**: Flask + Gunicorn
 - **Frontend**: Vanilla JS, Plotly.js (charts), Canvas (map), Chart.js (bike comparison)
 - **Data processing**: NumPy, Pandas, SciPy (KD-tree route alignment)
-- **Auth**: Zwift OAuth 2.0
+- **API access**: Server-side Zwift account; no visitor login or passwords
 - **Hosting**: Azure App Service (Linux, Python 3.12, Gunicorn)
 - **Analytics pipeline**: Azure Function + Azure Data Explorer (see [ZWIFTGAMES.md](azure_function/ZWIFTGAMES.md))
 
@@ -297,12 +324,22 @@ load road geometry directly from Sauce rather than bundling repository route dat
    `requirements-dev.txt` pulls in `requirements.txt` plus the test tools (pytest). Use plain
    `requirements.txt` if you only want to run the app.
 
-2. Set environment variables (all optional for local dev):
+2. Set environment variables (API credentials are required only for live Zwift data):
    - `YOUTUBE_API_KEY` — YouTube stream matching for Race Replay
    - `SECRET_KEY` — Flask session secret (auto-generated if unset)
    - `AZURE_STORAGE_CONNECTION_STRING` — Azure Blob Storage for race data caching
    - `AZURE_STORAGE_CONTAINER` — blob container name (default: `race-cache`)
-   - `ZWIFT_USERNAME` / `ZWIFT_PASSWORD` — headless Zwift auth for the Azure Function and CLI data downloads
+   - `ZWIFT_USERNAME` / `ZWIFT_PASSWORD` — dedicated server account for the website's live Zwift API access (also used by headless collectors when configured). Keep these in Azure application settings/secret storage, never source code or browser storage. Use an account without privileged access to riders' private data.
+
+   Without account configuration, live lookups report service unavailability;
+   manual calculations, FIT uploads, static tools, and saved public replays remain
+   usable. Coordinate traffic from collectors sharing the account; the website's
+   in-process token cache and pacing are not a distributed account-wide quota.
+
+   On migration from visitor authentication, quarantine or remove legacy
+   local/blob race caches whose public provenance cannot be established before
+   making them available. Do not copy caches of private activities into the new
+   public deployment. Legacy visitor tokens are cleared on subsequent requests.
 
 3. Run:
    ```bash

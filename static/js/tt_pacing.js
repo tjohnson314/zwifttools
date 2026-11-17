@@ -168,9 +168,18 @@ function applyUnitToUI() {
 // Rider/bike/route choices are saved to localStorage so they survive reloads.
 // Rider weight/height are stored in canonical metric regardless of display unit.
 const TT_SETTINGS_KEY = 'ttSettings';
+const editedRiderFields = new Set();
 
 function loadSettings() {
-    try { return JSON.parse(localStorage.getItem(TT_SETTINGS_KEY)) || {}; }
+    try {
+        const settings = JSON.parse(localStorage.getItem(TT_SETTINGS_KEY)) || {};
+        if (settings.riderId !== (window.ZwiftRider.get()?.id || null)) {
+            delete settings.weightKg;
+            delete settings.heightCm;
+            delete settings.npTarget;
+        }
+        return settings;
+    }
     catch (e) { return {}; }
 }
 
@@ -179,6 +188,7 @@ function saveSettings() {
     const h = getHeightCm();
     const np = parseFloat(document.getElementById('avgPower').value);
     const data = {
+        riderId: window.ZwiftRider.get()?.id || null,
         weightKg: isNaN(w) ? null : +w.toFixed(2),
         heightCm: isNaN(h) ? null : +h.toFixed(1),
         npTarget: isNaN(np) ? null : np,
@@ -228,7 +238,8 @@ function restoreSelections(settings) {
 }
 
 // ── Initialise ───────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    await window.ZwiftRider.ready;
     const settings = loadSettings();
     planMode = settings.planMode === 'segment' ? 'segment' : 'route';
     const urlMode = new URL(window.location.href).searchParams.get('mode');
@@ -285,13 +296,39 @@ document.addEventListener('DOMContentLoaded', () => {
     ['riderWeight', 'riderHeight', 'avgPower', 'startDistance', 'customDistance', 'worldFilter', 'routeSelect',
      'includeLeadin', 'draftLevel'].forEach(id => {
         const el = document.getElementById(id);
+        if (['riderWeight', 'riderHeight'].includes(id)) {
+            el.addEventListener('input', () => editedRiderFields.add(id));
+        }
         el.addEventListener('change', saveSettings);
         if (el.type === 'number') el.addEventListener('input', saveSettings);
     });
     for (const id of ['startDistance', 'customDistance']) {
         document.getElementById(id).addEventListener('input', updatePlanButton);
     }
+    loadRiderProfile(settings);
 });
+
+async function loadRiderProfile(settings) {
+    if (!window.ZwiftRider.get()) return;
+    const status = document.getElementById('riderProfileStatus');
+    try {
+        const profile = await window.ZwiftRider.profile();
+        for (const [id, key, value, conversion] of [
+            ['riderWeight', 'weightKg', profile.weight_kg, KG_TO_LB],
+            ['riderHeight', 'heightCm', profile.height_cm, CM_TO_IN],
+        ]) {
+            if (settings[key] == null && !editedRiderFields.has(id) && value != null) {
+                document.getElementById(id).value = isImperial() ? value * conversion : value;
+            }
+        }
+        status.textContent = 'Active rider loaded. All values remain editable; enter any missing measurements manually.';
+        updateWperKg();
+        updatePlanButton();
+        saveSettings();
+    } catch (error) {
+        status.textContent = `Profile unavailable: ${error.message} Enter measurements manually.`;
+    }
+}
 
 // ── Data loading ─────────────────────────────────────────────────────────────
 async function loadRoutes() {

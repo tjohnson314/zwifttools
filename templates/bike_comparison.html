@@ -18,10 +18,7 @@
                 <h1>🚴 Bike Comparison</h1>
                 <p class="subtitle">Compare your race performance with different bike setups</p>
             </div>
-            <div class="auth-section">
-                <span id="authStatus" class="auth-status">Checking...</span>
-                <button id="authBtn" class="btn-auth" onclick="handleAuth()" style="display: none;">Login with Zwift</button>
-            </div>
+            {% include '_rider_header.html' %}
         </div>
         
         <!-- Data Source Section -->
@@ -29,7 +26,7 @@
             <div style="display: flex; gap: 30px; flex-wrap: wrap; width: 100%;">
                 <!-- Fetch by Activity ID -->
                 <div style="flex: 1; min-width: 300px;">
-                    <label for="activityId">Fetch by Activity ID: <span style="color: #888; font-weight: normal;">(requires login)</span></label>
+                    <label for="activityId">Fetch by Activity ID: <span style="color: #888; font-weight: normal;">(public activities)</span></label>
                     <div style="display: flex; gap: 10px; margin-top: 8px;">
                         <input type="text" id="activityId" placeholder="e.g., 2061903945080504368" style="flex: 1;">
                         <button class="btn btn-primary" id="fetchBtn" onclick="fetchActivity()">
@@ -199,7 +196,7 @@
                     <button class="btn-copy" onclick="copyRider('alt','actual')" title="Copy alternative rider to actual">←</button>
                 </div>
                 <div class="rider-panel alternative">
-                    <h4>🚴 Alternative Rider <button class="btn-use-my-stats" onclick="applyMyStats('alt')" title="Uses your current in-game height &amp; weight from your Zwift profile">Use My Stats</button></h4>
+                    <h4>🚴 Alternative Rider <button class="btn-use-my-stats" onclick="applyMyStats('alt')" title="Uses the active rider's current in-game height and weight">Use Active Rider</button></h4>
                     <div class="rider-input">
                         <label>Height:</label>
                         <input type="number" id="altRiderHeight" value="175" min="140" max="210">
@@ -371,56 +368,11 @@
         let fullTelemetryData = null;  // Unfiltered copy for range slider
         let powerChart = null;
         let diffChart = null;
-        let isAuthenticated = false;
         let myProfile = null;  // {height_cm, weight_kg, name}
         let excludedFrames = new Set();  // Frame IDs excluded from best bikes search
         let lastComparisonData = null;  // Stored for ZWO export
         let actualBike = null;  // BikeSelector for the "actual" panel
         let altBike = null;     // BikeSelector for the "alternative" panel
-        
-        // Authentication functions
-        async function checkAuthStatus() {
-            try {
-                const resp = await fetch('/auth/status');
-                const data = await resp.json();
-                
-                const statusEl = document.getElementById('authStatus');
-                const btnEl = document.getElementById('authBtn');
-                
-                isAuthenticated = data.authenticated;
-                
-                if (data.authenticated && data.method === 'oauth') {
-                    // Logged in via OAuth - show logout
-                    statusEl.textContent = '✓ Logged in via Zwift';
-                    statusEl.className = 'auth-status logged-in';
-                    btnEl.textContent = 'Logout';
-                    btnEl.className = 'btn-auth logout';
-                } else if (data.authenticated && data.method === 'config') {
-                    // Using config token - offer OAuth login for fresh token
-                    statusEl.textContent = 'Using config token (may be stale)';
-                    statusEl.className = 'auth-status';
-                    btnEl.textContent = 'Login with Zwift';
-                    btnEl.className = 'btn-auth';
-                    isAuthenticated = false;  // Allow login button to work
-                } else {
-                    statusEl.textContent = 'Not logged in';
-                    statusEl.className = 'auth-status';
-                    btnEl.textContent = 'Login with Zwift';
-                    btnEl.className = 'btn-auth';
-                }
-                btnEl.style.display = 'inline-block';
-            } catch (e) {
-                console.error('Failed to check auth status:', e);
-            }
-        }
-        
-        function handleAuth() {
-            if (isAuthenticated) {
-                window.location.href = '/auth/logout';
-            } else {
-                window.location.href = '/auth/login?next=/bike-comparison';
-            }
-        }
         
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', async () => {
@@ -435,7 +387,7 @@
             }
             updateActivityLink();
             
-            await checkAuthStatus();
+            await window.ZwiftRider.ready;
             await loadMyProfile();
 
             // Capture saved bike selections before the selectors mount, since
@@ -545,15 +497,16 @@
         }
         
         async function loadMyProfile() {
+            await window.ZwiftRider.ready;
+            myProfile = null;
+            if (!window.ZwiftRider.get()) return;
             try {
-                const resp = await fetch('/api/my_profile');
-                if (!resp.ok) return;
-                const data = await resp.json();
+                const data = await window.ZwiftRider.profile();
                 if (data.height_cm && data.weight_kg) {
                     myProfile = data;
                 }
             } catch (e) {
-                console.log('Could not load profile:', e);
+                console.warn('Could not load active rider profile:', e);
             }
         }
         
@@ -562,7 +515,7 @@
                 await loadMyProfile();
             }
             if (!myProfile) {
-                alert('Not logged in or profile not available. Please log in first.');
+                alert('Choose an active rider in the header, or enter height and weight manually if their profile is unavailable.');
                 return;
             }
             document.getElementById(prefix + 'RiderHeight').value = myProfile.height_cm;

@@ -23,6 +23,7 @@ def _subgroup_race(race_id, activity_id, activity_start_time):
         data=rider_data,
         finish_time_sec=100.0,
         activity_start_time=activity_start_time,
+        player_id=9007199254740993 if activity_id == 'activity-D' else None,
     )
     elevation = pd.DataFrame({
         'distance_km': [0.0, 1.0],
@@ -123,3 +124,5 @@ def test_chase_subgroups_use_shared_event_clock(tmp_path, monkeypatch):
     assert riders_by_category['E']['start_offset_sec'] == 300.0
     assert riders_by_category['D']['is_late_joiner'] is False
     assert riders_by_category['E']['is_late_joiner'] is False
+    assert riders_by_category['D']['zwift_id'] == '9007199254740993'
+    assert riders_by_category['E']['zwift_id'] is None

@@ -90,58 +90,40 @@
             line-height: 1.6;
             font-size: 0.95rem;
         }
-        .auth-bar {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
+        .home-header {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+            align-items: start;
+            gap: 20px;
+            width: 100%;
         }
-        .auth-status {
-            font-size: 0.9rem;
-            color: #888;
+        .home-title {
+            grid-column: 2;
+            text-align: center;
         }
-        .auth-status.logged-in {
-            color: #4caf50;
+        .home-rider-bar {
+            grid-column: 3;
+            justify-self: end;
+            width: 340px;
+            max-width: 100%;
         }
-        .btn-auth {
-            padding: 8px 16px;
-            font-size: 0.9rem;
-            border-radius: 6px;
-            border: 2px solid #f7931e;
-            background: transparent;
-            color: #f7931e;
-            cursor: pointer;
-            text-decoration: none;
-            transition: all 0.3s ease;
-        }
-        .btn-auth:hover {
-            background: #f7931e;
-            color: #1a1a2e;
-        }
-        .btn-auth.logout {
-            border-color: #666;
-            color: #666;
-        }
-        .btn-auth.logout:hover {
-            background: #666;
-            color: #fff;
+        @media (max-width: 1100px) {
+            .home-header { grid-template-columns: 1fr; }
+            .home-title { grid-column: 1; grid-row: 2; }
+            .home-rider-bar { grid-column: 1; grid-row: 1; }
         }
     </style>
 </head>
 <body>
-    <div class="auth-bar">
-        {% if logged_in %}
-            <span class="auth-status logged-in">Logged in</span>
-            <a href="/auth/logout" class="btn-auth logout">Log out</a>
-        {% else %}
-            <a href="/auth/login" class="btn-auth">Log in with Zwift</a>
-        {% endif %}
-    </div>
-
-    <h1>Zwift Tools</h1>
-    <p class="subtitle">Performance analysis tools for Zwift</p>
+    <header class="home-header">
+        <div class="home-title">
+            <h1>Zwift Tools</h1>
+            <p class="subtitle">Performance analysis tools for Zwift</p>
+        </div>
+        <div class="home-rider-bar">
+            {% include '_rider_header.html' %}
+        </div>
+    </header>
 
     {% set archived = request.args.get('tab') == 'archived' %}
     <nav class="tools-tabs" aria-label="Tool categories">

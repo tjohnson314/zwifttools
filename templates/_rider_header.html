@@ -1,0 +1,14 @@
+<link rel="stylesheet" href="/static/css/active_rider.css">
+<aside class="active-rider" aria-label="Active rider">
+    <form id="activeRiderForm" class="active-rider-form">
+        <label for="activeRiderId">Active rider</label>
+        <div class="active-rider-controls">
+            <input id="activeRiderId" name="zwift_id" type="text" inputmode="numeric" pattern="[0-9]+" required placeholder="Zwift ID" aria-describedby="activeRiderStatus">
+            <button type="submit" id="setActiveRider">Set rider</button>
+            <button type="button" id="clearActiveRider" hidden>Clear</button>
+        </div>
+    </form>
+    <div id="activeRiderStatus" role="status" aria-live="polite">No rider selected</div>
+    <small>Public data only. Changing riders reloads this page; uploads must be selected again.</small>
+</aside>
+<script src="/static/js/active_rider.js"></script>

@@ -266,11 +266,7 @@ function renderSegmentTable() {
 }
 
 async function segmentFetch(url) {
-    const response = await fetch(url);
-    if (response.status === 401) {
-        window.location.href = '/auth/login?next=/segment-prs';
-        throw new Error('Not authenticated');
-    }
+    const response = await fetch(window.ZwiftRider.url(url));
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
     return data;
@@ -318,7 +314,6 @@ async function loadSegmentActivities(retryOnly = false) {
             } catch (error) {
                 activity.error = error.message;
                 console.error('Segment activity load failed:', activity.activity_id, error);
-                if (error.message === 'Not authenticated') return;
             }
             renderSegmentTable();
             segmentLoadSummary();
@@ -335,6 +330,7 @@ async function initSegmentPRs() {
     segmentBusy(true);
     document.getElementById('errorState').hidden = true;
     try {
+        await window.ZwiftRider.ready;
         const data = await segmentFetch('/api/segment_prs/activities');
         segmentContext = data;
         segmentActivities = data.activities;

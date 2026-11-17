@@ -16,7 +16,6 @@
 let raceData = null;          // Full race JSON from server
 let currentTime = 0;          // Current playback time (seconds)
 let isPlaying = false;
-let isAuthenticated = false;
 let playbackSpeed = 5;        // Multiplier
 let lastFrameTs = null;       // For requestAnimationFrame delta
 let animFrameId = null;
@@ -33,7 +32,7 @@ let effSortAsc = true;
 // Rider analysis state
 let analysisRank = null;       // Rider the analysis panel is showing
 let analysisRequestId = 0;     // Drops stale responses when the rider changes quickly
-const CP_MODEL_STORAGE_KEY = 'criticalPowerModelV1';  // Written by the Critical Power page
+const CP_MODEL_STORAGE_PREFIX = 'criticalPowerModelV2:';
 
 // Rider lookup for O(1) access: rank -> rider object with typed arrays
 let riderLookup = {};
@@ -97,7 +96,6 @@ const CATEGORY_COLORS = {
 // Initialization
 // ---------------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', () => {
-    checkAuth();
     bindEvents();
 
     // Auto-load race from URL parameters (e.g. ?activity_id=12345&all_subgroups=1)
@@ -110,7 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (urlActivityId) {
         document.getElementById('activity-input').value = urlActivityId;
         // If it looks like a cached race ID, load directly without hitting
-        // the fetch_stream endpoint (which requires authentication).
+        // the fetch_stream endpoint.
         if (urlActivityId.startsWith('race_data_') || urlActivityId.startsWith('race_event_')) {
             loadRaceById(urlActivityId);
         } else {
@@ -179,7 +177,7 @@ function bindEvents() {
         }
         updateFrame();
     });
-    document.getElementById('show-route-segments').addEventListener('change', e => {
+    document.getElementById('show-route-segments')?.addEventListener('change', e => {
         showRouteSegments = e.target.checked;
         updateFrame();
     });
@@ -188,16 +186,16 @@ function bindEvents() {
     });
 
     // Rider analysis controls
-    document.getElementById('analysis-rider-select').addEventListener('change', e => {
+    document.getElementById('analysis-rider-select')?.addEventListener('change', e => {
         selectAnalysisRider(parseInt(e.target.value), true);
     });
-    document.getElementById('analysis-run-btn').addEventListener('click', runAnalysis);
-    document.getElementById('analysis-use-saved-cp').addEventListener('click', () => {
+    document.getElementById('analysis-run-btn')?.addEventListener('click', runAnalysis);
+    document.getElementById('analysis-use-saved-cp')?.addEventListener('click', () => {
         fillSavedCp();
         runAnalysis();
     });
     ['analysis-cp', 'analysis-wprime'].forEach(id => {
-        document.getElementById(id).addEventListener('keydown', e => {
+        document.getElementById(id)?.addEventListener('keydown', e => {
             if (e.key === 'Enter') runAnalysis();
         });
     });
@@ -230,48 +228,6 @@ function bindEvents() {
             renderEfficiencyTable();
         });
     });
-}
-
-// ---------------------------------------------------------------------------
-// Auth
-// ---------------------------------------------------------------------------
-async function checkAuth() {
-    try {
-        const resp = await fetch('/auth/status');
-        const data = await resp.json();
-        const text = document.getElementById('auth-status-text');
-        const btn = document.getElementById('authBtn');
-        isAuthenticated = data.authenticated;
-        if (data.authenticated && data.method === 'oauth') {
-            text.textContent = '✓ Logged in via Zwift';
-            text.className = 'auth-status logged-in';
-            btn.textContent = 'Logout';
-            btn.className = 'btn-auth logout';
-        } else if (data.authenticated && data.method === 'config') {
-            text.textContent = 'Using config token (may be stale)';
-            text.className = 'auth-status';
-            btn.textContent = 'Login with Zwift';
-            btn.className = 'btn-auth';
-            isAuthenticated = false;
-        } else {
-            text.textContent = 'Not logged in';
-            text.className = 'auth-status';
-            btn.textContent = 'Login with Zwift';
-            btn.className = 'btn-auth';
-        }
-        btn.style.display = 'inline-block';
-        // Show/hide unauthenticated banner
-        const banner = document.getElementById('unauth-banner');
-        if (banner) banner.style.display = isAuthenticated ? 'none' : 'block';
-    } catch (e) { /* ignore */ }
-}
-
-function handleAuth() {
-    if (isAuthenticated) {
-        window.location.href = '/auth/logout';
-    } else {
-        window.location.href = '/auth/login?next=/race-replay';
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -477,6 +433,7 @@ async function loadRaceById(raceId, internal = false) {
 
         hideLoading();
         initRaceData(fullData);
+        return true;
     } catch (e) {
         hideLoading();
         console.error('Race load exception:', e);
@@ -493,10 +450,12 @@ function initRaceData(data) {
     raceData = data;
     data.route_segments = data.route_segments || [];
     const segmentsCheckbox = document.getElementById('show-route-segments');
-    segmentsCheckbox.disabled = data.route_segments.length === 0;
-    segmentsCheckbox.checked = showRouteSegments && !segmentsCheckbox.disabled;
-    document.getElementById('route-segments-label').textContent = segmentsCheckbox.disabled
-        ? 'Route segments unavailable' : 'Show route segments';
+    if (segmentsCheckbox) {
+        segmentsCheckbox.disabled = data.route_segments.length === 0;
+        segmentsCheckbox.checked = showRouteSegments && !segmentsCheckbox.disabled;
+        document.getElementById('route-segments-label').textContent = segmentsCheckbox.disabled
+            ? 'Route segments unavailable' : 'Show route segments';
+    }
     currentTime = data.min_time;
     isPlaying = false;
     selectedRank = null;
@@ -548,6 +507,7 @@ function initRaceData(data) {
             team: r.team,
             category: r.category || null,
             activity_id: r.activity_id || null,
+            zwift_id: r.zwift_id || null,
             weight_kg: r.weight_kg || 75.0,
             is_late_joiner: r.is_late_joiner || false,
             start_offset_sec: Number(r.start_offset_sec) || 0,
@@ -1603,32 +1563,32 @@ function renderEfficiencyTable() {
 // ---------------------------------------------------------------------------
 // Rider analysis — where contact was lost, what it took, and why
 // ---------------------------------------------------------------------------
-function loadSavedCp() {
+function loadSavedCp(rank) {
+    const id = riderLookup[rank]?.zwift_id;
+    if (typeof id !== 'string' || !/^[1-9][0-9]*$/.test(id)) return null;
     try {
-        const saved = JSON.parse(localStorage.getItem(CP_MODEL_STORAGE_KEY) || 'null');
-        if (saved && saved.cp > 0 && saved.wPrime > 0) return saved;
-    } catch { /* storage blocked or corrupt */ }
+        const saved = JSON.parse(localStorage.getItem(CP_MODEL_STORAGE_PREFIX + id) || 'null');
+        if (saved && Number.isFinite(saved.cp) && saved.cp > 0 &&
+            Number.isFinite(saved.wPrime) && saved.wPrime > 0) return saved;
+    } catch (error) {
+        console.warn('Could not load saved critical power:', error);
+    }
     return null;
 }
 
 function fillSavedCp() {
-    const saved = loadSavedCp();
+    const saved = loadSavedCp(analysisRank);
     if (!saved) return;
     document.getElementById('analysis-cp').value = Math.round(saved.cp);
     document.getElementById('analysis-wprime').value = (saved.wPrime / 1000).toFixed(1);
 }
 
-function isSourceRider(rank) {
-    const rl = riderLookup[rank];
-    return !!(rl && raceData.source_activity_id && rl.activity_id === raceData.source_activity_id);
-}
-
 function initAnalysisPanel(data, sortedRiders) {
     const select = document.getElementById('analysis-rider-select');
+    if (!select) return;
     select.innerHTML = sortedRiders
         .map(r => `<option value="${r.rank}">${r.name}</option>`)
         .join('');
-    document.getElementById('analysis-use-saved-cp').style.display = loadSavedCp() ? '' : 'none';
     document.getElementById('analysis-panel').style.display = 'block';
     document.getElementById('analysis-events').innerHTML = '';
     Plotly.purge('analysis-chart');
@@ -1638,14 +1598,17 @@ function initAnalysisPanel(data, sortedRiders) {
 }
 
 // Switch the analysis to a rider.  CP/W' belong to a rider, so they're reset
-// on change — pre-filled from the Critical Power page for the source rider.
+// on change — pre-filled only when this rider has a matching saved model.
 function selectAnalysisRider(rank, force = false) {
+    if (!document.getElementById('analysis-rider-select')) return;
     if (!raceData || (!force && rank === analysisRank)) return;
     analysisRank = rank;
     document.getElementById('analysis-rider-select').value = String(rank);
     document.getElementById('analysis-cp').value = '';
     document.getElementById('analysis-wprime').value = '';
-    if (isSourceRider(rank)) fillSavedCp();
+    const saved = loadSavedCp(rank);
+    document.getElementById('analysis-use-saved-cp').style.display = saved ? '' : 'none';
+    if (saved) fillSavedCp();
     runAnalysis();
 }
 

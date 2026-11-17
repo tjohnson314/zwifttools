@@ -1,0 +1,51 @@
+.active-rider {
+    margin-left: auto;
+    flex: 0 1 340px;
+    min-width: 240px;
+    text-align: left;
+    font: 14px/1.4 system-ui, sans-serif;
+    color: #ddd;
+}
+.active-rider-form { margin: 0; padding: 0; }
+.active-rider-form label { display: block; margin: 0 0 4px; color: #ccc; font-size: 13px; }
+.active-rider-controls { display: flex; gap: 6px; align-items: center; }
+.active-rider-controls input {
+    width: 120px;
+    min-width: 0;
+    flex: 1;
+    padding: 7px 9px;
+    border: 1px solid #666;
+    border-radius: 5px;
+    background: #202030;
+    color: #fff;
+    font: inherit;
+}
+.active-rider-controls button {
+    width: auto;
+    margin: 0;
+    padding: 7px 9px;
+    border: 1px solid #777;
+    border-radius: 5px;
+    background: #333344;
+    color: #fff;
+    font: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.active-rider-controls button:disabled { opacity: .6; cursor: wait; }
+.active-rider-controls [hidden] { display: none; }
+#activeRiderStatus { margin-top: 5px; overflow-wrap: anywhere; }
+.active-rider small { display: block; margin-top: 3px; color: #aaa; font-size: 11px; }
+.rider-page-header, .header-bar:has(> .active-rider), .page-header:has(> .active-rider),
+header:has(> .active-rider) {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+.header-bar:has(> .active-rider) > div:first-child,
+.page-header:has(> .active-rider) > div:first-child { flex: 1 1 350px; }
+@media (max-width: 640px) {
+    .active-rider { flex-basis: 100%; margin-left: 0; min-width: 0; width: 100%; }
+}

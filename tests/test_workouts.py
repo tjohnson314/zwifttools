@@ -107,13 +107,10 @@ def test_power_samples_reject_invalid_data(data):
         workouts.power_telemetry(data)
 
 
-def test_workout_page_preserves_activity_on_login_and_renders_controls():
+def test_workout_page_is_public_and_renders_controls():
     client = app_module.app.test_client()
     response = client.get("/workout-analysis?activity_id=123")
-    assert response.status_code == 302
-    assert "activity_id%3D123" in response.location
-    with client.session_transaction() as session:
-        session["tokens"] = {}
+    assert response.status_code == 200
     html = client.get("/workout-analysis?activity_id=123").get_data(as_text=True)
     for field in ("ftp", "intensity", "offset", "workoutSearch", "workoutSelect", "powerChart",
                   "workoutSource", "workoutFile", "uploadWorkoutForm"):
@@ -148,9 +145,9 @@ def upload_client():
     return client
 
 
-def test_custom_workout_upload_requires_login_and_does_not_change_catalog():
+def test_custom_workout_upload_is_public_and_does_not_change_catalog():
     client = app_module.app.test_client()
-    assert client.post("/api/workouts/upload").status_code == 401
+    assert client.post("/api/workouts/upload").status_code == 400
     client = upload_client()
     before = workouts.workout_index()
     data = definition('<Warmup Duration="10" PowerLow=".5" PowerHigh=".8"/>'
@@ -214,7 +211,7 @@ def test_custom_upload_reports_missing_and_oversized_files():
 def test_activity_api_auth_validation_and_raw_samples(monkeypatch):
     client = app_module.app.test_client()
     monkeypatch.setattr(app_module, "get_headers", lambda: None)
-    assert client.get("/api/workout_activity/123").status_code == 401
+    assert client.get("/api/workout_activity/123").status_code == 503
     monkeypatch.setattr(app_module, "get_headers", lambda: {"Authorization": "test"})
     assert client.get("/api/workout_activity/nope").status_code == 400
     monkeypatch.setattr(app_module, "fetch_rider_telemetry", lambda *args: (
@@ -247,12 +244,12 @@ def test_profile_exposes_current_ftp_without_breaking_measurements(monkeypatch, 
         text = "{}"
 
         def json(self):
-            return {"firstName": "Test", "height": 1800, "weight": 75000, "ftp": ftp}
+            return {"id": 7, "firstName": "Test", "height": 1800, "weight": 75000, "ftp": ftp}
     monkeypatch.setattr(app_module, "get_headers", lambda: {"Authorization": "test"})
     monkeypatch.setattr(app_module.requests, "request", lambda *args, **kwargs: ProfileResponse())
-    response = app_module.app.test_client().get("/api/my_profile")
+    response = app_module.app.test_client().get("/api/my_profile?zwift_id=7")
     assert response.status_code == 200
-    assert response.get_json() == {"name": "Test", "height_cm": 180, "weight_kg": 75, "ftp_w": expected}
+    assert response.get_json() == {"id": "7", "name": "Test", "height_cm": 180, "weight_kg": 75, "ftp_w": expected}
 
 
 def test_profile_requests_json_instead_of_zwift_default_binary(monkeypatch):
@@ -265,7 +262,7 @@ def test_profile_requests_json_instead_of_zwift_default_binary(monkeypatch):
         response.status_code = 200
         if kwargs["headers"].get("Accept") == "application/json":
             response._content = json.dumps({
-                "height": 1800, "weight": 75000, "ftp": 280,
+                "id": 7, "height": 1800, "weight": 75000, "ftp": 280,
             }).encode()
             response.headers["Content-Type"] = "application/json"
         else:
@@ -276,12 +273,12 @@ def test_profile_requests_json_instead_of_zwift_default_binary(monkeypatch):
     monkeypatch.setattr(app_module, "get_headers", lambda: headers)
     monkeypatch.setattr(app_module.requests, "get", lambda url, **kwargs: upstream("GET", url, **kwargs))
     monkeypatch.setattr(app_module.requests, "request", upstream)
-    response = app_module.app.test_client().get("/api/my_profile")
+    response = app_module.app.test_client().get("/api/my_profile?zwift_id=7")
     assert response.status_code == 200
-    assert response.get_json() == {"name": "", "height_cm": 180, "weight_kg": 75, "ftp_w": 280}
+    assert response.get_json() == {"id": "7", "name": "", "height_cm": 180, "weight_kg": 75, "ftp_w": 280}
     assert len(calls) == 1
     method, url, options = calls[0]
-    assert (method, url) == ("GET", f"{app_module.BASE_URL}/profiles/me")
+    assert (method, url) == ("GET", f"{app_module.BASE_URL}/profiles/7")
     assert options["headers"]["Accept"] == "application/json"
     assert options["headers"]["Authorization"] == "test"
     assert headers == {"Authorization": "test"}

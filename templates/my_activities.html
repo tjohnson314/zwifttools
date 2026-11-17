@@ -14,12 +14,9 @@
             <div>
                 <a href="/" class="back-link">&#8592; Back to Tools</a>
                 <h1><span class="header-icon">&#x1F5D3;&#xFE0F;</span> My Activities</h1>
-                <p class="subtitle">Your recent Zwift activities</p>
+                <p class="subtitle">Recent public Zwift activities for the active rider</p>
             </div>
-            <div class="auth-section">
-                <span id="authStatus" class="auth-status">Checking...</span>
-                <a id="logoutBtn" href="/auth/logout" class="btn-auth logout" style="display:none;">Log out</a>
-            </div>
+            {% include '_rider_header.html' %}
         </div>
 
         <div class="panel">
@@ -83,29 +80,9 @@
             return '<span class="sport-icon">&#x1F6B4;</span>';
         }
 
-        // ---- Auth check ----
-        async function checkAuth() {
-            try {
-                const resp = await fetch('/auth/status');
-                const data = await resp.json();
-                const statusEl = document.getElementById('authStatus');
-                const logoutEl = document.getElementById('logoutBtn');
-                if (data.authenticated) {
-                    statusEl.textContent = 'Logged in';
-                    statusEl.classList.add('logged-in');
-                    logoutEl.style.display = '';
-                } else {
-                    statusEl.textContent = 'Not logged in';
-                    window.location.href = '/auth/login?next=/my-activities';
-                }
-            } catch(e) {
-                console.error('Auth check failed', e);
-            }
-        }
-
         // ---- Fetch activities list ----
         async function fetchActivities(start, limit) {
-            const resp = await fetch(`/api/my_activities?start=${start}&limit=${limit}`);
+            const resp = await fetch(window.ZwiftRider.url(`/api/my_activities?start=${start}&limit=${limit}`));
             if (!resp.ok) {
                 const err = await resp.json().catch(() => ({}));
                 throw new Error(err.error || `HTTP ${resp.status}`);
@@ -201,8 +178,8 @@
 
             try {
                 const resp = await fetch(`/api/activity_enrichment/${activityId}`);
-                if (!resp.ok) return;
                 const data = await resp.json();
+                if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
 
                 // NP
                 const tdNP = tr.querySelector('.col-np');
@@ -245,9 +222,10 @@
                 }
             } catch(e) {
                 console.warn(`Enrichment failed for ${activityId}:`, e);
-                // Leave placeholders as-is — replace dots with dashes
                 tr.querySelectorAll('.placeholder-dot').forEach(el => {
-                    el.replaceWith('—');
+                    el.textContent = 'Unavailable';
+                    el.title = e.message;
+                    el.classList.remove('placeholder-dot');
                 });
             }
         }
@@ -283,6 +261,7 @@
             loadMoreEl.style.display = 'none';
 
             try {
+                await window.ZwiftRider.ready;
                 const data = await fetchActivities(0, PAGE_SIZE);
                 loadingEl.style.display = 'none';
 
@@ -344,6 +323,8 @@
                 enrichAllRows(newRows);
             } catch(e) {
                 console.error('Load more failed', e);
+                document.getElementById('errorState').textContent = `Could not load more activities: ${e.message}`;
+                document.getElementById('errorState').style.display = '';
             } finally {
                 btn.disabled = false;
                 btn.textContent = 'Load more';
@@ -351,7 +332,6 @@
         }
 
         // ---- Init ----
-        checkAuth();
         loadActivities();
     </script>
 </body>

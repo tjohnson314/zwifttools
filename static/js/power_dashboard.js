@@ -15,7 +15,8 @@
 
 const POWER_CURVE_X_TICKS = [1, 2, 5, 10, 30, 60, 120, 300, 600, 1200, 3600, 7200];
 const MORTON_PR_DURATIONS = [300, 600, 1200];
-const POWER_CURVE_CACHE_PREFIX = 'powerDashboardCurveV1:';
+const POWER_CURVE_CACHE_PREFIX = 'powerDashboardCurveV2:';
+let dashboardRiderId = '';
 
 // Distinct colours for the partition curves (cycled if there are more groups).
 const PARTITION_COLORS = [
@@ -769,6 +770,10 @@ function partitionIndexOf(activityIndex) {
     return 0;
 }
 
+function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+}
+
 function statusCellHtml(activity) {
     switch (activity.status) {
         case 'loaded':
@@ -786,7 +791,7 @@ function statusCellHtml(activity) {
         case 'nodata':
             return '<span class="status-badge muted">No power data</span>';
         case 'error':
-            return '<span class="status-badge err">Failed</span>';
+            return `<span class="status-badge err">Failed: ${escapeHtml(activity.error || 'Request unavailable')}</span>`;
         default:
             return '<span class="status-badge muted">Pending…</span>';
     }
@@ -946,8 +951,11 @@ function updateLoadSummary(loadedCount) {
     }
     el.style.display = '';
     if (loadedCount >= activities.length) {
-        el.textContent = `All ${activities.length} activities loaded`;
-        el.classList.add('done');
+        const failures = activities.filter(activity => activity.status === 'error').length;
+        el.textContent = failures
+            ? `${activities.length} activities processed; ${failures} unavailable. Curves are incomplete.`
+            : `All ${activities.length} activities loaded`;
+        el.classList.toggle('done', failures === 0);
     } else {
         el.textContent = `Loading power data… ${loadedCount} / ${activities.length}`;
         el.classList.remove('done');
@@ -955,19 +963,16 @@ function updateLoadSummary(loadedCount) {
 }
 
 async function fetchActivityCurve(activity) {
-    const resp = await fetch(`/api/power_dashboard/activity/${encodeURIComponent(activity.activity_id)}`);
-    if (resp.status === 401) {
-        window.location.href = '/auth/login?next=/power';
-        throw new Error('Not authenticated');
-    }
+    const resp = await fetch(window.ZwiftRider.url(`/api/power_dashboard/activity/${encodeURIComponent(activity.activity_id)}`));
     if (!resp.ok) {
-        throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${resp.status}`);
     }
     return resp.json();
 }
 
 function powerCurveCacheKey(activityId) {
-    return `${POWER_CURVE_CACHE_PREFIX}${encodeURIComponent(activityId)}`;
+    return `${POWER_CURVE_CACHE_PREFIX}${dashboardRiderId}:${encodeURIComponent(activityId)}`;
 }
 
 function hasActivityPowerData(data) {
@@ -1013,7 +1018,7 @@ function prunePowerCurveCache() {
     try {
         for (let index = localStorage.length - 1; index >= 0; index -= 1) {
             const key = localStorage.key(index);
-            if (key && key.startsWith(POWER_CURVE_CACHE_PREFIX) && !activeKeys.has(key)) {
+            if (key && key.startsWith(`${POWER_CURVE_CACHE_PREFIX}${dashboardRiderId}:`) && !activeKeys.has(key)) {
                 localStorage.removeItem(key);
             }
         }
@@ -1075,10 +1080,8 @@ async function loadAllActivities() {
             }
             applyActivityCurveData(activity, data, fromCache);
         } catch (err) {
-            if (err && err.message === 'Not authenticated') {
-                return;
-            }
             activity.status = 'error';
+            activity.error = err.message;
         }
 
         loaded += 1;
@@ -1154,11 +1157,9 @@ async function init() {
     setStatusText('loadingProgress', 'Fetching activity list…');
 
     try {
-        const resp = await fetch('/api/power_dashboard/activities');
-        if (resp.status === 401) {
-            window.location.href = '/auth/login?next=/power';
-            return;
-        }
+        await window.ZwiftRider.ready;
+        dashboardRiderId = window.ZwiftRider.get()?.id || '';
+        const resp = await fetch(window.ZwiftRider.url('/api/power_dashboard/activities'));
         if (!resp.ok) {
             const body = await resp.json().catch(() => ({}));
             throw new Error(body.error || `HTTP ${resp.status}`);

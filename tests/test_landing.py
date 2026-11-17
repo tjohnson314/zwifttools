@@ -36,19 +36,20 @@ def test_archived_tab_contains_only_zrl_tool():
     assert "Archived tool:" in html
 
 
-def test_landing_preserves_dev_tool_and_authentication(monkeypatch):
+def test_landing_preserves_dev_tool_and_clears_legacy_authentication(monkeypatch):
     monkeypatch.setattr(app_module, "_surface_map_dev_available", lambda: True)
     client = app_module.app.test_client()
 
-    assert b'Log in with Zwift' in client.get("/").data
+    assert b'Log in with Zwift' not in client.get("/").data
     with client.session_transaction() as session:
         session["tokens"] = {}
 
     assert b'href="/surface-map-dev"' in client.get("/").data
     for path in ("/", "/?tab=archived"):
         html = client.get(path).get_data(as_text=True)
-        assert "Logged in" in html
-        assert 'href="/auth/logout"' in html
+        assert "Logged in" not in html
+    with client.session_transaction() as session:
+        assert "tokens" not in session
 
 
 def test_archived_zrl_page_keeps_existing_url_and_controls(monkeypatch):

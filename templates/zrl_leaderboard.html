@@ -37,10 +37,7 @@
             <h1><span class="header-icon">🏆</span> ZRL Leaderboard</h1>
             <p class="subtitle">Archived tool: Stage 1 Race of Truth points and segment scoring</p>
         </div>
-        <div class="auth-section">
-            <span id="auth-status-text" class="auth-status">Checking...</span>
-            <button id="authBtn" class="btn-auth" onclick="handleAuth()">Login with Zwift</button>
-        </div>
+        {% include '_rider_header.html' %}
     </div>
 
     <section class="panel">
@@ -122,34 +119,6 @@ const link = id => `<a href="${activityUrl(id)}" target="_blank" rel="noopener">
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 let data;
 let overallSort = { field: 'total', direction: -1 };
-let isAuthenticated = false;
-async function checkAuth() {
-    try {
-        const response = await fetch('/auth/status');
-        const auth = await response.json();
-        const text = document.getElementById('auth-status-text');
-        const button = document.getElementById('authBtn');
-        isAuthenticated = auth.authenticated && auth.method === 'oauth';
-        if (isAuthenticated) {
-            text.textContent = '✓ Logged in via Zwift';
-            text.className = 'auth-status logged-in';
-            button.textContent = 'Logout';
-            button.className = 'btn-auth logout';
-        } else {
-            text.textContent = 'Not logged in';
-            text.className = 'auth-status';
-            button.textContent = 'Login with Zwift';
-            button.className = 'btn-auth';
-        }
-    } catch (error) {
-        document.getElementById('auth-status-text').textContent = 'Authentication unavailable';
-    }
-}
-function handleAuth() {
-    window.location.href = isAuthenticated
-        ? '/auth/logout'
-        : '/auth/login?next=/zrl/leaderboard';
-}
 const uniqueOptions = (rows, valueKey, labelKey = valueKey) => {
     const seen = new Set();
     return rows.filter(row => { const value = String(row[valueKey]); if (seen.has(value)) return false; seen.add(value); return true; }).map(row => ({ value: String(row[valueKey]), label: row[labelKey] }));
@@ -373,7 +342,6 @@ document.querySelectorAll('#overall th[data-sort]').forEach(header => header.add
     renderOverall();
 }));
 async function initialize() {
-    checkAuth();
     try {
         await loadEventCatalog();
         if (initialSubgroupId) loadLeaderboard(false);

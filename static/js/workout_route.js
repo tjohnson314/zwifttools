@@ -32,6 +32,11 @@ function loadSettings() {
         if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
             throw new Error('Invalid saved workout route settings.');
         }
+        if (settings.riderId !== (window.ZwiftRider.get()?.id || null)) {
+            delete settings.riderWeight;
+            delete settings.riderHeight;
+            delete settings.ftp;
+        }
         return settings;
     } catch (error) {
         storageError(error);
@@ -43,6 +48,7 @@ function saveSettings() {
     if (restoringSettings) return;
     const settings = {
         ...savedSettings,
+        riderId: window.ZwiftRider.get()?.id || null,
         riderWeight: element('riderWeight').value,
         riderHeight: element('riderHeight').value,
         ftp: element('ftp').value,
@@ -88,7 +94,7 @@ function restoreChoice(id, value) {
 
 async function fetchJSON(url, options) {
     const response = await fetch(url, options);
-    if (response.redirected) throw new Error('Your session expired. Reload the page to sign in.');
+    if (response.redirected) throw new Error('Unexpected redirect. Reload the page and retry.');
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || `Request failed (${response.status}).`);
     return data;
@@ -305,7 +311,7 @@ async function runEstimate(event) {
 
 async function loadProfile() {
     try {
-        const profile = await fetchJSON('/api/my_profile');
+        const profile = await fetchJSON(window.ZwiftRider.url('/api/my_profile'));
         const fields = { riderWeight: profile.weight_kg, riderHeight: profile.height_cm, ftp: profile.ftp_w };
         for (const [id, value] of Object.entries(fields)) {
             if (!editedProfileFields.has(id) && value != null) element(id).value = value;
@@ -317,6 +323,7 @@ async function loadProfile() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+    await window.ZwiftRider.ready;
     savedSettings = loadSettings();
     restoreInputs(savedSettings);
     element('estimateForm').addEventListener('submit', runEstimate);

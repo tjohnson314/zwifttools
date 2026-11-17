@@ -5,11 +5,28 @@ const test = require('node:test');
 const vm = require('node:vm');
 
 function dashboardContext(globals = {}) {
-    const context = vm.createContext({ document: { addEventListener() {} }, ...globals });
+    const context = vm.createContext({
+        document: { addEventListener() {} },
+        window: { ZwiftRider: { url: url => `${url}?zwift_id=7681059` } },
+        ...globals,
+    });
     const source = fs.readFileSync(path.join(__dirname, '../static/js/power_dashboard.js'), 'utf8');
     vm.runInContext(source.replace(/\ninit\(\);\s*$/, '\n'), context);
     return context;
 }
+
+test('per-activity power requests include the active rider ID', async () => {
+    const requests = [];
+    const context = dashboardContext({
+        fetch: async url => {
+            requests.push(url);
+            return { ok: true, json: async () => ({ has_power: true, peak_watts: [900] }) };
+        },
+    });
+    const data = await context.fetchActivityCurve({ activity_id: '2260150967800512560' });
+    assert.deepEqual(requests, ['/api/power_dashboard/activity/2260150967800512560?zwift_id=7681059']);
+    assert.equal(data.has_power, true);
+});
 
 test('Morton fit recovers known parameters with a fixed peak power', () => {
     const context = dashboardContext();
@@ -265,8 +282,8 @@ test('progressive loading still fetches cache misses and continues after failed 
         async fetch(url) {
             requests.push(url);
             return {
-                status: url.endsWith('failed') ? 500 : 200,
-                ok: !url.endsWith('failed'),
+                status: new URL(url, 'http://localhost').pathname.endsWith('failed') ? 500 : 200,
+                ok: !new URL(url, 'http://localhost').pathname.endsWith('failed'),
                 async json() { return { has_power: true, peak_watts: [900], avg_power: 250 }; },
             };
         },
@@ -283,7 +300,7 @@ test('progressive loading still fetches cache misses and continues after failed 
         ['loaded', 'loaded', 'error', 'loaded']);
     assert.equal(requests.length, 4);
     assert.equal(writes.length, 3);
-    assert.deepEqual(removals, ['powerDashboardCurveV1:nodata']);
+    assert.deepEqual(removals, ['powerDashboardCurveV2::nodata']);
     assert.deepEqual(updates.map(update => Array.from(update)), [
         [0, 'loading'], [0, 'loaded'], [1, 'loading'], [1, 'loaded'],
         [2, 'loading'], [2, 'error'], [3, 'loading'], [3, 'loaded'],

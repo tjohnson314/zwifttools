@@ -45,27 +45,34 @@ All data originates from the **Zwift REST API** (`https://us-or-rly101.zwift.com
 
 ## Authentication
 
-### `GET /auth/login`
+Visitors do not authenticate with Zwift. The server uses `ZWIFT_USERNAME` and
+`ZWIFT_PASSWORD` for a dedicated account, with synchronized server-only token
+refresh and bounded retries. Tokens and passwords never enter browser storage or
+Flask session cookies. The old login form and password-submission flow are retired;
+legacy visitor token/state cookies are cleared on subsequent requests.
 
-Renders the login form (`login.html`).
+`templates/_rider_header.html` and `static/js/active_rider.js` provide a shared
+header selector on every tool and the homepage. Browser local storage contains
+only the confirmed active rider's ID/name under `zwifttools.activeRider`.
+`GET /api/profiles/<zwift_id>` resolves public profile data. An explicit
+`?zwift_id=` supplies rider context to the activity-list, power-dashboard,
+segment-PR, and `/api/my_profile` endpoints; `/profiles/me` is never a fallback
+for an absent selection. An ID is a lookup, not authenticated ownership.
 
-### `POST /auth/login`
+Changing or clearing a rider reloads the page, invalidating outstanding work and
+in-memory uploads; other tabs observe selection changes through storage events.
+Shared `?zwift_id=<id>` links take precedence over a previously saved selection.
+Manual tools and activity-ID/race-ID tools do not require rider selection.
+Critical Power calculator inputs and models use rider-ID-scoped browser keys.
+Unassigned legacy inputs remain available for explicit import; legacy models are
+never automatically attributed to a rider. Race Replay matches saved models
+against the analyzed rider's string-valued Zwift ID.
 
-**Flow:** Email + password → `get_token_with_password()` → Zwift OAuth token pair → stored in Flask `session['tokens']` as a `ZwiftTokens` dict (access_token, refresh_token, expires_at).
-
-### `GET /auth/callback`
-
-OAuth code exchange flow (CSRF state check → `exchange_code_for_tokens()`). Stores tokens in session.
-
-### `GET /auth/logout`
-
-Clears `session['tokens']`.
-
-### `GET /auth/status`
-
-Returns `{ authenticated: bool, method: 'oauth', expires_at: int }`.
-
-**Token refresh:** `get_session_tokens()` checks `expires_at` on every authenticated request and calls `refresh_access_token()` if expired. All Zwift API calls use `get_headers()` which returns `{ Authorization: 'Bearer <access_token>' }`.
+Only public data is supported. Inaccessible data and service failures are
+reported explicitly, and partial analyses remain identifiable. Server pacing
+and token synchronization are process-local: deployments or collectors sharing
+an account must coordinate their combined load. Legacy local/blob replay caches
+must be quarantined or cleared at cutover unless their public provenance is known.
 
 ---
 
@@ -73,7 +80,7 @@ Returns `{ authenticated: bool, method: 'oauth', expires_at: int }`.
 
 ### `GET /`
 
-Renders `landing.html`. Passes `logged_in = 'tokens' in session` to the template so it can show login/logout links. No data pipeline — purely static.
+Renders `landing.html` with the shared active-rider selector. No visitor login.
 
 ---
 
@@ -608,15 +615,15 @@ Restart Flask after refreshing data to clear the cached world files.
 
 ### Page: `GET /my-activities`
 
-Renders `my_activities.html`. Redirects to login if not authenticated.
+Renders `my_activities.html`. Prompts for an active rider when none is selected.
 
 ### `GET /api/my_activities`
 
-**Purpose:** Fetch the logged-in user's recent Zwift activities.
+**Purpose:** Fetch the selected rider's accessible recent Zwift activities.
 
 **Pipeline:**
 
-1. **Get profile ID** — `GET /api/profiles/me` → extract `id`
+1. **Validate rider ID** — required `zwift_id` query parameter; no account-profile fallback
 2. **Fetch activities** — `GET /api/profiles/{id}/activities?start={start}&limit={limit}`
 3. **Transform each activity:**
    - `distanceInMeters` → `distance_km` (÷ 1000)
@@ -650,7 +657,7 @@ Renders `my_activities.html`. Redirects to login if not authenticated.
 
 ### Page: `GET /workout-analysis`
 
-Requires login and preserves `?activity_id=` across the login redirect. Linked
+Needs no visitor login and supports `?activity_id=` links. Linked
 from the homepage and each row in My Activities.
 
 ### Catalog: `GET /api/workouts` and `GET /api/workouts/<workout_id>`
@@ -675,7 +682,7 @@ Missing or invalid catalog data returns an explicit 503 error.
 
 ### Custom plans: `POST /api/workouts/upload`
 
-Requires a logged-in session. Accepts a multipart `file` containing a `.zwo`
+Needs no visitor login. Accepts a multipart `file` containing a `.zwo`
 workout, at most 1 MiB, and returns the same plan shape as catalog details.
 Uses the shared `parse_workout()` parser, so repeats, ramps, ranges, fixed FTP
 references, and unscored blocks behave identically. Missing sport type defaults
@@ -693,17 +700,20 @@ rounding, raw-power chart, and coverage statistics.
 
 ### Recorded power: `GET /api/workout_activity/<activity_id>`
 
-Requires authentication. Uses `fetch_rider_telemetry()` and returns raw
-`timeInSec` / `powerInWatts` as `time_sec` / `power_watts`, plus activity name/ID.
+Uses server API credentials and returns accessible raw
+`timeInSec` / `powerInWatts` as `time_sec` / `power_watts`, plus activity name/ID
+and the owning `profile_id`.
 No cooldown trimming, smoothing, or power clipping is applied. Null power and
 timestamp gaps are retained. Mismatched arrays, non-finite values, and
 non-increasing timestamps return 422; upstream failures return 502.
 
 ### FTP and comparison
 
-`GET /api/my_profile` exposes finite positive `ftp` as `ftp_w` (otherwise null),
+`GET /api/my_profile?zwift_id=<id>` exposes finite positive `ftp` as `ftp_w` (otherwise null),
 alongside the existing name/height/weight fields. The page prefills this current
-profile value without overwriting manual edits. This is not historical FTP.
+profile value without overwriting manual edits. Activity loading uses the
+activity owner's profile rather than assuming it belongs to the active rider.
+This is not historical FTP.
 Missing FTP or lookup failures prompt manual entry without blocking analysis.
 
 The browser scales targets by editable FTP and whole-workout intensity, then
@@ -726,8 +736,8 @@ mid-workout intensity reconstruction.
 
 ### Page: `GET /workout-route`
 
-Requires login and is linked from the homepage. Rider weight, height, and FTP
-come from `GET /api/my_profile`; every value remains editable. Profile errors
+Needs no login and is linked from the homepage. Rider weight, height, and FTP
+come from `GET /api/my_profile?zwift_id=<id>` when a rider is selected; every value remains editable. Profile errors
 are shown and allow manual entry. A profile response never overwrites a field
 edited while the request was pending.
 
@@ -740,14 +750,16 @@ uploads nor estimates are persisted.
 Page settings are stored locally under `workoutRouteSettings`: rider inputs,
 frame/wheel/upgrade choices, world/route/lead-in selection, workout search and
 built-in workout ID, and untargeted-block power. Saved non-empty rider values
-take precedence over profile values on reload. Dropdowns are restored only
+take precedence over profile values on reload for the same `riderId`. Switching
+riders discards the previous rider's saved measurements/FTP, preserving route
+and equipment settings. Dropdowns are restored only
 after their catalogs load, and unavailable cached choices are not selected.
 Custom workout contents, files, and prediction results are never stored.
 Storage errors are reported without blocking manual use of the page.
 
 ### Prediction: `POST /api/workout_route_plan`
 
-Requires login. Accepts `route_id`, `include_leadin` (default true),
+Needs no login. Accepts `route_id`, `include_leadin` (default true),
 `rider_weight_kg`, `rider_height_cm`, `ftp_w`, `frame_id`, `wheel_id`,
 `upgrade_level`, and either `workout_id` or the uploaded numeric
 `custom_workout` object. `untargeted_percent` (default 75) specifies power for
@@ -827,13 +839,17 @@ Renders `bike_comparison.html`.
 - `wheelaero`, `wheelweight`, `wheelfitsframe`, `wheellevel`
 - Prepends a synthetic `(Built-in wheels)` entry for fixed-wheel frames
 
-### `GET /api/my_profile`
+### `GET /api/my_profile?zwift_id=<id>` / `GET /api/profiles/<id>`
 
-**Source:** `GET /api/profiles/me`
+**Source:** `GET /api/profiles/{id}` using server credentials. Missing or invalid
+IDs are errors; the server account is never substituted. Includes `id` and `name`.
 
 **Transform:**
-- `height` (mm) → `height_cm` (÷ 10)
-- `weight` (g) → `weight_kg` (÷ 1000)
+- `height` or `heightInMillimeters` (mm) → `height_cm` (÷ 10), falling back
+  to `heightInCentimeters` as-is
+- `weight` or `weightInGrams` (g) → `weight_kg` (÷ 1000)
+- Numeric strings are accepted; missing measurements are null and malformed
+  or non-finite measurements produce an explicit 502 error.
 - `firstName + lastName` → `name`
 - Finite positive `ftp` → `ftp_w`; missing/invalid FTP → null (editable in Workout Analysis)
 
@@ -872,6 +888,12 @@ Renders `bike_comparison.html`.
 ### `POST /api/upload_fit`
 
 **Purpose:** Parse a `.fit file` upload as an alternative to fetching from Zwift API.
+
+Files and decoded telemetry are processed transiently, not written to the
+application's disk/blob caches or browser storage. Upload and upload-derived
+comparison responses use `Cache-Control: no-store`; derived analysis stays in
+page memory only and reloading requires re-uploading. Request payloads must not
+be logged. Generic equipment choices may still be remembered.
 
 **Pipeline:**
 
@@ -1397,11 +1419,10 @@ Window adapts to actual sample rate when `time_sec` is provided.
 
 ### Zwift Auth (`shared/zwift_auth.py`)
 
-- Zwift OAuth 2.0 Authorization Code Flow
-- `get_token_with_password()` — email + password → access/refresh token pair (used by Azure Function for headless auth)
-- `exchange_code_for_tokens()` — OAuth callback code exchange (used by web app)
-- `refresh_access_token()` — automatic token refresh on expiry
-- Token storage via Flask session (`ZwiftTokens` dict: access_token, refresh_token, expires_at)
+- Dedicated server-account authentication; no visitor password flow
+- `get_token_with_password()` — configured account credentials to access/refresh tokens
+- `refresh_access_token()` — server-side token refresh on expiry
+- Tokens stay in a synchronized process-local cache, never Flask session cookies
 
 ### YouTube Streams (`shared/youtube_streams.py`)
 

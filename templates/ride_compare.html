@@ -17,10 +17,7 @@
                 <h1><span class="header-icon">🔀</span> Ride Compare</h1>
                 <p class="subtitle">Compare multiple rides on the same route side-by-side</p>
             </div>
-            <div class="auth-section">
-                <span id="auth-status-text" class="auth-status">Checking...</span>
-                <button id="authBtn" class="btn-auth" onclick="handleAuth()" style="display:none;">Login with Zwift</button>
-            </div>
+            {% include '_rider_header.html' %}
         </div>
 
         <!-- Dev warnings (localhost only) -->

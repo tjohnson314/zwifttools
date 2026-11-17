@@ -58,13 +58,13 @@ from shared.data_fetcher import (
     fetch_rider_telemetry, convert_telemetry_to_dataframe,
     fetch_race_from_activity, get_activity_details,
     get_race_entries, save_rider_data, extract_activity_id,
-    _request_with_retry, BASE_URL
+    _request_with_retry, _race_summary_dataframe, BASE_URL
 )
 from shared.route_lookup import get_route_info
 from shared import blob_storage
 from shared.segment_prs import catalog_version, segment_map_id, world_segments, find_traversals
 from shared.workouts import load_workouts, workout_index, power_telemetry, parse_workout, MAX_WORKOUT_BYTES
-from shared.zwift_auth import exchange_code_for_tokens, refresh_access_token, ZwiftTokens, get_token_with_password
+from shared.zwift_auth import server_token_manager, ZwiftAPIError
 
 try:
     from garmin_fit_sdk import Decoder, Stream
@@ -124,10 +124,6 @@ def _set_power_dashboard_progress(progress_id: str | None, **fields):
 @app.route('/api/power_dashboard_progress')
 def api_power_dashboard_progress():
     """Return the latest server-side progress for a power dashboard load."""
-    # Keep this endpoint lightweight; avoid token refresh/network calls while polling.
-    if 'tokens' not in session:
-        return jsonify({'error': 'Not authenticated'}), 401
-
     progress_id = request.args.get('progress_id')
     if not progress_id:
         return jsonify({'error': 'progress_id required'}), 400
@@ -141,99 +137,105 @@ def api_power_dashboard_progress():
     return jsonify(state)
 
 
-def get_redirect_uri():
-    """Get the OAuth redirect URI based on request host."""
-    # Use the host from the request, defaulting to localhost
-    host = request.host_url.rstrip('/')
-    return f"{host}/auth/callback"
+@app.before_request
+def clear_legacy_auth():
+    for key in ('tokens', 'oauth_state'):
+        session.pop(key, None)
 
 
-def get_session_tokens() -> ZwiftTokens | None:
-    """Get tokens from session, refreshing if expired."""
-    if 'tokens' not in session:
-        return None
-    
+@app.after_request
+def private_upload_responses(response):
+    if request.path in ('/api/upload_fit', '/api/compare', '/api/best_bikes',
+                        '/api/workouts/upload', '/api/workout_route_plan'):
+        response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+@app.errorhandler(ZwiftAPIError)
+def zwift_service_error(error):
+    response = jsonify({'error': str(error)})
+    response.status_code = error.status_code
+    if error.retry_after:
+        response.headers['Retry-After'] = str(error.retry_after)
+    return response
+
+
+def get_headers(required=True):
+    """Resolve server-only credentials; optional auth is for saved data only."""
     try:
-        tokens = ZwiftTokens.from_dict(session['tokens'])
-        
-        # Refresh if expired
-        if tokens.is_expired:
-            logger.info("Token expired (expires_at=%s, now=%s), refreshing...", tokens.expires_at, time.time())
-            tokens = refresh_access_token(tokens.refresh_token)
-            session['tokens'] = tokens.to_dict()
-        
-        return tokens
-    except Exception as e:
-        # Token refresh failed, user needs to re-login
-        logger.exception("get_session_tokens failed")
-        session.pop('tokens', None)
+        return server_token_manager.headers()
+    except ZwiftAPIError:
+        if required:
+            raise
         return None
 
 
-def get_headers():
-    """Get authorization headers for Zwift API."""
-    tokens = get_session_tokens()
-    if tokens:
-        return {'Authorization': f'Bearer {tokens.access_token}'}
-    
-    return None
+def _validated_zwift_id(value):
+    if not isinstance(value, str) or not re.fullmatch(r'[0-9]{1,20}', value) or int(value) <= 0:
+        raise ZwiftAPIError('zwift_id must be a positive numeric ID.', 400)
+    return str(int(value))
+
+
+def _selected_zwift_id():
+    return _validated_zwift_id(request.args.get('zwift_id'))
+
+
+def _check_zwift_response(response, message):
+    if response.status_code == 200:
+        return
+    status = response.status_code
+    if status == 401 or status >= 500:
+        status = 503
+    raise ZwiftAPIError(message, status, response.headers.get('Retry-After'))
+
+
+def _fetch_profile(profile_id, headers):
+    response = _request_with_retry(
+        'GET', f'{BASE_URL}/profiles/{profile_id}', headers=headers, timeout=15)
+    _check_zwift_response(response, 'Could not fetch public rider profile.')
+    try:
+        profile = response.json()
+    except ValueError:
+        raise ZwiftAPIError('Invalid profile response from Zwift.', 502) from None
+    if not isinstance(profile, dict) or str(profile.get('id')) != profile_id:
+        raise ZwiftAPIError('Invalid profile response from Zwift.', 502)
+    return profile
+
+
+def _check_activity_owner(activity, profile_id):
+    owner = (activity or {}).get('profileId') or ((activity or {}).get('profile') or {}).get('id')
+    if str(owner) != profile_id:
+        raise ZwiftAPIError('Activity does not belong to the selected rider.', 403)
+
+
+def _check_telemetry_error(error):
+    if error and error != 'No fitness data available':
+        raise ZwiftAPIError(str(error), 502)
+
+
+def _fetch_batch_telemetry(activity_id, headers):
+    try:
+        return fetch_rider_telemetry(activity_id, headers)
+    except ZwiftAPIError as error:
+        if error.status_code not in (403, 404):
+            raise
+        logger.info("Activity %s is inaccessible: %s", activity_id, error)
+        return None, None, 'Activity or telemetry is private or unavailable.'
 
 
 @app.route('/auth/login')
 def auth_login():
-    """Show login form for password-based auth."""
-    next_url = request.args.get('next', url_for('index'))
-    return render_template('login.html', next_url=next_url)
+    return redirect(url_for('index'))
 
 
 @app.route('/auth/login', methods=['POST'])
 def auth_login_post():
-    """Handle password-based login."""
-    email = request.form.get('email')
-    password = request.form.get('password')
-    
-    if not email or not password:
-        return redirect(url_for('auth_login') + '?error=missing')
-    
-    try:
-        tokens = get_token_with_password(email, password)
-        session['tokens'] = tokens.to_dict()
-        next_url = request.form.get('next') or url_for('index')
-        return redirect(next_url)
-    except Exception as e:
-        return render_template('login_failed.html', error=str(e)), 401
+    return jsonify({'error': 'Visitor login is disabled.'}), 410
 
 
 @app.route('/auth/callback')
 def auth_callback():
-    """Handle OAuth callback from Zwift."""
-    # Verify state for CSRF protection
-    state = request.args.get('state')
-    stored_state = session.pop('oauth_state', None)
-    
-    if not state or state != stored_state:
-        return jsonify({'error': 'Invalid state parameter'}), 400
-    
-    # Check for errors
-    error = request.args.get('error')
-    if error:
-        error_desc = request.args.get('error_description', 'Unknown error')
-        return jsonify({'error': error, 'description': error_desc}), 400
-    
-    # Exchange code for tokens
-    code = request.args.get('code')
-    if not code:
-        return jsonify({'error': 'No authorization code received'}), 400
-    
-    try:
-        redirect_uri = get_redirect_uri()
-        tokens = exchange_code_for_tokens(code, redirect_uri)
-        session['tokens'] = tokens.to_dict()
-        
-        # Redirect to main page on success
-        return redirect(url_for('index'))
-    except Exception as e:
-        return jsonify({'error': 'Token exchange failed', 'details': str(e)}), 500
+    return jsonify({'error': 'Visitor OAuth callback is retired.'}), 410
 
 
 @app.route('/auth/logout')
@@ -246,21 +248,13 @@ def auth_logout():
 @app.route('/auth/status')
 def auth_status():
     """Check authentication status."""
-    tokens = get_session_tokens()
-    if tokens:
-        return jsonify({
-            'authenticated': True,
-            'method': 'oauth',
-            'expires_at': tokens.expires_at
-        })
-    
-    return jsonify({'authenticated': False})
+    return jsonify({'authenticated': False, 'service_configured': server_token_manager.configured})
 
 
 @app.route('/')
 def index():
     """Landing page with links to both tools."""
-    logged_in = 'tokens' in session
+    logged_in = False
     return render_template('landing.html', logged_in=logged_in,
                            dev_tools=_surface_map_dev_available())
 
@@ -376,7 +370,7 @@ def api_zrl_leaderboard():
     """Build the Montmartre Mixer leaderboard from one ZRL event subgroup."""
     headers = get_headers()
     if not headers:
-        return jsonify({'error': 'Not authenticated. Please log in first.'}), 401
+        return jsonify({'error': 'Zwift service unavailable.'}), 503
 
     raw_subgroup_id = request.args.get('subgroup_id', '').strip()
     if not raw_subgroup_id:
@@ -393,7 +387,7 @@ def api_zrl_leaderboard():
     from shared.zrl_leaderboard import build_leaderboard
 
     def fetch_one(participant):
-        telemetry, _, telemetry_error = fetch_rider_telemetry(
+        telemetry, _, telemetry_error = _fetch_batch_telemetry(
             participant['activity_id'], headers
         )
         if telemetry_error:
@@ -444,14 +438,13 @@ def api_zrl_leaderboard_stream():
     """Stream ZRL rider telemetry progress, then emit the final leaderboard."""
     headers = get_headers()
     if not headers:
-        return jsonify({'error': 'Not authenticated. Please log in first.'}), 401
+        return jsonify({'error': 'Zwift service unavailable.'}), 503
     try:
         subgroup_id = int(request.args.get('subgroup_id', '').strip())
     except ValueError:
         return jsonify({'error': 'subgroup_id is required and must be a number'}), 400
 
-    @stream_with_context
-    def events():
+    def fetch_events():
         participants, error = get_race_entries(subgroup_id, headers)
         if error:
             yield f"data: {json.dumps({'error': error})}\n\n"
@@ -459,7 +452,7 @@ def api_zrl_leaderboard_stream():
         yield f"data: {json.dumps({'progress': True, 'type': 'status', 'name': 'Found participants', 'current': 0, 'total': len(participants)})}\n\n"
 
         def fetch_one(participant):
-            telemetry, _, telemetry_error = fetch_rider_telemetry(participant['activity_id'], headers)
+            telemetry, _, telemetry_error = _fetch_batch_telemetry(participant['activity_id'], headers)
             if telemetry_error:
                 return participant['activity_id'], None
             return participant['activity_id'], convert_telemetry_to_dataframe(telemetry)
@@ -491,6 +484,13 @@ def api_zrl_leaderboard_stream():
             result['segment_geometry_error'] = 'GPS route geometry is not available for the configured segments.'
         yield f"data: {json.dumps(result)}\n\n"
 
+    @stream_with_context
+    def events():
+        try:
+            yield from fetch_events()
+        except ZwiftAPIError as error:
+            yield f"data: {json.dumps({'error': str(error)})}\n\n"
+
     return Response(events(), mimetype='text/event-stream', headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
 
@@ -499,7 +499,7 @@ def api_zrl_streams():
     """Find known YouTube streamers who rode in one ZRL subgroup."""
     headers = get_headers()
     if not headers:
-        return jsonify({'error': 'Not authenticated. Please log in first.'}), 401
+        return jsonify({'error': 'Zwift service unavailable.'}), 503
 
     raw_subgroup_id = request.args.get('subgroup_id', '').strip()
     if not raw_subgroup_id.isdigit():
@@ -682,16 +682,12 @@ def top_performers_tt():
 
 @app.route('/my-activities')
 def my_activities():
-    """My Activities page — shows the logged-in user's recent activities."""
-    if 'tokens' not in session:
-        return redirect(url_for('auth_login', next=url_for('my_activities')))
+    """Activities for an explicitly selected public rider."""
     return render_template('my_activities.html')
 
 
 @app.route('/workout-analysis')
 def workout_analysis():
-    if 'tokens' not in session:
-        return redirect(url_for('auth_login', next=request.full_path.rstrip('?')))
     return render_template('workout_analysis.html')
 
 
@@ -712,15 +708,11 @@ def api_workouts(workout_id=None):
 
 @app.route('/workout-route')
 def workout_route():
-    if 'tokens' not in session:
-        return redirect(url_for('auth_login', next=request.full_path.rstrip('?')))
     return render_template('workout_route.html')
 
 
 @app.route('/api/workout_route_plan', methods=['POST'])
 def api_workout_route_plan():
-    if 'tokens' not in session:
-        return jsonify({'error': 'Not authenticated'}), 401
     if request.content_length is not None and request.content_length > 4 * MAX_WORKOUT_BYTES:
         return jsonify({'error': 'Workout request is too large.'}), 413
     body = request.get_json(silent=True)
@@ -788,8 +780,6 @@ def api_workout_route_plan():
 
 @app.route('/api/workouts/upload', methods=['POST'])
 def api_upload_workout():
-    if 'tokens' not in session:
-        return jsonify({'error': 'Not authenticated'}), 401
     if request.content_length is not None and request.content_length > MAX_WORKOUT_BYTES + 65536:
         return jsonify({'error': 'Workout file must be 1 MiB or smaller.'}), 413
     uploaded = request.files.get('file')
@@ -813,9 +803,11 @@ def api_upload_workout():
 
 @app.route('/api/workout_activity/<activity_id>')
 def api_workout_activity(activity_id):
+    if not activity_id.isascii() or not activity_id.isdigit():
+        return jsonify({'error': 'Activity ID must be numeric'}), 400
     headers = get_headers()
     if not headers:
-        return jsonify({'error': 'Not authenticated'}), 401
+        return jsonify({'error': 'Zwift service unavailable.'}), 503
     if not activity_id.isascii() or not activity_id.isdigit():
         return jsonify({'error': 'Activity ID must be numeric'}), 400
     try:
@@ -825,6 +817,8 @@ def api_workout_activity(activity_id):
         samples = power_telemetry(telemetry or {})
         return jsonify({
             'activity_id': activity_id,
+            'profile_id': str((activity or {}).get('profileId') or
+                              ((activity or {}).get('profile') or {}).get('id') or '') or None,
             'name': (activity or {}).get('name') or f'Activity {activity_id}',
             **samples,
         })
@@ -838,38 +832,32 @@ def api_workout_activity(activity_id):
 
 @app.route('/power')
 def power_dashboard():
-    """ZwiftPower-style power profile dashboard for the logged-in user."""
-    if 'tokens' not in session:
-        return redirect(url_for('auth_login', next=url_for('power_dashboard')))
+    """ZwiftPower-style power profile dashboard for a selected rider."""
     return render_template('power_dashboard.html')
 
 
 @app.route('/segment-prs')
 def segment_prs():
-    if 'tokens' not in session:
-        return redirect(url_for('auth_login', next=url_for('segment_prs')))
     from shared.world_config import WORLD_NAMES
     return render_template('segment_prs.html', world_names=WORLD_NAMES)
 
 
 @app.route('/api/segment_prs/activity/<activity_id>')
 def api_segment_prs_activity(activity_id):
+    profile_id = _selected_zwift_id()
+    if not activity_id.isascii() or not activity_id.isdigit():
+        return jsonify({'error': 'Activity ID must be numeric'}), 400
     headers = get_headers()
     if not headers:
-        return jsonify({'error': 'Not authenticated'}), 401
+        return jsonify({'error': 'Zwift service unavailable.'}), 503
     if not activity_id.isascii() or not activity_id.isdigit():
         return jsonify({'error': 'Activity ID must be numeric'}), 400
     try:
-        response = _request_with_retry('GET', f'{BASE_URL}/profiles/me', headers=headers, timeout=15)
-        if response.status_code != 200:
-            return jsonify({'error': 'Failed to fetch current rider profile'}), response.status_code
-        profile = response.json()
+        profile = _fetch_profile(profile_id, headers)
         telemetry, activity, error = fetch_rider_telemetry(activity_id, headers)
         if error:
             return jsonify({'error': error}), 502
-        owner_id = (activity or {}).get('profileId') or ((activity or {}).get('profile') or {}).get('id')
-        if str(owner_id) != str(profile.get('id')):
-            return jsonify({'error': 'Activity does not belong to the current user'}), 403
+        _check_activity_owner(activity, profile_id)
         if not telemetry:
             return jsonify({'error': 'No activity telemetry available'}), 422
         version = catalog_version()
@@ -907,6 +895,8 @@ def api_segment_prs_activity(activity_id):
             'segment_status': 'unavailable' if unavailable else 'analyzed',
             'warning': warning,
         })
+    except ZwiftAPIError:
+        raise
     except (ValueError, KeyError) as error:
         logger.warning("Cannot match segments for activity %s: %s", activity_id, error)
         return jsonify({'error': str(error)}), 422
@@ -917,26 +907,14 @@ def api_segment_prs_activity(activity_id):
 
 @app.route('/api/my_activities')
 def api_my_activities():
-    """Fetch the logged-in user's recent activities from the Zwift API."""
+    """Fetch public activities for the explicitly selected rider."""
+    profile_id = _selected_zwift_id()
     headers = get_headers()
     if not headers:
-        return jsonify({'error': 'Not authenticated'}), 401
+        return jsonify({'error': 'Zwift service unavailable.'}), 503
 
     try:
-        # First get the user's profile ID
-        profile_resp = _request_with_retry(
-            'GET',
-            f'{BASE_URL}/profiles/me',
-            headers=headers,
-            timeout=15,
-        )
-        if profile_resp.status_code != 200:
-            return jsonify({'error': 'Failed to fetch profile'}), profile_resp.status_code
-
-        profile = profile_resp.json()
-        profile_id = profile.get('id')
-        if not profile_id:
-            return jsonify({'error': 'Could not determine profile ID'}), 500
+        _fetch_profile(profile_id, headers)
 
         # Fetch activities — Zwift API: GET /api/profiles/{id}/activities
         start = int(request.args.get('start', 0))
@@ -948,10 +926,11 @@ def api_my_activities():
             params={'start': start, 'limit': limit},
             timeout=30,
         )
-        if resp.status_code != 200:
-            return jsonify({'error': f'Failed to fetch activities: {resp.status_code}'}), resp.status_code
+        _check_zwift_response(resp, 'Could not fetch public activities.')
 
         raw_activities = resp.json()
+        if not isinstance(raw_activities, list):
+            raise ZwiftAPIError('Invalid activities response from Zwift.', 502)
 
         activities = []
         for act in raw_activities:
@@ -986,6 +965,8 @@ def api_my_activities():
             })
 
         return jsonify({'activities': activities, 'start': start, 'limit': limit})
+    except ZwiftAPIError:
+        raise
     except Exception as e:
         logger.exception("Error fetching activities")
         return jsonify({'error': str(e)}), 500
@@ -1001,7 +982,7 @@ def api_activity_enrichment(activity_id):
     """
     headers = get_headers()
     if not headers:
-        return jsonify({'error': 'Not authenticated'}), 401
+        return jsonify({'error': 'Zwift service unavailable.'}), 503
 
     try:
         result = {}
@@ -1067,6 +1048,8 @@ def api_activity_enrichment(activity_id):
             result['avg_hr'] = None
 
         return jsonify(result)
+    except ZwiftAPIError:
+        raise
     except Exception as e:
         logger.exception("Error enriching activity")
         return jsonify({'error': str(e)}), 500
@@ -1227,12 +1210,12 @@ def _fetch_recent_activities_for_profile(headers, profile_id, days=90, page_size
             params={'start': start, 'limit': page_size},
             timeout=30,
         )
-        if resp.status_code != 200:
-            body = (resp.text or '')[:200]
-            raise RuntimeError(f"Failed to fetch activities: {resp.status_code} {body}")
+        _check_zwift_response(resp, 'Could not fetch public activities.')
 
         page = resp.json()
-        if not isinstance(page, list) or len(page) == 0:
+        if not isinstance(page, list):
+            raise ZwiftAPIError('Invalid activities response from Zwift.', 502)
+        if len(page) == 0:
             break
 
         reached_older_activities = False
@@ -1289,24 +1272,13 @@ def api_power_dashboard_activities():
     Lightweight: only the activity metadata is returned. Telemetry (and the peak
     power curve) is loaded per-activity via /api/power_dashboard/activity/<id>.
     """
+    profile_id = _selected_zwift_id()
     headers = get_headers()
     if not headers:
-        return jsonify({'error': 'Not authenticated'}), 401
+        return jsonify({'error': 'Zwift service unavailable.'}), 503
 
     try:
-        profile_resp = _request_with_retry(
-            'GET',
-            f'{BASE_URL}/profiles/me',
-            headers=headers,
-            timeout=15,
-        )
-        if profile_resp.status_code != 200:
-            return jsonify({'error': 'Failed to fetch profile'}), profile_resp.status_code
-
-        profile = profile_resp.json()
-        profile_id = profile.get('id')
-        if not profile_id:
-            return jsonify({'error': 'Could not determine profile ID'}), 500
+        profile = _fetch_profile(profile_id, headers)
 
         lookback_days = 90
         recent = _fetch_recent_activities_for_profile(
@@ -1342,6 +1314,8 @@ def api_power_dashboard_activities():
                 for a in recent
             ],
         })
+    except ZwiftAPIError:
+        raise
     except Exception as e:
         logger.exception("Error listing power dashboard activities")
         return jsonify({'error': str(e)}), 500
@@ -1351,19 +1325,23 @@ def api_power_dashboard_activities():
 def api_power_dashboard_activity(activity_id):
     """Return the peak-power curve for a single activity.
 
-    Always responds 200 when reachable — activities without power telemetry return
-    has_power=false so the frontend can mark them as "no data" rather than erroring.
+    Missing power is distinct from upstream authentication or data failures.
     """
+    profile_id = _selected_zwift_id()
+    if not activity_id.isascii() or not activity_id.isdigit():
+        return jsonify({'error': 'Activity ID must be numeric'}), 400
     headers = get_headers()
     if not headers:
-        return jsonify({'error': 'Not authenticated'}), 401
+        return jsonify({'error': 'Zwift service unavailable.'}), 503
 
     intervals = _build_power_intervals_seconds()
     empty_curve = [None for _ in intervals]
 
     try:
         telem_data, activity_data, error = fetch_rider_telemetry(activity_id, headers)
-        if error or not telem_data:
+        _check_telemetry_error(error)
+        _check_activity_owner(activity_data, profile_id)
+        if not telem_data:
             return jsonify({
                 'activity_id': str(activity_id),
                 'has_power': False,
@@ -1415,6 +1393,8 @@ def api_power_dashboard_activity(activity_id):
             'avg_hr': avg_hr,
             'peak_watts': [round(peaks.get(sec), 1) if peaks.get(sec) is not None else None for sec in intervals],
         })
+    except ZwiftAPIError:
+        raise
     except Exception as e:
         logger.exception("Error building single-activity power curve")
         return jsonify({'error': str(e)}), 500
@@ -1423,31 +1403,20 @@ def api_power_dashboard_activity(activity_id):
 @app.route('/api/power_dashboard')
 def api_power_dashboard():
     """Return peak-power dashboard data for the last 90 days and latest activity."""
+    profile_id = _selected_zwift_id()
     progress_id = request.args.get('progress_id')
     _set_power_dashboard_progress(progress_id, status='authenticating', message='Checking authentication...')
 
     headers = get_headers()
     if not headers:
-        _set_power_dashboard_progress(progress_id, status='error', message='Not authenticated')
-        return jsonify({'error': 'Not authenticated'}), 401
+        _set_power_dashboard_progress(progress_id, status='error', message='Zwift service unavailable.')
+        return jsonify({'error': 'Zwift service unavailable.'}), 503
 
     _set_power_dashboard_progress(progress_id, status='starting', message='Starting dashboard build...')
 
     try:
         _set_power_dashboard_progress(progress_id, status='fetching_profile', message='Fetching rider profile...')
-        profile_resp = _request_with_retry(
-            'GET',
-            f'{BASE_URL}/profiles/me',
-            headers=headers,
-            timeout=15,
-        )
-        if profile_resp.status_code != 200:
-            return jsonify({'error': 'Failed to fetch profile'}), profile_resp.status_code
-
-        profile = profile_resp.json()
-        profile_id = profile.get('id')
-        if not profile_id:
-            return jsonify({'error': 'Could not determine profile ID'}), 500
+        _fetch_profile(profile_id, headers)
 
         intervals = _build_power_intervals_seconds()
         weekly_intervals = [1200, 600, 300, 60, 30, 15, 5]
@@ -1505,7 +1474,9 @@ def api_power_dashboard():
 
         def process_activity(activity):
             telem_data, activity_data, error = fetch_rider_telemetry(activity['id'], headers)
-            if error or not telem_data:
+            _check_telemetry_error(error)
+            _check_activity_owner(activity_data, profile_id)
+            if not telem_data:
                 return None
 
             power_values = telem_data.get('powerInWatts') or []
@@ -1695,6 +1666,8 @@ def api_power_dashboard():
             'total_activity_count': len(recent_activities),
             'range_activity_count': 0,
         })
+    except ZwiftAPIError:
+        raise
     except Exception as e:
         logger.exception("Error building power dashboard")
         _set_power_dashboard_progress(progress_id, status='error', message=str(e))
@@ -2089,30 +2062,32 @@ def download_data_file(filename):
 
 
 @app.route('/api/my_profile')
-def get_my_profile():
-    """Get measurements and current FTP from the logged-in user's profile."""
+@app.route('/api/profiles/<zwift_id>')
+def get_my_profile(zwift_id=None):
+    """Public profile selection; the legacy alias also requires an explicit ID."""
+    profile_id = _validated_zwift_id(zwift_id) if zwift_id is not None else _selected_zwift_id()
     headers = get_headers()
-    if not headers:
-        return jsonify({'error': 'Not authenticated'}), 401
-    
     try:
-        resp = _request_with_retry(
-            'GET', f'{BASE_URL}/profiles/me',
-            headers=headers,
-            timeout=10
-        )
-        if resp.status_code != 200:
-            return jsonify({'error': 'Failed to fetch profile'}), resp.status_code
-        
-        if not resp.text.strip():
-            return jsonify({'error': 'Empty response from Zwift API'}), 502
-        
-        try:
-            profile = resp.json()
-        except Exception:
-            return jsonify({'error': 'Invalid response from Zwift API'}), 502
-        height_mm = profile.get('height', 0)
-        weight_g = profile.get('weight', 0)
+        profile = _fetch_profile(profile_id, headers)
+        def measurement(fields):
+            for key, divisor in fields:
+                value = profile.get(key)
+                if value is None or value == '':
+                    continue
+                try:
+                    if isinstance(value, bool):
+                        raise ValueError
+                    number = float(value)
+                except (TypeError, ValueError, OverflowError):
+                    raise ZwiftAPIError('Invalid profile measurements from Zwift.', 502) from None
+                if not np.isfinite(number):
+                    raise ZwiftAPIError('Invalid profile measurements from Zwift.', 502)
+                return round(number / divisor, 1)
+            return None
+
+        height_cm = measurement((('height', 10), ('heightInMillimeters', 10),
+                                 ('heightInCentimeters', 1)))
+        weight_kg = measurement((('weight', 1000), ('weightInGrams', 1000)))
         try:
             ftp = float(profile.get('ftp'))
         except (TypeError, ValueError):
@@ -2121,11 +2096,14 @@ def get_my_profile():
             ftp = None
         
         return jsonify({
-            'height_cm': round(height_mm / 10, 1) if height_mm else None,
-            'weight_kg': round(weight_g / 1000, 1) if weight_g else None,
+            'id': profile_id,
+            'height_cm': height_cm,
+            'weight_kg': weight_kg,
             'name': f"{profile.get('firstName', '')} {profile.get('lastName', '')}".strip(),
             'ftp_w': ftp,
         })
+    except ZwiftAPIError:
+        raise
     except Exception as e:
         logger.exception("Error fetching profile")
         return jsonify({'error': str(e)}), 500
@@ -2223,7 +2201,7 @@ def fetch_activity():
     
     headers = get_headers()
     if not headers:
-        return jsonify({'error': 'Not authenticated. Please log in first.'}), 401
+        return jsonify({'error': 'Zwift service unavailable.'}), 503
     
     try:
         # Fetch telemetry using existing fetcher
@@ -2293,13 +2271,13 @@ def fetch_activity():
             telemetry['crr'] = surface_types_to_crr(surface_types, 'road_bike').tolist()
         
         # Look up rider profile for height/weight
-        # The rider may differ from the logged-in user, so always fetch by profileId
+        # Always use the activity's actual owner, never the service account.
         rider_profile = None
         if activity_data:
             profile_id = activity_data.get('profileId') or activity_data.get('profile', {}).get('id')
             if profile_id:
                 try:
-                    profile_resp = requests.get(
+                    profile_resp = _request_with_retry('GET',
                         f'https://us-or-rly101.zwift.com/api/profiles/{profile_id}',
                         headers=headers,
                         timeout=10
@@ -2339,6 +2317,8 @@ def fetch_activity():
 
         return jsonify(response)
         
+    except ZwiftAPIError:
+        raise
     except Exception as e:
         logger.exception("Error fetching activity")
         return jsonify({'error': str(e)}), 500
@@ -2526,7 +2506,7 @@ def upload_fit():
         })
 
     except Exception as e:
-        logger.exception("Error parsing FIT file")
+        logger.error("Error parsing FIT file")
         return jsonify({'error': str(e)}), 500
 
 
@@ -3201,7 +3181,7 @@ def api_ttt_pacing_riders():
     """Look up name, height, weight and zFTP for a list of Zwift IDs."""
     headers = get_headers()
     if not headers:
-        return jsonify({'error': 'Log in with Zwift to look up riders.'}), 401
+        return jsonify({'error': 'Zwift service unavailable.'}), 503
 
     body = request.get_json(force=True, silent=True) or {}
     raw_ids = body.get('zwift_ids')
@@ -3228,8 +3208,10 @@ def api_ttt_pacing_riders():
             'w_prime_kj': TTT_DEFAULT_W_PRIME_KJ,
         }
         try:
-            resp = requests.get(f'https://us-or-rly101.zwift.com/api/profiles/{zid}',
+            resp = _request_with_retry('GET', f'https://us-or-rly101.zwift.com/api/profiles/{zid}',
                                 headers=headers, timeout=10)
+            if resp.status_code not in (200, 404):
+                _check_zwift_response(resp, 'Could not fetch public rider profile.')
             if resp.status_code == 200 and resp.text.strip():
                 p = resp.json()
                 if not isinstance(p, dict):
@@ -3543,9 +3525,7 @@ def api_ride_compare_fetch_stream():
     """SSE endpoint — fetches telemetry for a list of activity IDs."""
     headers = get_headers()
     if not headers:
-        def err_gen():
-            yield f"data: {json.dumps({'error': 'Not authenticated. Please log in first.'})}\n\n"
-        return Response(err_gen(), mimetype='text/event-stream')
+        return jsonify({'error': 'Zwift service unavailable.'}), 503
 
     activity_ids_raw = request.args.get('activity_ids', '').strip()
     if not activity_ids_raw:
@@ -3589,9 +3569,10 @@ def api_ride_compare_fetch_stream():
                 try:
                     summary_df = pd.read_csv(summary_path)
                     success_count = int((summary_df['status'] == 'SUCCESS').sum())
-                    q.put({'success': True, 'race_id': compare_id,
-                           'message': f'Cached: {success_count} rides loaded'})
-                    return
+                    if success_count == len(activity_ids):
+                        q.put({'success': True, 'race_id': compare_id,
+                               'message': f'Cached: {success_count} rides loaded'})
+                        return
                 except Exception:
                     pass
 
@@ -3616,7 +3597,7 @@ def api_ride_compare_fetch_stream():
                 q.put({'progress': True, 'current': rank, 'total': total,
                        'name': f'Activity {act_id}'})
 
-                telem_data, act_data, error = fetch_rider_telemetry(act_id, headers)
+                telem_data, act_data, error = _fetch_batch_telemetry(act_id, headers)
 
                 if error:
                     summary_data.append({
@@ -3676,8 +3657,13 @@ def api_ride_compare_fetch_stream():
                     'data_points': len(df),
                 })
 
+            success_count = sum(s['status'] == 'SUCCESS' for s in summary_data)
+            if not success_count:
+                q.put({'error': 'No accessible ride telemetry could be fetched.'})
+                return
+
             # Save summary CSV
-            summary_df = pd.DataFrame(summary_data)
+            summary_df = _race_summary_dataframe(summary_data)
             summary_df.to_csv(str(summary_path), index=False)
 
             # Save metadata — use first start time and detected route
@@ -3729,15 +3715,16 @@ def api_ride_compare_fetch_stream():
                     s['name'] = f"{n} ({suffix})"
 
             # Re-save summary with disambiguated names
-            summary_df = pd.DataFrame(summary_data)
+            summary_df = _race_summary_dataframe(summary_data)
             summary_df.to_csv(str(summary_path), index=False)
 
             # Clear cleaned cache so it picks up disambiguated names
             _race_data_cache.pop(compare_id, None)
 
-            success_count = len([s for s in summary_data if s.get('status') == 'SUCCESS'])
+            skipped = len(summary_data) - success_count
             q.put({'success': True, 'race_id': compare_id,
-                   'message': f'Loaded: {success_count} rides for comparison'})
+                   'message': f'Loaded: {success_count} rides for comparison'
+                              + (f'; {skipped} unavailable.' if skipped else '')})
         except Exception as e:
             logger.exception("Error in ride_compare fetch")
             q.put({'error': str(e)})
@@ -3972,10 +3959,7 @@ def api_race_fetch_stream():
     """SSE endpoint — streams progress while fetching race data."""
     headers = get_headers()
     if not headers:
-        logger.warning("SSE fetch_stream: No auth headers. Session keys: %s", list(session.keys()))
-        def err_gen():
-            yield f"data: {json.dumps({'error': 'Not authenticated. Please log in first.'})}\n\n"
-        return Response(err_gen(), mimetype='text/event-stream')
+        return jsonify({'error': 'Zwift service unavailable.'}), 503
 
     activity_url_or_id = request.args.get('activity_id', '').strip()
     if not activity_url_or_id:
@@ -4141,7 +4125,7 @@ def api_race_load():
 
     # Saved replays remain available offline; authenticated loads refresh the
     # roster unless fetch_stream has just refreshed it in the same UI cycle.
-    headers = get_headers()
+    headers = get_headers(required=False)
     if headers and data.get('refresh_participants', True):
         is_event = race_id.startswith('race_event_')
         meta_name = 'event_manifest.json' if is_event else 'race_meta.json'
@@ -4602,6 +4586,7 @@ def _build_race_data_response(race_id):
             'category': cat_map.get(int(r.rank)),
             'activity_id': str(r.activity_id),
             'player_id': int(r.player_id) if r.player_id else None,
+            'zwift_id': str(r.player_id) if r.player_id else None,
             'weight_kg': float(r.weight_kg),
             'height_cm': float(r.height_cm) if r.height_cm is not None else None,
             'is_late_joiner': is_late_joiner,
@@ -5070,7 +5055,7 @@ def _ttt_profile_measurements(profile):
     return weight_kg, height_cm
 
 
-def _load_ttt_manual_participants(raw_activities, headers, existing_activity_ids):
+def _load_ttt_manual_participants(raw_activities, headers, existing_activity_ids, unavailable=None):
     """Fetch participant metadata for manually supplied, non-result activities."""
     try:
         activity_ids = _parse_ttt_manual_activity_ids(raw_activities)
@@ -5082,7 +5067,14 @@ def _load_ttt_manual_participants(raw_activities, headers, existing_activity_ids
     for activity_id in activity_ids:
         if activity_id in existing_ids:
             continue
-        activity_data, error = get_activity_details(activity_id, headers)
+        try:
+            activity_data, error = get_activity_details(activity_id, headers)
+        except ZwiftAPIError as error:
+            if error.status_code not in (403, 404) or unavailable is None:
+                raise
+            unavailable.append(activity_id)
+            logger.info("Manual activity %s is inaccessible: %s", activity_id, error)
+            continue
         if error:
             return None, f'Could not add activity {activity_id}: {error}'
         participant = _ttt_participant_from_activity(activity_id, activity_data)
@@ -5205,46 +5197,62 @@ def api_ttt_fetch_csv():
     route_id = None
     event_distance_km = None
 
-    headers = get_headers()
-    if raw_sg and headers:
+    if raw_sg:
         try:
             event_subgroup_id = int(raw_sg)
         except ValueError:
             return jsonify({'error': 'subgroup_id must be a number'}), 400
 
-        # Fetch one participant to resolve event info
-        participants, _ = get_race_entries(event_subgroup_id, headers, limit=1)
-        if participants:
-            first_act, _ = get_activity_details(participants[0]['activity_id'], headers)
-            if first_act:
-                ei = first_act.get('eventInfo', {})
-                event_name = ei.get('name', event_name)
-                eid = ei.get('id')
-                if eid:
-                    try:
+    # CSV analysis works offline; account-backed metadata is optional enrichment.
+    headers = get_headers(required=False)
+    participants = None
+    event_metadata_available = False
+    metadata_service_unavailable = False
+    if raw_sg and headers:
+        try:
+            participants, entries_error = get_race_entries(event_subgroup_id, headers)
+            if entries_error:
+                logger.warning("TTT CSV: event participants unavailable for subgroup %s", event_subgroup_id)
+            if participants:
+                first_act, activity_error = get_activity_details(participants[0]['activity_id'], headers)
+                if activity_error:
+                    logger.warning("TTT CSV: event activity metadata unavailable for subgroup %s", event_subgroup_id)
+                if first_act:
+                    if not isinstance(first_act, dict):
+                        raise ValueError('Invalid event activity metadata')
+                    ei = first_act.get('eventInfo') or {}
+                    if not isinstance(ei, dict):
+                        raise ValueError('Invalid event information')
+                    event_name = ei.get('name', event_name)
+                    eid = ei.get('id')
+                    if eid:
                         ev_resp = _request_with_retry('GET', f'{BASE_URL}/events/{eid}', headers=headers, timeout=15)
-                        if ev_resp.status_code == 200:
-                            ev = ev_resp.json()
-                            event_name = ev.get('name', event_name)
-                            for sg in ev.get('eventSubgroups', []):
-                                if sg.get('id') == event_subgroup_id:
-                                    label = sg.get('subgroupLabel', '')
-                                    if label:
-                                        event_name = f'{event_name} — {label}'
-                                    route_id = sg.get('routeId')
-                                    sg_laps = sg.get('laps') or 1
-                                    if route_id:
-                                        from shared.route_lookup import get_route_info as _get_ri
-                                        ri = _get_ri(route_id)
-                                        if ri and ri.get('distanceInMeters'):
-                                            leadin = ri.get('leadinDistanceInMeters', 0)
-                                            event_distance_km = round((ri['distanceInMeters'] * sg_laps + leadin) / 1000, 2)
-                                    break
-                    except Exception:
-                        pass
-    elif raw_sg and not headers:
-        return jsonify({'error': 'Not authenticated. Log in to fetch event metadata.'}), 401
-
+                        _check_zwift_response(ev_resp, 'Could not fetch public event metadata.')
+                        ev = ev_resp.json()
+                        if not isinstance(ev, dict):
+                            raise ValueError('Invalid event metadata')
+                        event_name = ev.get('name', event_name)
+                        for sg in ev.get('eventSubgroups') or []:
+                            if sg.get('id') == event_subgroup_id:
+                                label = sg.get('subgroupLabel', '')
+                                if label:
+                                    event_name = f'{event_name} — {label}'
+                                route_id = sg.get('routeId')
+                                sg_laps = sg.get('laps') or 1
+                                if route_id:
+                                    from shared.route_lookup import get_route_info as _get_ri
+                                    ri = _get_ri(route_id)
+                                    if ri and ri.get('distanceInMeters'):
+                                        leadin = ri.get('leadinDistanceInMeters', 0)
+                                        event_distance_km = round((ri['distanceInMeters'] * sg_laps + leadin) / 1000, 2)
+                                        event_metadata_available = True
+                                break
+        except (ZwiftAPIError, requests.RequestException, ValueError, TypeError) as error:
+            logger.warning("TTT CSV: optional event metadata unavailable for subgroup %s (%s)",
+                           event_subgroup_id, type(error).__name__)
+            metadata_service_unavailable = (isinstance(error, requests.RequestException)
+                                            or isinstance(error, ZwiftAPIError)
+                                            and error.status_code in (429, 503))
     # ---- Group rows by athlete_id ----
     athletes_raw = defaultdict(list)
     for row in rows:
@@ -5257,21 +5265,29 @@ def api_ttt_fetch_csv():
     # athlete_id in the Sauce CSV is the Zwift profile (player) ID.
     profile_lookup = {}  # athlete_id str -> {'name': ..., 'weight_kg': ...}
 
-    # First, try to match from race entries (already fetched if subgroup_id given)
-    if raw_sg and headers:
-        full_participants, _ = get_race_entries(int(raw_sg), headers)
-        if full_participants:
-            for p in full_participants:
-                pid = str(p.get('player_id', ''))
-                if pid and pid in athletes_raw:
-                    profile_lookup[pid] = {
-                        'name': p['name'],
-                        'weight_kg': p.get('weight_kg', 75.0),
-                        'height_cm': p.get('height_cm', 175.0),
-                    }
+    # First, try to match from race entries.
+    if participants:
+        for p in participants:
+            pid = str(p.get('player_id', ''))
+            if pid and pid in athletes_raw:
+                try:
+                    weight_kg = float(p.get('weight_kg') or 75.0)
+                    height_cm = float(p.get('height_cm') or 175.0)
+                    if not np.isfinite(weight_kg) or not np.isfinite(height_cm):
+                        raise ValueError('Non-finite measurements')
+                except (ValueError, TypeError, OverflowError):
+                    logger.warning("TTT CSV: invalid event profile measurements for athlete %s", pid)
+                    continue
+                profile_lookup[pid] = {
+                    'name': p.get('name') or f'Athlete {pid}',
+                    'weight_kg': weight_kg,
+                    'height_cm': height_cm,
+                    'fallback': not (p.get('name') and p.get('weight_is_event_recorded')
+                                     and p.get('height_cm')),
+                }
 
     # For any athletes not matched via race entries, fetch profiles directly
-    if headers:
+    if headers and not metadata_service_unavailable:
         missing_ids = [aid for aid in athletes_raw if aid not in profile_lookup]
         for aid in missing_ids:
             try:
@@ -5279,20 +5295,31 @@ def api_ttt_fetch_csv():
                     'GET', f'{BASE_URL}/profiles/{aid}',
                     headers=headers, timeout=10,
                 )
-                if resp.status_code == 200:
-                    p = resp.json()
-                    name = f"{p.get('firstName', '')} {p.get('lastName', '')}".strip()
-                    wt_g = p.get('weightInGrams', 0) or p.get('weight', 0)
-                    height_cm = p.get('heightInCentimeters')
-                    if not height_cm and p.get('height'):
-                        height_cm = float(p['height']) / 10.0
-                    profile_lookup[aid] = {
-                        'name': name or f'Athlete {aid}',
-                        'weight_kg': round(wt_g / 1000, 1) if wt_g else 75.0,
-                        'height_cm': height_cm or 175.0,
-                    }
-            except Exception:
-                pass
+                _check_zwift_response(resp, 'Could not fetch public rider profile.')
+                p = resp.json()
+                if not isinstance(p, dict):
+                    raise ValueError('Invalid profile metadata')
+                name = f"{p.get('firstName', '')} {p.get('lastName', '')}".strip()
+                wt_g = p.get('weightInGrams', 0) or p.get('weight', 0)
+                height_cm = p.get('heightInCentimeters')
+                if not height_cm and p.get('height'):
+                    height_cm = float(p['height']) / 10.0
+                weight_kg = float(wt_g) / 1000 if wt_g else 75.0
+                height_cm = float(height_cm) if height_cm else None
+                if not np.isfinite(weight_kg) or (height_cm is not None and not np.isfinite(height_cm)):
+                    raise ValueError('Non-finite measurements')
+                profile_lookup[aid] = {
+                    'name': name or f'Athlete {aid}',
+                    'weight_kg': round(weight_kg, 1),
+                    'height_cm': height_cm if height_cm is not None else 175.0,
+                    'fallback': not (name and wt_g and height_cm),
+                }
+            except (ZwiftAPIError, requests.RequestException, ValueError, TypeError, OverflowError) as error:
+                logger.warning("TTT CSV: optional profile unavailable for athlete %s (%s)",
+                               aid, type(error).__name__)
+                if (isinstance(error, requests.RequestException)
+                        or isinstance(error, ZwiftAPIError) and error.status_code in (429, 503)):
+                    break
 
     # ---- Derive a common time origin across all athletes ----
     # world_time is a game clock shared by all riders, so use the global
@@ -5357,6 +5384,20 @@ def api_ttt_fetch_csv():
 
     if not all_processed:
         return jsonify({'error': 'No valid athlete data (need >= 10 samples each).'}), 400
+    metadata_warnings = []
+    if raw_sg and not event_metadata_available:
+        metadata_warnings.append(
+            'Event metadata unavailable; route and distance may be estimated from the CSV.'
+        )
+    fallback_count = sum(
+        not profile_lookup.get(aid) or profile_lookup[aid].get('fallback')
+        for aid in all_processed
+    )
+    if fallback_count:
+        metadata_warnings.append(
+            f'Profile data unavailable or incomplete for {fallback_count} riders; '
+            'generic names or default weight (75 kg) and height (175 cm) may be used.'
+        )
 
     # ---- Route-project riders for accurate distance alignment ----
     route_data = None
@@ -5461,6 +5502,7 @@ def api_ttt_fetch_csv():
         'participants': [],
         'race_distance_km': race_distance_km,
         'team_assignments': dict(team_assignments),
+        'unavailable_warnings': metadata_warnings,
     }
 
     return jsonify({
@@ -5471,6 +5513,7 @@ def api_ttt_fetch_csv():
         'unassigned': [],
         'team_tags': team_tags,
         'cache_key': cache_key,
+        'warnings': metadata_warnings,
     })
 
 
@@ -5495,7 +5538,7 @@ def api_ttt_fetch():
     """
     headers = get_headers()
     if not headers:
-        return jsonify({'error': 'Not authenticated. Please log in first.'}), 401
+        return jsonify({'error': 'Zwift service unavailable.'}), 503
 
     data = request.json or {}
     raw_id = str(data.get('subgroup_id', '')).strip()
@@ -5517,10 +5560,16 @@ def api_ttt_fetch():
     if error:
         return jsonify({'error': error}), 502
 
-    # ---- Resolve event name from first participant's activity ----
+    # ---- Resolve event name from an accessible participant's activity ----
     first_act = None
-    if participants:
-        first_act, _ = get_activity_details(participants[0]['activity_id'], headers)
+    for participant in participants:
+        try:
+            first_act, _ = get_activity_details(participant['activity_id'], headers)
+        except ZwiftAPIError as error:
+            if error.status_code not in (403, 404):
+                raise
+            logger.info("Activity %s is inaccessible: %s", participant['activity_id'], error)
+            continue
         if first_act:
             ei = first_act.get('eventInfo', {})
             event_name = ei.get('name', event_name)
@@ -5548,11 +5597,14 @@ def api_ttt_fetch():
                                 break
                 except Exception:
                     pass
+            break
 
+    unavailable_manual = []
     manual_participants, manual_error = _load_ttt_manual_participants(
         data.get('manual_activities'),
         headers,
         (participant['activity_id'] for participant in participants),
+        unavailable_manual,
     )
     if manual_error:
         return jsonify({'error': manual_error}), 400
@@ -5621,7 +5673,7 @@ def api_ttt_fetch():
 
     def fetch_one(p):
         act_id = p['activity_id']
-        telem_data, act_data, err = fetch_rider_telemetry(act_id, headers)
+        telem_data, act_data, err = _fetch_batch_telemetry(act_id, headers)
         if err:
             return {**p, 'telemetry': None, 'telem_raw': None, 'error': err}
 
@@ -5887,7 +5939,15 @@ def api_ttt_fetch():
             logger.info("TTT: applied time offsets to %d / %d riders",
                         offsets_applied, len(all_processed))
 
-    alignment_warnings = []
+    unavailable_warnings = []
+    unavailable_count = len(participants) - len(rider_lookup) + len(unavailable_manual)
+    if unavailable_count:
+        unavailable_warnings.append(
+            f'Telemetry unavailable for {unavailable_count} of '
+            f'{len(participants) + len(unavailable_manual)} riders; '
+            'they are omitted from the analysis.'
+        )
+    alignment_warnings = list(unavailable_warnings)
     unaligned_count = sum(
         rd['time_offset_source'] == 'none' for rd in all_processed.values()
     )
@@ -5953,6 +6013,7 @@ def api_ttt_fetch():
         'participants': participants,
         'race_distance_km': race_distance_km,
         'team_assignments': dict(team_assignments),
+        'unavailable_warnings': unavailable_warnings,
     }
 
     return jsonify({
@@ -5976,7 +6037,7 @@ def api_ttt_debug_starts():
     """
     headers = get_headers()
     if not headers:
-        return jsonify({'error': 'Not authenticated. Please log in first.'}), 401
+        return jsonify({'error': 'Zwift service unavailable.'}), 503
 
     raw_id = str(request.args.get('subgroup_id', '')).strip()
     if not raw_id.isdigit():
@@ -6403,6 +6464,7 @@ def api_ttt_reassign():
         'race_distance_km': cached.get('race_distance_km', 0),
         'unassigned': unassigned,
         'team_tags': ordered_tags,
+        'warnings': cached.get('unavailable_warnings', []),
     })
 
 

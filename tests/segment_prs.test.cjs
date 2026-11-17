@@ -8,7 +8,10 @@ function context(extra = {}) {
     const store = new Map();
     const state = vm.createContext({
         console, URLSearchParams, URL, setTimeout,
-        window: { location: { search: '', href: 'http://localhost/segment-prs' }, history: { replaceState() {} } },
+        window: {
+            location: { search: '', href: 'http://localhost/segment-prs' }, history: { replaceState() {} },
+            ZwiftRider: { ready: Promise.resolve(), url: url => `${url}?zwift_id=7` },
+        },
         document: { addEventListener() {}, getElementById() { return {}; }, querySelectorAll() { return []; } },
         localStorage: {
             getItem: key => store.get(key) ?? null,
@@ -375,7 +378,7 @@ test('cached loads skip fetches and failed requests remain explicit and retryabl
     vm.runInContext('renderSegmentTable = () => {}; segmentActivities.push({activity_id: "12", name: "Unavailable"});', state);
     state.saveSegmentCache(vm.runInContext('segmentActivities[0]', state), payload([row('A', 15)]));
     await state.loadSegmentActivities();
-    assert.deepEqual(requested, ['/api/segment_prs/activity/12']);
+    assert.deepEqual(requested, ['/api/segment_prs/activity/12?zwift_id=7']);
     assert.equal(vm.runInContext('segmentActivities[1].error', state), 'Telemetry unavailable');
     assert.equal(elements.get('retryBtn').hidden, false);
     assert.match(elements.get('loadStatus').textContent, /1 cached.*1 failed.*provisional/);

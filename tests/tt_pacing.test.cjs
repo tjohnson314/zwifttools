@@ -11,6 +11,7 @@ function plannerContext() {
     const elements = new Map();
     const storage = new Map();
     const browserWindow = {
+        ZwiftRider: { get: () => ({ id: '7' }), ready: Promise.resolve() },
         addEventListener() {},
         location: { href: 'http://localhost/tt-pacing' },
         history: { replaceState(state, title, url) { browserWindow.location.href = String(url); } },
@@ -38,7 +39,7 @@ function plannerContext() {
         },
     });
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../static/js/tt_pacing.js'), 'utf8'), context);
-    return { context, configs, legend, elements };
+    return { context, configs, legend, elements, storage };
 }
 
 function profile() {
@@ -46,6 +47,36 @@ function profile() {
         power_w: [250, 300, 200, 260], speed_kph: [35, 32, 40, 34],
         gradient_pct: [0, 2, -1, 1], surface_type: ['Tarmac', 'Dirt', 'Cobbles', 'Dirt'] };
 }
+
+test('switching active riders discards saved rider inputs without losing route and equipment', () => {
+    const { context, storage } = plannerContext();
+    storage.set('ttSettings', JSON.stringify({
+        riderId: '8', weightKg: 90, heightCm: 185, npTarget: 330,
+        routeId: 'route', frameId: 'frame',
+    }));
+    const settings = context.loadSettings();
+    assert.equal(settings.weightKg, undefined);
+    assert.equal(settings.heightCm, undefined);
+    assert.equal(settings.npTarget, undefined);
+    assert.equal(settings.routeId, 'route');
+    assert.equal(settings.frameId, 'frame');
+});
+
+test('active rider measurements prefill without overwriting manual edits or inventing NP', async () => {
+    const { context } = plannerContext();
+    context.window.ZwiftRider.profile = async () => ({ weight_kg: 80, height_cm: 190 });
+    vm.runInContext(`
+        document.getElementById('riderWeight').value = '72';
+        document.getElementById('riderHeight').value = '175';
+        document.getElementById('avgPower').value = '250';
+        editedRiderFields.add('riderWeight');
+        updateWperKg = () => {}; updatePlanButton = () => {}; saveSettings = () => {};
+    `, context);
+    await context.loadRiderProfile({});
+    assert.equal(context.document.getElementById('riderWeight').value, '72');
+    assert.equal(context.document.getElementById('riderHeight').value, 190);
+    assert.equal(context.document.getElementById('avgPower').value, '250');
+});
 
 test('TT elevation uses TTT surface colors and a deduplicated legend without mutating data', () => {
     const { context, configs, legend } = plannerContext();

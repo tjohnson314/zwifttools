@@ -20,6 +20,20 @@ def test_pre_refit_replay_cache_is_recleaned(tmp_path, caplog):
     assert cache_path.exists()
 
 
+def test_summary_preserves_exact_player_ids_with_missing_values(tmp_path):
+    from race_replay.data_cleaner import _summary_player_id
+
+    large_id = 9007199254740993
+    path = tmp_path / 'summary.csv'
+    data_fetcher._race_summary_dataframe([
+        {'player_id': large_id}, {'player_id': None},
+    ]).to_csv(path, index=False)
+    rows = pd.read_csv(path, dtype={'player_id': str})
+    assert _summary_player_id(rows.iloc[0]['player_id'], 1) == large_id
+    assert _summary_player_id('7681059.0', 2) == 7681059
+    assert _summary_player_id('9007199254740992.0', 3) is None
+
+
 @pytest.fixture
 def race_api(monkeypatch):
     activity = {
@@ -175,7 +189,11 @@ def test_saved_replay_refreshes_only_when_authenticated(
     (directory / 'race_meta.json').write_text(json.dumps({
         'source_activity_id': '101', 'event_subgroup_id': 456,
     }))
-    monkeypatch.setattr(app_module, 'get_headers', lambda: {'Authorization': 'test'} if authenticated else None)
+    if authenticated:
+        monkeypatch.setattr(app_module, 'get_headers', lambda **kwargs: {'Authorization': 'test'})
+    else:
+        monkeypatch.delenv('ZWIFT_USERNAME', raising=False)
+        monkeypatch.delenv('ZWIFT_PASSWORD', raising=False)
     fetch = Mock(return_value=(str(directory), 'Loaded'))
     monkeypatch.setattr(app_module, 'fetch_race_from_activity', fetch)
     race = Mock(
@@ -201,7 +219,7 @@ def test_authenticated_refresh_error_does_not_load_stale_roster(tmp_path, monkey
     directory = tmp_path / 'race_data' / 'race_data_456'
     directory.mkdir(parents=True)
     (directory / 'race_meta.json').write_text(json.dumps({'source_activity_id': '101'}))
-    monkeypatch.setattr(app_module, 'get_headers', lambda: {'Authorization': 'test'})
+    monkeypatch.setattr(app_module, 'get_headers', lambda **kwargs: {'Authorization': 'test'})
     monkeypatch.setattr(app_module, 'fetch_race_from_activity', Mock(return_value=(None, 'API unavailable')))
     response = app_module.app.test_client().post('/api/race/load', json={'race_id': 'race_data_456'})
     assert response.status_code == 502
@@ -221,7 +239,7 @@ def test_saved_event_refreshes_all_categories_and_manifest(tmp_path, monkeypatch
     subgroup = root / 'race_data_456'
     subgroup.mkdir()
     (subgroup / 'race_meta.json').write_text(json.dumps({'source_activity_id': '101'}))
-    monkeypatch.setattr(app_module, 'get_headers', lambda: {'Authorization': 'test'})
+    monkeypatch.setattr(app_module, 'get_headers', lambda **kwargs: {'Authorization': 'test'})
     fetch = Mock(return_value=(
         [(str(subgroup), 'A', 456), (str(root / 'race_data_789'), 'B', 789)],
         123, 'Event', None,

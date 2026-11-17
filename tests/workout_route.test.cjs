@@ -30,6 +30,11 @@ function pageContext(fetch = async () => { throw new Error('Unexpected request')
         return elements.get(id);
     }
     const context = vm.createContext({
+        window: { ZwiftRider: {
+            get: () => ({ id: '7', name: 'Test Rider' }),
+            ready: Promise.resolve(),
+            url: url => `${url}?zwift_id=7`,
+        } },
         document: { getElementById: element, createElement: () => ({}),
             addEventListener(name, callback) { listeners[name] = callback; } },
         Option: function(text, value) { this.text = text; this.value = value; },
@@ -233,6 +238,7 @@ test('responses for inputs edited while calculating are discarded', async () => 
 
 function cachedSettings() {
     return {
+        riderId: '7',
         riderWeight: '81.25', riderHeight: '183', ftp: '321.5',
         untargetedPercent: '92', includeLeadin: false,
         world: 'WATOPIA', routeId: 'route', frameId: 'saved-bike', wheelId: 'saved-wheel',
@@ -242,7 +248,7 @@ function cachedSettings() {
 
 function catalogResponse(url) {
     const data = {
-        '/api/my_profile': { weight_kg: 70, height_cm: 170, ftp_w: 200 },
+        '/api/my_profile?zwift_id=7': { weight_kg: 70, height_cm: 170, ftp_w: 200 },
         '/api/tt_pacing/routes?mode=free_ride': { routes: [
             { id: 'route', world: 'WATOPIA', world_name: 'Watopia', name: 'Test route',
                 distance_km: 10, ascent_m: 50, leadin_distance_km: 1, leadin_ascent_m: 5 },
@@ -276,6 +282,16 @@ test('reload restores rider overrides, route, bike, built-in workout and power a
     assert.equal(body.untargeted_percent, 92);
     assert.equal(element('estimateBtn').disabled, false);
     assert.deepEqual(JSON.parse(storage.get('workoutRouteSettings')), settings);
+});
+
+test('changing riders discards saved measurements and FTP but preserves course and equipment', () => {
+    const settings = { ...cachedSettings(), riderId: '8' };
+    const { context } = pageContext(catalogResponse,
+        new Map([['workoutRouteSettings', JSON.stringify(settings)]]));
+    const restored = context.loadSettings();
+    for (const key of ['riderWeight', 'riderHeight', 'ftp']) assert.equal(restored[key], undefined);
+    assert.equal(restored.routeId, settings.routeId);
+    assert.equal(restored.frameId, settings.frameId);
 });
 
 test('input and bike changes are saved automatically and survive another page load', async () => {
@@ -371,6 +387,7 @@ test('initial catalog loading does not overwrite cached choices or in-flight edi
     const page = pageContext(url => url === '/api/tt_pacing/routes?mode=free_ride'
         ? new Promise(done => { resolve = done; }) : catalogResponse(url), storage);
     const pending = page.initialize();
+    await new Promise(setImmediate);
     page.element('ftp').value = '350';
     for (const callback of page.element('ftp').listeners.input) callback();
     for (const callback of page.element('estimateForm').listeners.input) callback();

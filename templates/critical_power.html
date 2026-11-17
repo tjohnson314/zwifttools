@@ -11,11 +11,14 @@
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <a href="/" class="back-link">&larr; Back to Tools</a>
-            <h1>Critical Power Calculator</h1>
-            <p class="subtitle">Linear regression on work-duration data with CP, W&#8242;, and fit quality.</p>
-        </div>
+        <header class="header rider-page-header">
+            <div>
+                <a href="/" class="back-link">&larr; Back to Tools</a>
+                <h1>Critical Power Calculator</h1>
+                <p class="subtitle">Linear regression on work-duration data with CP, W&#8242;, and fit quality.</p>
+            </div>
+            {% include '_rider_header.html' %}
+        </header>
 
         <div class="equation-card">
             <p class="equation-label">Model equation</p>
@@ -37,9 +40,11 @@
             <div class="actions">
                 <button id="calculateBtn" class="btn primary" type="button">Calculate</button>
                 <button id="resetBtn" class="btn" type="button">Reset</button>
+                <button id="importLegacyCp" class="btn" type="button" hidden>Import previous unassigned inputs</button>
             </div>
 
             <p id="message" class="message"></p>
+            <p id="cpStorageStatus" class="help-text" role="status"></p>
         </div>
 
         <div class="input-card what-if-card">

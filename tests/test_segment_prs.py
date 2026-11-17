@@ -251,9 +251,9 @@ def mock_profile(monkeypatch):
     return profile
 
 
-def test_segment_page_requires_login_and_is_discoverable():
+def test_segment_page_is_public_and_is_discoverable():
     client = app_module.app.test_client()
-    assert client.get("/segment-prs").status_code == 302
+    assert client.get("/segment-prs").status_code == 200
     assert b'href="/segment-prs" class="tool-card"' in client.get("/").data
     with client.session_transaction() as session:
         session["tokens"] = {}
@@ -277,8 +277,8 @@ def test_recent_listing_reuses_90_day_pagination_and_isolates_profile(monkeypatc
                  "end_dt": now + timedelta(seconds=100), "duration_sec": 100}]
 
     monkeypatch.setattr(app_module, "_fetch_recent_activities_for_profile", fetch)
-    data = app_module.app.test_client().get("/api/segment_prs/activities").get_json()
-    assert calls == [(7, 90, 50)]
+    data = app_module.app.test_client().get("/api/segment_prs/activities?zwift_id=7").get_json()
+    assert calls == [("7", 90, 50)]
     assert data["profile_id"] == "7"
     assert data["weight_kg"] == 75
     assert data["height_cm"] == 180
@@ -294,7 +294,7 @@ def test_activity_api_records_traversals_with_current_measurements(monkeypatch):
     ))
     monkeypatch.setattr(app_module, "convert_telemetry_to_dataframe", lambda _: frame)
     monkeypatch.setattr(app_module, "world_segments", lambda *args: [segment([(0, 0), (100, 0)])])
-    response = app_module.app.test_client().get("/api/segment_prs/activity/11")
+    response = app_module.app.test_client().get("/api/segment_prs/activity/11?zwift_id=7")
     assert response.status_code == 200
     data = response.get_json()
     assert len(data["traversals"]) == 1
@@ -317,7 +317,7 @@ def test_activity_api_can_match_without_optional_sensors(monkeypatch):
         telemetry, {"profileId": 7, "worldId": 1}, None,
     ))
     monkeypatch.setattr(app_module, "world_segments", lambda *args: [segment([(0, 0), (100, 0)])])
-    response = app_module.app.test_client().get("/api/segment_prs/activity/11")
+    response = app_module.app.test_client().get("/api/segment_prs/activity/11?zwift_id=7")
     assert response.status_code == 200
     data = response.get_json()
     assert len(data["traversals"]) == 1
@@ -334,7 +334,7 @@ def test_video_activity_reports_unavailable_timed_segments_not_a_load_failure(mo
          "longitude": [-4.89, -4.89]},
         {"profileId": 7, "worldId": world_id, "routeId": 2010849247}, None,
     ))
-    response = app_module.app.test_client().get("/api/segment_prs/activity/11")
+    response = app_module.app.test_client().get("/api/segment_prs/activity/11?zwift_id=7")
     assert response.status_code == 200
     data = response.get_json()
     assert data["traversals"] == []
@@ -365,7 +365,7 @@ def test_activity_api_does_not_cache_failures_or_other_users(monkeypatch, owner,
     mock_profile(monkeypatch)
     monkeypatch.setattr(app_module, "fetch_rider_telemetry",
                         lambda *args: ({"test": True}, {"profileId": owner, "worldId": 1}, error))
-    response = app_module.app.test_client().get("/api/segment_prs/activity/11")
+    response = app_module.app.test_client().get("/api/segment_prs/activity/11?zwift_id=7")
     assert response.status_code == status
     assert "error" in response.get_json()
     assert "traversals" not in response.get_json()
@@ -374,16 +374,16 @@ def test_activity_api_does_not_cache_failures_or_other_users(monkeypatch, owner,
 def test_segment_api_authentication_and_request_failure(monkeypatch):
     monkeypatch.setattr(app_module, "get_headers", lambda: None)
     client = app_module.app.test_client()
-    assert client.get("/api/segment_prs/activity/11").status_code == 401
-    assert client.get("/api/segment_prs/activities").status_code == 401
+    assert client.get("/api/segment_prs/activity/11?zwift_id=7").status_code == 503
+    assert client.get("/api/segment_prs/activities?zwift_id=7").status_code == 503
     mock_profile(monkeypatch)
-    assert client.get("/api/segment_prs/activity/invalid").status_code == 400
+    assert client.get("/api/segment_prs/activity/invalid?zwift_id=7").status_code == 400
 
     def fail(*args, **kwargs):
         raise requests.Timeout()
 
     monkeypatch.setattr(app_module, "fetch_rider_telemetry", fail)
-    assert client.get("/api/segment_prs/activity/11").status_code == 502
+    assert client.get("/api/segment_prs/activity/11?zwift_id=7").status_code == 502
 
 
 def test_real_catalog_deduplicates_directional_segments():

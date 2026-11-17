@@ -218,10 +218,10 @@ def request_body():
     }
 
 
-def test_page_requires_login_and_has_all_inputs(client):
+def test_page_is_public_and_has_all_inputs(client):
     anonymous = app_module.app.test_client()
-    assert anonymous.get("/workout-route").status_code == 302
-    assert anonymous.post("/api/workout_route_plan", json={}).status_code == 401
+    assert anonymous.get("/workout-route").status_code == 200
+    assert anonymous.post("/api/workout_route_plan", json={}).status_code == 400
     response = client.get("/workout-route")
     assert response.status_code == 200
     for field in ("ftp", "riderWeight", "riderHeight", "frameSelect", "routeSelect", "workoutSelect", "workoutFile"):
