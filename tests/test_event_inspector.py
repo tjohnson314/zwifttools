@@ -329,6 +329,29 @@ def test_event_route_escalator_overlays_and_details(upstream, map_id, route_id, 
         assert 'class="escalator-key"' not in html
 
 
+@pytest.mark.parametrize("identical", [True, False])
+def test_powerup_section_merges_matching_event_and_pen_tags(upstream, identical):
+    tags = ["starting_powerup=0", 'arch_powerup="74,0"']
+    upstream.return_value = event_response({
+        "id": 1, "tags": tags, "eventSubgroups": [{
+            "id": 2, "subgroupLabel": "A",
+            "tags": tags if identical else ["starting_powerup=8"],
+        }],
+    })
+    response = app_module.app.test_client().get("/api/events/1?view=readable")
+    assert response.status_code == 200
+    html = response.get_json()["summary_html"]
+    section = html.split('<section class="powerup-settings">', 1)[1].split("</section>", 1)[0]
+    assert ("Event and pen tags are identical; these powerup settings apply to both." in section) is identical
+    assert section.count("Starting powerup</dt>") == (1 if identical else 2)
+    if identical:
+        assert "<h4>" not in section
+    else:
+        assert "<h4>Event tags</h4>" in section
+        assert "<h4>Pen tags</h4>" in section
+        assert "Anvil (ID 8)" in section
+
+
 def test_readable_pens_render_tabs_and_individual_routes_with_arch_awards(upstream):
     event = {
         "id": 1, "mapId": 1, "routeId": 3536020075,

@@ -109,6 +109,7 @@ status and unavailable profiles are reported without breaking the Roster tab.
 - Arches without an ID are treated as arch 0. Without an override or distribution, the displayed default is random Feather/Van/Aero, with no assumed probabilities. This describes award selection, not which arches award powerups
 - Event and pen powerup tags remain separate rather than guessing precedence between conflicting sources. Disabled powerup settings and malformed overrides remain visible for inspection
 - When event and pen tags are identical, the route preview notes this once at the top instead of repeating source labels at every arch
+- The Powerups section also shows matching event/pen settings once with a shared-source note; differing settings keep separate source headings
 - Pens use accessible tabs (click or Arrow Left/Right, Home, and End) rather than stacked cards
 - Each pen includes a route map, elevation profile, timing segments, and numbered arches with configured powerups or fallback pools. Hover an arch for its award or select it to jump to the details table
 - New York escalators use the same cached race-route zones as Route Explorer, with gold map highlights and elevation bands; hover or expand the escalator list for distances and trainer-slope percentages
