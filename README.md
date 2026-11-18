@@ -94,6 +94,18 @@ each 60-rider batch. Authentication stays under
 can serve its worker at `/worker` on its temporary local port. Stats collection
 status and unavailable profiles are reported without breaking the Roster tab.
 
+### Event Inspector
+
+- Open `/event-inspector` and enter a Zwift event ID, or share `/event-inspector?event_id=5795670`
+- View, copy, or download the full event JSON, including every subgroup, rules, and tags
+- Read per-pen summaries with map/route names, local route measurements, UTC schedules, rider counts, equipment settings, decoded rules, and powerup IDs/percentages
+- Event timestamps accept compact offsets (`+0000`, `-0800`), colon-separated offsets, and `Z`; displayed times are converted to UTC
+- Pens are sorted by label. Event and pen rules/tags remain distinguishable; unknown codes and unspecified settings are not guessed. Account-relative signup/followed-rider fields are labeled as service-account state
+- Uses the existing server-side Zwift account; no active rider selection is required
+- Preserves large numeric IDs in the displayed and downloaded JSON; no event fields are filtered out
+- Private, missing, or inaccessible events and service failures are reported explicitly
+- Powerup settings are shown as returned: `starting_powerup` alone does not define arch awards, and missing distribution tags do not establish that powerups are disabled
+
 ### Bike Comparison
 
 - Load any Zwift activity by URL/ID or upload a .fit file

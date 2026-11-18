@@ -54,6 +54,7 @@ from bike_comparison.ttt_planner import (
 )
 from bike_comparison.workout_route import simulate_workout_route, validate_workout
 from shared.utils import calculate_normalized_power
+from shared.datetime_utils import parse_iso_datetime
 from shared.data_fetcher import (
     fetch_rider_telemetry, convert_telemetry_to_dataframe,
     fetch_race_from_activity, get_activity_details,
@@ -285,6 +286,41 @@ def race_replay():
     # The FAQ quotes the analyzer's thresholds, so they stay in sync with the code.
     from race_replay import race_analyzer
     return render_template('race_replay.html', ra=race_analyzer)
+
+
+@app.route('/event-inspector')
+def event_inspector():
+    return render_template('event_inspector.html')
+
+
+@app.route('/api/events/<event_id>')
+def api_event_settings(event_id):
+    if not re.fullmatch(r'[0-9]{1,20}', event_id) or int(event_id) <= 0:
+        raise ZwiftAPIError('event_id must be a positive numeric ID.', 400)
+    event_id = str(int(event_id))
+    response = _request_with_retry(
+        'GET', f'{BASE_URL}/events/{event_id}',
+        headers=get_headers(), timeout=30)
+    _check_zwift_response(response, 'Could not fetch event settings from Zwift. '
+                          'The event may be private, unavailable, or inaccessible to the service account.')
+    try:
+        event = response.json()
+    except ValueError:
+        raise ZwiftAPIError('Invalid event response from Zwift.', 502) from None
+    if not isinstance(event, dict) or str(event.get('id')) != event_id:
+        raise ZwiftAPIError('Invalid event response from Zwift.', 502)
+    raw_json = json.dumps(event, indent=2, ensure_ascii=True)
+    if request.args.get('view') == 'readable':
+        from shared.event_settings import summarize_event
+        result = jsonify({
+            'summary_html': render_template('_event_summary.html', summary=summarize_event(event)),
+            'raw_json': raw_json,
+        })
+        result.headers['Cache-Control'] = 'no-store'
+        return result
+    return Response(
+        raw_json,
+        mimetype='application/json', headers={'Cache-Control': 'no-store'})
 
 
 _DIRT_ROSTER_FILE = Path(__file__).parent / 'dirt_s14_roster.json'
@@ -1080,14 +1116,8 @@ def _parse_zwift_datetime(value):
     # Strip trailing zone labels like "[UTC]".
     text = re.sub(r'\[[^\]]+\]$', '', text).strip()
 
-    if text.endswith('Z'):
-        text = text[:-1] + '+00:00'
-
-    # Convert +0000/-0700 to +00:00/-07:00 for fromisoformat.
-    text = re.sub(r'([+\-]\d{2})(\d{2})$', r'\1:\2', text)
-
     try:
-        dt = datetime.fromisoformat(text)
+        dt = parse_iso_datetime(text)
     except ValueError:
         dt = None
 
