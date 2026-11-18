@@ -108,6 +108,7 @@ status and unavailable profiles are reported without breaking the Roster tab.
 - Powerup summaries use the working rule model: `NO_POWERUPS` in event or pen rules disables powerups; otherwise `starting_powerup` assigns the pen powerup, `arch_powerup` supplies arch-ID/powerup-ID override pairs, and `powerup_percent` supplies the distribution for arches without a matching override
 - Arches without an ID are treated as arch 0. Without an override or distribution, the displayed default is random Feather/Van/Aero, with no assumed probabilities. This describes award selection, not which arches award powerups
 - Event and pen powerup tags remain separate rather than guessing precedence between conflicting sources. Disabled powerup settings and malformed overrides remain visible for inspection
+- When event and pen tags are identical, the route preview notes this once at the top instead of repeating source labels at every arch
 - Pens use accessible tabs (click or Arrow Left/Right, Home, and End) rather than stacked cards
 - Each pen includes a route map, elevation profile, timing segments, and numbered arches with configured powerups or fallback pools. Hover an arch for its award or select it to jump to the details table
 - Previews show the cached race lead-in plus one route lap, not a reconstruction of event laps, distance/time limits, or individual pen approaches. Native disabled-award flags, overlapping arch entities, and arches at the preview start are explicitly marked as uncertain; configured awards remain visible

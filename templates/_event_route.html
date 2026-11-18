@@ -4,6 +4,9 @@
     <p class="hint">{{ preview.error }}</p>
     {% else %}
     <h3>Route preview: {{ preview.name }}</h3>
+    {% if preview.identical_tags %}
+    <p class="hint">Event and pen tags are identical; the expected powerups below apply to both.</p>
+    {% endif %}
     <p class="hint">Race lead-in plus one route lap. Distances include the lead-in; this preview is not expanded or shortened for event laps, distance, or time limits. The actual approach from an individual pen has not been identified.</p>
     <p><a href="/surface-map?world={{ preview.map_id }}&amp;route={{ preview.route_id }}&amp;mode=race">Open in Route Explorer</a></p>
     <div class="route-legend" aria-label="Chart legend">
@@ -26,7 +29,7 @@
         {% for arch in preview.arches %}
         <a href="#pen-{{ pen_index }}-arch-{{ arch.number }}" aria-label="Arch {{ arch.number }}: {{ arch.name }}">
             <title>{{ arch.name }} - arch ID {{ arch.effective_id }}{% if arch.arch_id is none %} (missing ID treated as 0){% endif %}
-{% for source, award in arch.awards %}{{ source }}: {{ award }}
+{% for source, award in arch.awards %}{% if not preview.identical_tags %}{{ source }}: {% endif %}{{ award }}
 {% endfor %}{% if arch.warning %}{{ arch.warning }}{% endif %}</title>
             <circle class="arch-dot{% if arch.warning %} uncertain{% endif %}" cx="{{ arch.map[0] }}" cy="{{ arch.map[1] }}" r="5" />
             <text class="arch-number" x="{{ arch.map[0] + 7 }}" y="{{ arch.map[1] - 8 + (loop.index0 % 3) * 13 }}">{{ arch.number }}</text>
@@ -52,7 +55,7 @@
         {% for arch in preview.arches %}
         <a href="#pen-{{ pen_index }}-arch-{{ arch.number }}" aria-label="Arch {{ arch.number }}: {{ arch.name }}">
             <title>{{ arch.name }} at {{ '%.2f'|format(arch.distance_km) }} km
-{% for source, award in arch.awards %}{{ source }}: {{ award }}
+{% for source, award in arch.awards %}{% if not preview.identical_tags %}{{ source }}: {% endif %}{{ award }}
 {% endfor %}{% if arch.warning %}{{ arch.warning }}{% endif %}</title>
             <circle class="arch-dot{% if arch.warning %} uncertain{% endif %}" cx="{{ arch.profile[0] }}" cy="{{ arch.profile[1] }}" r="4" />
             <text class="arch-number" x="{{ arch.profile[0] + 3 }}" y="{{ arch.profile[1] + 18 + (loop.index0 % 2) * 13 if arch.profile[1] < 60 else arch.profile[1] - 9 - (loop.index0 % 2) * 13 }}">{{ arch.number }}</text>
@@ -71,7 +74,7 @@
             <tr id="pen-{{ pen_index }}-arch-{{ arch.number }}" tabindex="-1">
                 <td>{{ arch.number }}<br>{{ '%.2f'|format(arch.distance_km) }} km{% if arch.leg == 'leadin' %}<br>Lead-in{% endif %}</td>
                 <td>{{ arch.name }}<br><span class="hint">ID {{ arch.effective_id }}{% if arch.arch_id is none %} (not set; using 0){% endif %}</span></td>
-                <td>{% for source, award in arch.awards %}<p><strong>{{ source }}:</strong> {{ award }}</p>{% endfor %}
+                <td>{% for source, award in arch.awards %}<p>{% if not preview.identical_tags %}<strong>{{ source }}:</strong> {% endif %}{{ award }}</p>{% endfor %}
                     {% if arch.warning %}<p class="route-warning">{{ arch.warning }}</p>{% endif %}</td>
             </tr>
             {% endfor %}

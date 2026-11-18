@@ -287,6 +287,31 @@ def test_disabled_powerups_override_starting_arch_and_distribution_tags(upstream
     assert "Default for arches without a matching override" not in html
 
 
+@pytest.mark.parametrize("identical", [True, False])
+def test_arch_sources_are_not_repeated_when_event_and_pen_tags_match(upstream, identical):
+    tags = ['arch_powerup="11,1"']
+    upstream.return_value = event_response({
+        "id": 1, "mapId": 4, "routeId": 2898229208, "tags": tags,
+        "eventSubgroups": [{
+            "id": 2, "subgroupLabel": "A",
+            "tags": tags if identical else ['arch_powerup="11,0"'],
+        }],
+    })
+    response = app_module.app.test_client().get("/api/events/1?view=readable")
+    assert response.status_code == 200
+    html = response.get_json()["summary_html"]
+    route_html = html.split('<section class="event-route"', 1)[1]
+    assert ("Event and pen tags are identical;" in route_html) is identical
+    assert "Event and pen tags (identical):" not in route_html
+    assert "Arch override: Draft" in route_html
+    if identical:
+        assert "<strong>" not in route_html
+    else:
+        assert "<strong>Event tags:</strong>" in route_html
+        assert "<strong>Pen tags:</strong>" in route_html
+        assert "Arch override: Feather" in route_html
+
+
 def test_readable_pens_render_tabs_and_individual_routes_with_arch_awards(upstream):
     event = {
         "id": 1, "mapId": 1, "routeId": 3536020075,
