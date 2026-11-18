@@ -11,13 +11,13 @@ from shared.datetime_utils import parse_iso_datetime
 
 
 POWERUPS = {
-    0: "Feather / Lightweight",
-    1: "Draft Boost (Van)",
-    2: "Small XP Bonus",
-    3: "Large XP Bonus",
+    0: "Feather",
+    1: "Draft",
+    2: "Small XP",
+    3: "Large XP",
     4: "Burrito",
-    5: "Aero Boost (Helmet)",
-    6: "Ghost / Cloaking",
+    5: "Aero",
+    6: "Ghost",
     7: "Steamroller",
     8: "Anvil",
     9: "Coffee Stop",
@@ -88,18 +88,44 @@ def _distribution(value):
     return "; ".join(awards)
 
 
+def _arch_powerup_pairs(value):
+    parts = [part.strip() for part in value.strip('"').split(",")]
+    if len(parts) % 2 or not all(
+        re.fullmatch(r"-?[0-9]+", arch_id) for arch_id in parts[::2]
+    ):
+        return None
+    return list(zip(parts[::2], parts[1::2]))
+
+
+def _arch_powerup_rows(value):
+    pairs = _arch_powerup_pairs(value)
+    if pairs is None:
+        return [("Arch-specific powerups", f"Unrecognized arch override: {value}")]
+    return [
+        (
+            f"Arch {arch_id}" + (" (including arches without an ID)" if int(arch_id) == 0 else ""),
+            _powerup(powerup_id),
+        )
+        for arch_id, powerup_id in pairs
+    ]
+
+
 def _powerup_rows(tags):
     rows = []
     for tag in tags:
         key, separator, value = tag.partition("=")
         if key == "starting_powerup" and separator:
             rows.append(("Starting powerup", _powerup(value.strip('"'))))
+        elif key == "arch_powerup" and separator:
+            rows.extend(_arch_powerup_rows(value))
         elif key == "powerup_percent" and separator:
-            rows.append(("Arch award distribution", _distribution(value)))
+            rows.append(("Fallback arch award distribution", _distribution(value)))
     if not any(tag.startswith("starting_powerup=") for tag in tags):
         rows.append(("Starting powerup", "Not specified in these tags"))
+    if not any(tag.startswith("arch_powerup=") for tag in tags):
+        rows.append(("Arch-specific powerups", "Not specified in these tags"))
     if not any(tag.startswith("powerup_percent=") for tag in tags):
-        rows.append(("Arch award distribution", "Not specified in these tags"))
+        rows.append(("Fallback arch award distribution", "Not specified in these tags"))
     return rows
 
 
@@ -108,6 +134,8 @@ def _rule_labels(rules):
 
 
 def _pen_summary(event, pen):
+    from shared.event_route import build_event_route
+
     def value(key):
         return pen[key] if key in pen else event.get(key)
 
@@ -140,13 +168,18 @@ def _pen_summary(event, pen):
     powerups = [{"title": title, "rows": _powerup_rows(tags)} for title, tags in tag_sets]
     all_rules = (event.get("rulesSet") or []) + (pen.get("rulesSet") or [])
     powerup_note = (
-        "NO_POWERUPS is present in the event or pen rules. The starting tag is shown separately; "
-        "these fields do not establish how conflicting settings are resolved."
+        "Powerups disabled: NO_POWERUPS is present in the event or pen rules. "
+        "The powerup tags are retained for inspection but do not apply."
         if "NO_POWERUPS" in all_rules else
         "No NO_POWERUPS rule is present in the supplied event or pen rules. "
-        "A starting powerup alone does not disable or specify later arch awards. "
-        "Without an explicit distribution, random arch awards are not ruled out."
     )
+    if "NO_POWERUPS" not in all_rules and not any(
+        tag.startswith("powerup_percent=") for tag in event_tags + pen_tags
+    ):
+        powerup_note += (
+            " Default for arches without a matching override: random Feather, "
+            "Draft, or Aero."
+        )
     sections = [
         {"title": "Event and pen", "rows": [
             ("Name", _display(value("name"))),
@@ -210,6 +243,7 @@ def _pen_summary(event, pen):
         "has_pen": bool(pen),
         "powerups": powerups,
         "powerup_note": powerup_note,
+        "route_preview": build_event_route(map_id, route_id, tag_sets, all_rules),
         "controls": [
             {"title": title, "values": [
                 meaning for tag, meaning in [
@@ -234,14 +268,17 @@ def _pen_summary(event, pen):
 def summarize_event(event):
     pens = event.get("eventSubgroups") or []
     ordered_pens = sorted(pens, key=lambda pen: str(pen.get("subgroupLabel") or pen.get("label") or ""))
+    visibility = {
+        "CULLING_SUBGROUP_ONLY": "Only riders in the same pen (CULLING_SUBGROUP_ONLY)",
+        "CULLING_EVENT_ONLY": "Only riders in the same event, across all pens (CULLING_EVENT_ONLY)",
+    }.get(event.get("cullingType"), _display(event.get("cullingType")))
     return {
         "name": _display(event.get("name")),
         "id": _display(event.get("id")),
         "description": _display(event.get("description")),
         "settings": [
             ("Event start", _time(event.get("eventStart"))),
-            ("Rider visibility mode", "Only riders in the same pen (CULLING_SUBGROUP_ONLY)"
-             if event.get("cullingType") == "CULLING_SUBGROUP_ONLY" else _display(event.get("cullingType"))),
+            ("Rider visibility mode", visibility),
         ] + [(label, _display(event.get(key))) for key, label in [
             ("totalEntrantCount", "Total entrants"),
             ("totalJoinedCount", "Total joined"),

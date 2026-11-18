@@ -4,12 +4,30 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 
-async function inspector({ search = '', responses = [] } = {}) {
+async function inspector({ search = '', responses = [], penCount = 0 } = {}) {
     const elements = {};
     const requests = [];
     const revoked = [];
     const blobs = [];
     const copied = [];
+    function element(id) {
+        return elements[id] ||= {
+            value: '', textContent: '', disabled: false, hidden: true, dataset: {},
+            listeners: {}, attributes: {},
+            addEventListener(name, callback) { this.listeners[name] = callback; },
+            removeAttribute(name) { delete this[name]; },
+            setAttribute(name, value) { this.attributes[name] = value; },
+            getAttribute(name) { return this.attributes[name]; },
+            querySelectorAll() { return this.tabs || []; },
+            focus() { this.focused = true; },
+        };
+    }
+    element('event-summary').tabs = Array.from({ length: penCount }, (_, index) => {
+        const tab = element(`pen-tab-${index + 1}`);
+        tab.setAttribute('aria-controls', `pen-${index + 1}`);
+        element(`pen-${index + 1}`);
+        return tab;
+    });
     const window = {
         location: { search, href: `http://localhost/event-inspector${search}` },
         history: { replaceState(state, title, url) { window.location.href = String(url); } },
@@ -22,14 +40,7 @@ async function inspector({ search = '', responses = [] } = {}) {
         URL: BrowserURL, URLSearchParams, Blob, window,
         navigator: { clipboard: { writeText: async text => copied.push(text) } },
         document: {
-            getElementById(id) {
-                return elements[id] ||= {
-                    value: '', textContent: '', disabled: false, hidden: true, dataset: {},
-                    listeners: {},
-                    addEventListener(name, callback) { this.listeners[name] = callback; },
-                    removeAttribute(name) { delete this[name]; },
-                };
-            },
+            getElementById: element,
         },
         fetch: async (url, options) => {
             requests.push({ url, options });
@@ -102,4 +113,38 @@ test('network failures are reported and controls become available again', async 
     assert.equal(ui.elements['event-status'].dataset.error, 'true');
     assert.equal(ui.elements['event-result'].hidden, true);
     assert.equal(ui.elements['load-event'].disabled, false);
+});
+
+test('pen tabs show only the selected panel and support click and keyboard navigation', async () => {
+    const ui = await inspector({ penCount: 3, responses: [
+        { ok: true, json: async () => ({ raw_json: '{"id":1}', summary_html: '<article>Tabbed pens</article>' }) },
+    ] });
+    await ui.load('1');
+    const tabs = ui.elements['event-summary'].tabs;
+    function selected(index) {
+        tabs.forEach((tab, position) => {
+            assert.equal(tab.getAttribute('aria-selected'), String(index === position));
+            assert.equal(tab.tabIndex, position === index ? 0 : -1);
+            assert.equal(ui.elements[`pen-${position + 1}`].hidden, position !== index);
+        });
+    }
+    function key(index, value) {
+        let prevented = false;
+        tabs[index].listeners.keydown({ key: value, preventDefault() { prevented = true; } });
+        assert.equal(prevented, true);
+    }
+    selected(0);
+    tabs[1].listeners.click();
+    selected(1);
+    key(1, 'ArrowRight');
+    selected(2);
+    assert.equal(tabs[2].focused, true);
+    key(2, 'ArrowRight');
+    selected(0);
+    key(0, 'ArrowLeft');
+    selected(2);
+    key(2, 'Home');
+    selected(0);
+    key(0, 'End');
+    selected(2);
 });

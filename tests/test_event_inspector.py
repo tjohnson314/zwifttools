@@ -135,8 +135,8 @@ def test_readable_pens_resolve_course_decode_settings_and_keep_original_json(ups
     assert "2026-11-18 18:17:00 UTC" in html
     assert html.index("Pen A</h2>") < html.index("Pen C</h2>")
     assert "Anvil (ID 8)" in html
-    assert "random arch awards are not ruled out" in html
-    assert "Arch award distribution</dt><dd>Not specified in these tags" in html
+    assert "Default for arches without a matching override: random Feather" in html
+    assert "Fallback arch award distribution</dt><dd>Not specified in these tags" in html
     assert "Steering disabled" in html and "Braking disabled" in html
     assert "zPower / estimated power not allowed" in html
     assert "Service account signed up" in html
@@ -184,7 +184,7 @@ def test_unrecognized_powerup_distribution_is_explicit(upstream, tag):
     assert response.status_code == 200
     html = response.get_json()["summary_html"]
     assert "Unrecognized distribution:" in html
-    assert "Arch award distribution</dt><dd>Not specified in these tags" not in html
+    assert "Fallback arch award distribution</dt><dd>Not specified in these tags" not in html
 
 
 def test_missing_settings_are_not_zeroes_and_disabled_powerups_are_explicit(upstream):
@@ -194,4 +194,123 @@ def test_missing_settings_are_not_zeroes_and_disabled_powerups_are_explicit(upst
     assert "Duration setting</dt><dd>Not specified</dd>" in html
     assert "Distance setting</dt><dd>Not specified</dd>" in html
     assert "NO_POWERUPS is present" in html
-    assert "random arch awards are not ruled out" not in html
+    assert "Default for arches without a matching override" not in html
+    assert "powerup tags are retained for inspection but do not apply" in html
+
+
+@pytest.mark.parametrize("mode,expected", [
+    ("CULLING_EVENT_ONLY", "Only riders in the same event, across all pens (CULLING_EVENT_ONLY)"),
+    ("CULLING_SUBGROUP_ONLY", "Only riders in the same pen (CULLING_SUBGROUP_ONLY)"),
+    ("UNKNOWN_MODE", "UNKNOWN_MODE"),
+    (None, "Not specified"),
+])
+def test_readable_visibility_distinguishes_event_and_pen_scope(upstream, mode, expected):
+    upstream.return_value = event_response({"id": 1, "cullingType": mode})
+    response = app_module.app.test_client().get("/api/events/1?view=readable")
+    assert response.status_code == 200
+    assert f"Rider visibility mode</dt><dd>{expected}</dd>" in response.get_json()["summary_html"]
+
+
+@pytest.mark.parametrize("event_settings,pen_settings,expected", [
+    ({}, {}, True),
+    ({"tags": ["starting_powerup=8"]}, {}, True),
+    ({}, {"tags": ["starting_powerup=8"]}, True),
+    ({"rulesSet": ["NO_POWERUPS"]}, {}, False),
+    ({}, {"rulesSet": ["NO_POWERUPS"]}, False),
+    ({"tags": ['powerup_percent="1,50,5,50"']}, {}, False),
+    ({}, {"tags": ['powerup_percent="1,50,5,50"']}, False),
+    ({}, {"tags": ['powerup_percent="unrecognized"']}, False),
+    ({"tags": ['arch_powerup="0,2,4,1,11,1"']}, {}, True),
+    ({}, {"tags": ['arch_powerup="74,0"']}, True),
+])
+def test_default_arch_powerup_note_only_when_neither_source_disables_or_sets_distribution(
+    upstream, event_settings, pen_settings, expected
+):
+    upstream.return_value = event_response({
+        "id": 1, **event_settings,
+        "eventSubgroups": [{"id": 2, "subgroupLabel": "A", **pen_settings}],
+    })
+    response = app_module.app.test_client().get("/api/events/1?view=readable")
+    assert response.status_code == 200
+    html = response.get_json()["summary_html"]
+    assert ("Default for arches without a matching override" in html) is expected
+    if expected:
+        assert "Feather, Draft Boost (Van), or Aero Boost (Helmet)" in html
+        assert "Default probabilities are not specified." in html
+
+
+def test_arch_overrides_decode_separately_from_starting_and_fallback_powerups(upstream):
+    event = {
+        "id": 1,
+        "tags": ["starting_powerup=0", 'arch_powerup="0,0,74,0"',
+                 'powerup_percent="2,95,3,5"'],
+    }
+    upstream.return_value = event_response(event)
+    response = app_module.app.test_client().get("/api/events/1?view=readable")
+    data = response.get_json()
+    html = data["summary_html"]
+    assert "Starting powerup</dt><dd>Feather / Lightweight (ID 0)" in html
+    assert "Arch 0 (including arches without an ID)</dt><dd>Feather / Lightweight (ID 0)" in html
+    assert "Arch 74</dt><dd>Feather / Lightweight (ID 0)" in html
+    assert "Fallback arch award distribution</dt><dd>Small XP Bonus (ID 2): 95%; Large XP Bonus (ID 3): 5%" in html
+    assert "arch_powerup takes priority over powerup_percent" in html
+    assert "powerup_percent applies only to arches without a matching override" in html
+    assert "Default for arches without a matching override" not in html
+    assert json.loads(data["raw_json"]) == event
+
+
+@pytest.mark.parametrize("value", ['"0,0,74"', '""', '"<script>,0"'])
+def test_malformed_arch_overrides_are_explicit_and_escaped(upstream, value):
+    upstream.return_value = event_response({"id": 1, "tags": [f"arch_powerup={value}"]})
+    response = app_module.app.test_client().get("/api/events/1?view=readable")
+    assert response.status_code == 200
+    html = response.get_json()["summary_html"]
+    assert "Unrecognized arch override:" in html
+    assert "<script>" not in html
+
+
+def test_disabled_powerups_override_starting_arch_and_distribution_tags(upstream):
+    upstream.return_value = event_response({
+        "id": 1, "tags": ["starting_powerup=8", 'arch_powerup="11,1"'],
+        "eventSubgroups": [{
+            "id": 2, "rulesSet": ["NO_POWERUPS"],
+            "tags": ['arch_powerup="74,123"', 'powerup_percent="2,100"'],
+        }],
+    })
+    response = app_module.app.test_client().get("/api/events/1?view=readable")
+    html = response.get_json()["summary_html"]
+    assert "Powerups disabled: NO_POWERUPS is present" in html
+    assert "powerup tags are retained for inspection but do not apply" in html
+    assert "Arch 11</dt><dd>Draft Boost (Van) (ID 1)" in html
+    assert "Arch 74</dt><dd>Unknown powerup (ID 123)" in html
+    assert "Event tags</h4>" in html and "Pen tags</h4>" in html
+    assert "Default for arches without a matching override" not in html
+
+
+def test_readable_pens_render_tabs_and_individual_routes_with_arch_awards(upstream):
+    event = {
+        "id": 1, "mapId": 1, "routeId": 3536020075,
+        "eventSubgroups": [
+            {"id": 2, "subgroupLabel": "A", "tags": ['arch_powerup="0,0,74,0"']},
+            {"id": 3, "subgroupLabel": "B", "mapId": 4, "routeId": 2898229208,
+             "tags": ['arch_powerup="11,1"']},
+        ],
+    }
+    upstream.return_value = event_response(event)
+    response = app_module.app.test_client().get("/api/events/1?view=readable")
+    assert response.status_code == 200
+    data = response.get_json()
+    html = data["summary_html"]
+    assert 'role="tablist" aria-label="Event pens"' in html
+    assert 'role="tabpanel" aria-labelledby="pen-tab-1" tabindex="0">' in html
+    assert 'role="tabpanel" aria-labelledby="pen-tab-2" tabindex="0" hidden>' in html
+    assert "Route preview: Three Step Sisters" in html
+    assert "Route preview: Watts the Limit" in html
+    assert "Woodland Sprint Reverse" in html and "Grade01" in html
+    assert "Whether the event configuration enables an award is uncertain" in html
+    assert "Arch override: Feather / Lightweight" in html
+    assert "Arch override: Draft Boost (Van)" in html
+    assert 'id="pen-1-arch-1"' in html and 'id="pen-2-arch-1"' in html
+    assert 'class="route-map"' in html and 'class="route-profile"' in html
+    assert "not expanded or shortened for event laps, distance, or time limits" in html
+    assert json.loads(data["raw_json"]) == event

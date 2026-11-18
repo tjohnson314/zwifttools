@@ -563,6 +563,127 @@ def parse_segment_definitions(data: bytes) -> list[dict]:
     return definitions
 
 
+def parse_arch_definitions(data: bytes) -> list[dict]:
+    """Keep award IDs and flags, including non-leaderboard power arches."""
+    definitions = []
+    for index, entity in enumerate(load_multiroot(data).iter("ent")):
+        attributes = entity.attrib
+        if attributes.get("type") not in ("ENTITY_TYPE_TIMINGARCH", "ENTITY_TYPE_POWERARCH"):
+            continue
+        road_time = float(attributes["m_roadTime"])
+        if not math.isfinite(road_time):
+            raise ValueError(f"Invalid road time for arch {index}")
+        definitions.append({
+            "entity": index,
+            "name": attributes.get("m_Name") or attributes.get("m_ArchFriendlyName") or f"Arch {index}",
+            "forward_name": attributes.get("m_ArchFriendlyName"),
+            "reverse_name": attributes.get("m_ArchFriendlyNameR"),
+            "arch_id": int(attributes["m_ArchId"]) if "m_ArchId" in attributes else None,
+            "road_id": int(attributes.get("m_roadId", "0")),
+            "road_time": road_time,
+            "forward_enabled": attributes.get("m_bEnableForward") != "0",
+            "reverse_enabled": attributes.get("m_bEnableBackward") != "0",
+            "gives_powerup": attributes.get("m_bGivesPowerUp") != "0",
+            "type": "power" if attributes["type"] == "ENTITY_TYPE_POWERARCH" else "timing",
+        })
+    return definitions
+
+
+def derive_arch_passages(root: ET.Element, definitions: list[dict]) -> list[dict]:
+    """Locate every arch crossing on the full race lead-in plus one route lap."""
+    lead = root.find("leadinhighrescheckpoint")
+    lead_count = len(lead.findall("entry")) if lead is not None else 0
+    entries = [entry for name in ("leadinhighrescheckpoint", "highrescheckpoint")
+               for leg in root.findall(name) for entry in leg.findall("entry")]
+    points = [tuple(float(entry.get(axis)) for axis in ("x", "y", "z")) for entry in entries]
+    distances = [value / UNITS_PER_METRE for value in _cumulative_planar(points)]
+    by_road = {}
+    for definition in definitions:
+        by_road.setdefault(definition["road_id"], []).append(definition)
+    passages = []
+    last_hits = {}
+    for index, (first, last) in enumerate(zip(entries, entries[1:])):
+        # The lead-in/main connector is geometry, not an additional road traversal.
+        if index == lead_count - 1:
+            continue
+        if first.get("road") != last.get("road") or first.get("dir") != last.get("dir"):
+            continue
+        start, end = float(first.get("time")), float(last.get("time"))
+        forward = first.get("dir") == "1"
+        if start == end:
+            continue
+        wrapped = (end < start) if forward else (end > start)
+        if wrapped:
+            if not ((forward and start > 0.9 and end < 0.1)
+                    or (not forward and start < 0.1 and end > 0.9)):
+                continue
+            end += 1 if forward else -1
+        for definition in by_road.get(int(first.get("road")), []):
+            time = definition["road_time"]
+            if wrapped and ((forward and time < start) or (not forward and time > start)):
+                time += 1 if forward else -1
+            fraction = (time - start) / (end - start)
+            if not 0 <= fraction <= 1:
+                continue
+            distance = distances[index] + fraction * (distances[index + 1] - distances[index])
+            if math.isclose(last_hits.get(definition["entity"], -1), distance, rel_tol=0, abs_tol=1e-8):
+                continue
+            last_hits[definition["entity"]] = distance
+            name = definition["forward_name" if forward else "reverse_name"] or definition["name"]
+            if forward or definition["reverse_name"] == definition["forward_name"] or not definition["reverse_name"]:
+                name = _directional_segment_name(name, "F" if forward else "R")
+            passages.append({
+                "name": name,
+                "entity_name": definition["name"],
+                "arch_id": definition["arch_id"],
+                "road_id": definition["road_id"],
+                "direction": "F" if forward else "R",
+                "type": definition["type"],
+                "enabled": definition["forward_enabled" if forward else "reverse_enabled"],
+                "gives_powerup": definition["gives_powerup"],
+                "leg": "leadin" if index < lead_count else "route",
+                "distance_m": round(distance, 2),
+            })
+    return sorted(passages, key=lambda passage: passage["distance_m"])
+
+
+def refresh_route_arches(out: str, zwift_dir: str, world: str | None = None):
+    """Ship arch crossings separately without rewriting existing route profiles."""
+    output = os.path.join(out, "arches.json")
+    payload = {"source": "native_route_checkpoint_interpolation", "worlds": {}}
+    if world and os.path.isfile(output):
+        with open(output, encoding="utf-8") as handle:
+            payload = json.load(handle)
+    worlds_dir = os.path.join(zwift_dir, "assets", "Worlds")
+    for folder in sorted(os.listdir(worlds_dir)):
+        if not re.fullmatch(r"world\d+", folder) or (world and folder.lower() != world.lower()):
+            continue
+        if not os.path.isfile(os.path.join(out, f"world_{int(folder[5:])}.json")):
+            continue
+        wad = os.path.join(worlds_dir, folder, "data_1.wad")
+        if not os.path.isfile(wad):
+            continue
+        members = read_wad_entries(wad, keep_substrings=("/routes/", "entities.xml"))
+        entity_data = next((data for source, data in members.items()
+                            if source.lower().endswith("/entities.xml")), None)
+        if entity_data is None:
+            raise ValueError(f"No native arch entities found in {wad}")
+        definitions = parse_arch_definitions(entity_data)
+        routes = {}
+        for source, data in members.items():
+            if "/routes/" not in source.lower() or not source.lower().endswith(".xml"):
+                continue
+            root = load_multiroot(data)
+            header = root.find("route")
+            if header is not None:
+                routes[header.get("nameHash")] = derive_arch_passages(root, definitions)
+        payload["worlds"][str(int(folder[5:]))] = routes
+        print(f"{folder}: arch crossings for {len(routes)} routes", flush=True)
+    os.makedirs(out, exist_ok=True)
+    with open(output, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=True, separators=(",", ":"), allow_nan=False)
+
+
 def parse_escalator_definitions(data: bytes) -> list[dict]:
     """Read directional subway bonus-power volumes, not visual props."""
     definitions = []
@@ -1321,9 +1442,14 @@ def main() -> int:
                     help="Surface output directory for video-cache extraction.")
     ap.add_argument("--refresh-route-versions", action="store_true",
                     help="Update only start-location metadata and mode profiles in existing numeric-world exports.")
+    ap.add_argument("--refresh-arches", action="store_true",
+                    help="Cache native arch crossings for event route previews without rewriting route profiles.")
     ap.add_argument("--source-cache-dir", default=None,
                     help="Optional trusted per-world WAD pickle snapshots for the start-version refresh.")
     args = ap.parse_args()
+    if args.refresh_arches:
+        refresh_route_arches(args.out, args.zwift_dir, args.world)
+        return 0
     if args.refresh_route_versions:
         refresh_route_versions(args.out, args.zwift_dir, args.source_cache_dir)
         return 0

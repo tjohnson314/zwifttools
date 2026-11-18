@@ -27,7 +27,10 @@ pre { background: #101827; padding: 20px; border: 1px solid #3c4658; border-radi
 .event-overview h2, .pen-card > h2 { margin-top: 0; color: #f7931e; overflow-wrap: anywhere; }
 .description { white-space: pre-wrap; overflow-wrap: anywhere; }
 .pen-nav { display: flex; flex-wrap: wrap; gap: 12px; }
-.pen-nav a { padding: 8px 16px; border: 1px solid #f7931e; border-radius: 6px; text-decoration: none; }
+.pen-nav button { padding: 8px 16px; border: 1px solid #f7931e; background: transparent; color: #f7931e; }
+.pen-nav button[aria-selected="true"] { background: #f7931e; color: #151515; }
+[hidden] { display: none !important; }
+.pen-nav button:focus-visible, .pen-card:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
 .pen-card { scroll-margin-top: 16px; }
 .pen-sections { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr)); gap: 24px; }
 .pen-sections > section { min-width: 0; }
@@ -43,6 +46,36 @@ li { margin-bottom: 8px; overflow-wrap: anywhere; }
 details > summary { cursor: pointer; color: #f7931e; padding: 8px 0; }
 .raw-settings { min-width: 0; }
 .raw-settings pre { padding: 12px; }
+.event-route { margin-top: 24px; border-top: 1px solid #3c4658; padding-top: 12px; }
+.route-map, .route-profile { display: block; width: 100%; background: #16213e; border-radius: 8px; margin: 12px 0; }
+.route-line, .segment-line { fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.route-line { stroke: #f7931e; stroke-width: 3; }
+.leadin-line { stroke: #bcc7d6; stroke-dasharray: 6 4; }
+.segment-line { stroke: #67b7ff; stroke-width: 5; opacity: 0.85; }
+.kom-line { stroke: #ff6b81; }
+.sprint-line { stroke: #64de98; }
+.segment-band { opacity: 0.18; fill: #67b7ff; }
+.kom-band { fill: #ff6b81; }
+.sprint-band { fill: #64de98; }
+.arch-dot { fill: #fff; stroke: #101827; stroke-width: 1.5; }
+.arch-dot.uncertain { fill: #ffd166; }
+.arch-number { fill: #fff; font-size: 12px; paint-order: stroke; stroke: #101827; stroke-width: 3px; }
+.chart-axis, .leadin-boundary { fill: none; stroke: #718096; }
+.leadin-boundary { stroke-dasharray: 4 4; }
+.axis-label { fill: #ccc; font-size: 12px; }
+.route-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 0.85rem; }
+.route-key { color: #f7931e; }
+.leadin-key { color: #bcc7d6; }
+.kom-key { color: #ff6b81; }
+.sprint-key { color: #64de98; }
+.segment-key { color: #67b7ff; }
+.route-table-wrap { overflow-x: auto; }
+.route-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem; }
+.route-table th, .route-table td { padding: 10px; border-bottom: 1px solid #3c4658; vertical-align: top; }
+.route-table td:first-child { white-space: nowrap; }
+.route-table p { margin: 0 0 6px; }
+.route-table tr:target { background: #f7931e20; }
+.route-warning { color: #ffd166; }
 @media (max-width: 500px) {
     .container { padding: 16px; }
     .event-overview, .pen-card, .raw-settings { padding: 14px; }

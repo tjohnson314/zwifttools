@@ -17,6 +17,34 @@
         status.dataset.error = String(error);
     }
 
+    function setupPenTabs() {
+        const tabs = Array.from(summary.querySelectorAll('[role="tab"]'));
+        function activate(index, focus = false) {
+            tabs.forEach((tab, position) => {
+                const selected = position === index;
+                tab.setAttribute('aria-selected', String(selected));
+                tab.tabIndex = selected ? 0 : -1;
+                document.getElementById(tab.getAttribute('aria-controls')).hidden = !selected;
+            });
+            if (focus) tabs[index].focus();
+        }
+        tabs.forEach((tab, index) => {
+            tab.addEventListener('click', () => activate(index));
+            tab.addEventListener('keydown', event => {
+                let next;
+                if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+                else if (event.key === 'ArrowLeft') next = (index + tabs.length - 1) % tabs.length;
+                else if (event.key === 'Home') next = 0;
+                else if (event.key === 'End') next = tabs.length - 1;
+                else return;
+                event.preventDefault();
+                activate(next, true);
+            });
+        });
+        const initial = tabs.findIndex(tab => `#${tab.getAttribute('aria-controls')}` === window.location.hash);
+        if (tabs.length) activate(initial < 0 ? 0 : initial);
+    }
+
     async function loadEvent(event) {
         event?.preventDefault();
         if (loadButton.disabled) return;
@@ -56,6 +84,7 @@
             const url = new URL(window.location.href);
             url.searchParams.set('event_id', normalizedId);
             window.history.replaceState(null, '', url);
+            setupPenTabs();
             showStatus(`Loaded settings for event ${normalizedId}.`);
         } catch (error) {
             showStatus(`Unable to load event settings: ${error.message}`, true);

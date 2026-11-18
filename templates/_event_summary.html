@@ -11,13 +11,15 @@
         </dl>
     </details>
 </article>
-<nav class="pen-nav" aria-label="Event pens">
+<div class="pen-nav" role="tablist" aria-label="Event pens">
     {% for pen in summary.pens %}
-    <a href="#pen-{{ loop.index }}">{{ 'Pen ' if pen.has_pen else '' }}{{ pen.label }}</a>
+    <button type="button" role="tab" id="pen-tab-{{ loop.index }}" aria-controls="pen-{{ loop.index }}"
+            aria-selected="{{ 'true' if loop.first else 'false' }}" tabindex="{{ 0 if loop.first else -1 }}">{{ 'Pen ' if pen.has_pen else '' }}{{ pen.label }}</button>
     {% endfor %}
-</nav>
+</div>
 {% for pen in summary.pens %}
-<article class="pen-card" id="pen-{{ loop.index }}">
+{% set pen_index = loop.index %}
+<article class="pen-card" id="pen-{{ pen_index }}" role="tabpanel" aria-labelledby="pen-tab-{{ pen_index }}" tabindex="0"{% if not loop.first %} hidden{% endif %}>
     <h2>{{ 'Pen ' if pen.has_pen else '' }}{{ pen.label }}</h2>
     <div class="pen-sections">
         {% for section in pen.sections[:4] %}
@@ -58,6 +60,9 @@
             <p class="hint">{{ pen.powerup_note }}</p>
         </section>
     </div>
+    {% with preview = pen.route_preview %}
+    {% include '_event_route.html' %}
+    {% endwith %}
     <details>
         <summary>Equipment, account state, and all tags</summary>
         <div class="pen-sections">

@@ -1,0 +1,90 @@
+<section class="event-route" aria-label="Route, profile, segments and powerups">
+    {% if preview.error %}
+    <h3>Route preview</h3>
+    <p class="hint">{{ preview.error }}</p>
+    {% else %}
+    <h3>Route preview: {{ preview.name }}</h3>
+    <p class="hint">Race lead-in plus one route lap. Distances include the lead-in; this preview is not expanded or shortened for event laps, distance, or time limits. The actual approach from an individual pen has not been identified.</p>
+    <p><a href="/surface-map?world={{ preview.map_id }}&amp;route={{ preview.route_id }}&amp;mode=race">Open in Route Explorer</a></p>
+    <div class="route-legend" aria-label="Chart legend">
+        <span class="route-key">Route</span><span class="leadin-key">Lead-in</span>
+        <span class="kom-key">KOM</span><span class="sprint-key">Sprint</span><span class="segment-key">Other segment</span>
+        <span>Numbered circles: arches (hover or select for details)</span>
+    </div>
+    <svg class="route-map" viewBox="0 0 900 400" role="img" aria-labelledby="route-map-title-{{ pen_index }}">
+        <title id="route-map-title-{{ pen_index }}">{{ preview.name }} route map with segments and numbered arches</title>
+        {% if preview.background %}
+        <image href="{{ preview.background.image }}" x="{{ preview.background.x }}" y="{{ preview.background.y }}"
+               width="{{ preview.background.width }}" height="{{ preview.background.height }}" opacity="0.5" />
+        {% endif %}
+        {% for leg, path in preview.paths.items() %}
+        <polyline class="route-line {{ leg }}-line" points="{{ path.map }}" />
+        {% endfor %}
+        {% for segment in preview.segments %}
+        <polyline class="segment-line {{ segment.type }}-line" points="{{ segment.map }}"><title>{{ segment.name }}</title></polyline>
+        {% endfor %}
+        {% for arch in preview.arches %}
+        <a href="#pen-{{ pen_index }}-arch-{{ arch.number }}" aria-label="Arch {{ arch.number }}: {{ arch.name }}">
+            <title>{{ arch.name }} - arch ID {{ arch.effective_id }}{% if arch.arch_id is none %} (missing ID treated as 0){% endif %}
+{% for source, award in arch.awards %}{{ source }}: {{ award }}
+{% endfor %}{% if arch.warning %}{{ arch.warning }}{% endif %}</title>
+            <circle class="arch-dot{% if arch.warning %} uncertain{% endif %}" cx="{{ arch.map[0] }}" cy="{{ arch.map[1] }}" r="5" />
+            <text class="arch-number" x="{{ arch.map[0] + 7 }}" y="{{ arch.map[1] - 8 + (loop.index0 % 3) * 13 }}">{{ arch.number }}</text>
+        </a>
+        {% endfor %}
+    </svg>
+    <h4>Elevation profile</h4>
+    <svg class="route-profile" viewBox="0 0 900 280" role="img" aria-labelledby="route-profile-title-{{ pen_index }}">
+        <title id="route-profile-title-{{ pen_index }}">{{ preview.name }} elevation in metres against distance in kilometres, with segments and arches</title>
+        <path class="chart-axis" d="M60 25 V230 H880" />
+        <text class="axis-label" x="5" y="30">{{ '%.1f'|format(preview.max_altitude) }} m</text>
+        <text class="axis-label" x="5" y="230">{{ '%.1f'|format(preview.min_altitude) }} m</text>
+        <text class="axis-label" x="60" y="257">0 km</text>
+        <text class="axis-label" x="800" y="257">{{ '%.2f'|format(preview.total_km) }} km</text>
+        <path class="leadin-boundary" d="M{{ preview.leadin_x }} 25 V230"><title>End of race lead-in</title></path>
+        {% for segment in preview.segments %}
+        <rect class="segment-band {{ segment.type }}-band" x="{{ segment.profile_x }}" y="25"
+              width="{{ segment.profile_width }}" height="205"><title>{{ segment.name }}: {{ '%.2f'|format(segment.start_km) }} - {{ '%.2f'|format(segment.end_km) }} km</title></rect>
+        {% endfor %}
+        {% for leg, path in preview.paths.items() %}
+        <polyline class="route-line {{ leg }}-line" points="{{ path.profile }}" />
+        {% endfor %}
+        {% for arch in preview.arches %}
+        <a href="#pen-{{ pen_index }}-arch-{{ arch.number }}" aria-label="Arch {{ arch.number }}: {{ arch.name }}">
+            <title>{{ arch.name }} at {{ '%.2f'|format(arch.distance_km) }} km
+{% for source, award in arch.awards %}{{ source }}: {{ award }}
+{% endfor %}{% if arch.warning %}{{ arch.warning }}{% endif %}</title>
+            <circle class="arch-dot{% if arch.warning %} uncertain{% endif %}" cx="{{ arch.profile[0] }}" cy="{{ arch.profile[1] }}" r="4" />
+            <text class="arch-number" x="{{ arch.profile[0] + 3 }}" y="{{ arch.profile[1] + 18 + (loop.index0 % 2) * 13 if arch.profile[1] < 60 else arch.profile[1] - 9 - (loop.index0 % 2) * 13 }}">{{ arch.number }}</text>
+        </a>
+        {% endfor %}
+    </svg>
+    <h4>Arches and expected powerups</h4>
+    <p class="hint">Missing arch IDs use 0. If event and pen sources differ, each source is evaluated separately; precedence between conflicting sources is not assumed. Yellow markers flag uncertain award locations.</p>
+    {% if preview.arch_error %}<p class="route-warning" role="status">{{ preview.arch_error }}</p>{% endif %}
+    {% if preview.arches %}
+    <div class="route-table-wrap">
+        <table class="route-table">
+            <thead><tr><th scope="col"># / km</th><th scope="col">Arch / ID</th><th scope="col">Configured / expected powerup</th></tr></thead>
+            <tbody>
+            {% for arch in preview.arches %}
+            <tr id="pen-{{ pen_index }}-arch-{{ arch.number }}" tabindex="-1">
+                <td>{{ arch.number }}<br>{{ '%.2f'|format(arch.distance_km) }} km{% if arch.leg == 'leadin' %}<br>Lead-in{% endif %}</td>
+                <td>{{ arch.name }}<br><span class="hint">ID {{ arch.effective_id }}{% if arch.arch_id is none %} (not set; using 0){% endif %}</span></td>
+                <td>{% for source, award in arch.awards %}<p><strong>{{ source }}:</strong> {{ award }}</p>{% endfor %}
+                    {% if arch.warning %}<p class="route-warning">{{ arch.warning }}</p>{% endif %}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% elif not preview.arch_error %}<p class="hint">No native arch crossings were found for this route.</p>{% endif %}
+    <details>
+        <summary>Segments ({{ preview.segments|length }})</summary>
+        <ul>{% for segment in preview.segments %}
+            <li>{{ segment.name }}: {{ '%.2f'|format(segment.start_km) }} - {{ '%.2f'|format(segment.end_km) }} km</li>
+            {% else %}<li>No complete timing segments found in the local catalog.</li>{% endfor %}
+        </ul>
+    </details>
+    {% endif %}
+</section>
