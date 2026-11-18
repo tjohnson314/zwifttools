@@ -312,6 +312,23 @@ def test_arch_sources_are_not_repeated_when_event_and_pen_tags_match(upstream, i
         assert "Arch override: Feather" in route_html
 
 
+@pytest.mark.parametrize("map_id,route_id,expected_count", [(4, 1178708985, 4), (7, 2905381067, 0)])
+def test_event_route_escalator_overlays_and_details(upstream, map_id, route_id, expected_count):
+    upstream.return_value = event_response({"id": 1, "mapId": map_id, "routeId": route_id})
+    response = app_module.app.test_client().get("/api/events/1?view=readable")
+    assert response.status_code == 200
+    html = response.get_json()["summary_html"]
+    assert html.count('class="escalator-zone"') == expected_count
+    if expected_count:
+        assert f"Escalators ({expected_count})" in html
+        assert "trainer slope: 20%" in html
+        assert "SubwayC_Forward" in html
+        assert '<polyline class="escalator-line"' in html
+    else:
+        assert "Escalators (" not in html
+        assert 'class="escalator-key"' not in html
+
+
 def test_readable_pens_render_tabs_and_individual_routes_with_arch_awards(upstream):
     event = {
         "id": 1, "mapId": 1, "routeId": 3536020075,

@@ -102,6 +102,18 @@ def _geometry(map_id, route_id):
             "profile_x": profile_point(start, low)[0],
             "profile_width": (end - start) / total * 820,
         })
+    escalators = []
+    for passage in route.get("escalators", []):
+        start, end = passage["start_distance_m"], passage["end_distance_m"]
+        passage_distances = [start, *(distance for distance in distances if start < distance < end), end]
+        escalators.append({
+            "name": passage["name"], "start_km": start / 1000, "end_km": end / 1000,
+            "trainer_slope_percent": passage["trainer_slope_scale"] * 100,
+            "map": _polyline(at(distance)["map"] for distance in passage_distances),
+            "profile_x": profile_point(start, low)[0],
+            "profile_end_x": profile_point(end, low)[0],
+            "profile_width": (end - start) / total * 820,
+        })
     try:
         passages = _arch_catalog().get(str(map_id), {}).get(str(route_id))
     except FileNotFoundError:
@@ -116,6 +128,7 @@ def _geometry(map_id, route_id):
     return {
         "name": route["name"], "map_id": map_id, "route_id": route_id,
         "paths": paths, "background": background, "segments": segments, "arches": arches,
+        "escalators": escalators,
         "arch_error": "Arch crossings are not available in the local catalog." if passages is None else None,
         "total_km": total / 1000, "min_altitude": low, "max_altitude": high,
         "leadin_x": profile_point(route["route_offset_m"], low)[0],

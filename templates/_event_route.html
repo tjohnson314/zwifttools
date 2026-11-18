@@ -12,6 +12,7 @@
     <div class="route-legend" aria-label="Chart legend">
         <span class="route-key">Route</span><span class="leadin-key">Lead-in</span>
         <span class="kom-key">KOM</span><span class="sprint-key">Sprint</span><span class="segment-key">Other segment</span>
+        {% if preview.escalators %}<span class="escalator-key">Escalator</span>{% endif %}
         <span>Numbered circles: arches (hover or select for details)</span>
     </div>
     <svg class="route-map" viewBox="0 0 900 400" role="img" aria-labelledby="route-map-title-{{ pen_index }}">
@@ -25,6 +26,9 @@
         {% endfor %}
         {% for segment in preview.segments %}
         <polyline class="segment-line {{ segment.type }}-line" points="{{ segment.map }}"><title>{{ segment.name }}</title></polyline>
+        {% endfor %}
+        {% for escalator in preview.escalators %}
+        <polyline class="escalator-line" points="{{ escalator.map }}"><title>Escalator ({{ escalator.name }}): {{ '%.2f'|format(escalator.start_km) }} - {{ '%.2f'|format(escalator.end_km) }} km; trainer slope: {{ '%g'|format(escalator.trainer_slope_percent) }}%</title></polyline>
         {% endfor %}
         {% for arch in preview.arches %}
         <a href="#pen-{{ pen_index }}-arch-{{ arch.number }}" aria-label="Arch {{ arch.number }}: {{ arch.name }}">
@@ -48,6 +52,13 @@
         {% for segment in preview.segments %}
         <rect class="segment-band {{ segment.type }}-band" x="{{ segment.profile_x }}" y="25"
               width="{{ segment.profile_width }}" height="205"><title>{{ segment.name }}: {{ '%.2f'|format(segment.start_km) }} - {{ '%.2f'|format(segment.end_km) }} km</title></rect>
+        {% endfor %}
+        {% for escalator in preview.escalators %}
+        <g class="escalator-zone">
+            <title>Escalator ({{ escalator.name }}): {{ '%.2f'|format(escalator.start_km) }} - {{ '%.2f'|format(escalator.end_km) }} km; trainer slope: {{ '%g'|format(escalator.trainer_slope_percent) }}%</title>
+            <rect class="escalator-band" x="{{ escalator.profile_x }}" y="25" width="{{ escalator.profile_width }}" height="205" />
+            <path class="escalator-line" d="M{{ escalator.profile_x }} 222 H{{ escalator.profile_end_x }}" />
+        </g>
         {% endfor %}
         {% for leg, path in preview.paths.items() %}
         <polyline class="route-line {{ leg }}-line" points="{{ path.profile }}" />
@@ -89,5 +100,14 @@
             {% else %}<li>No complete timing segments found in the local catalog.</li>{% endfor %}
         </ul>
     </details>
+    {% if preview.escalators %}
+    <details>
+        <summary>Escalators ({{ preview.escalators|length }})</summary>
+        <ul>{% for escalator in preview.escalators %}
+            <li>{{ escalator.name }}: {{ '%.2f'|format(escalator.start_km) }} - {{ '%.2f'|format(escalator.end_km) }} km; trainer slope: {{ '%g'|format(escalator.trainer_slope_percent) }}%</li>
+            {% endfor %}
+        </ul>
+    </details>
+    {% endif %}
     {% endif %}
 </section>

@@ -111,6 +111,7 @@ status and unavailable profiles are reported without breaking the Roster tab.
 - When event and pen tags are identical, the route preview notes this once at the top instead of repeating source labels at every arch
 - Pens use accessible tabs (click or Arrow Left/Right, Home, and End) rather than stacked cards
 - Each pen includes a route map, elevation profile, timing segments, and numbered arches with configured powerups or fallback pools. Hover an arch for its award or select it to jump to the details table
+- New York escalators use the same cached race-route zones as Route Explorer, with gold map highlights and elevation bands; hover or expand the escalator list for distances and trainer-slope percentages
 - Previews show the cached race lead-in plus one route lap, not a reconstruction of event laps, distance/time limits, or individual pen approaches. Native disabled-award flags, overlapping arch entities, and arches at the preview start are explicitly marked as uncertain; configured awards remain visible
 - Arch crossings are shipped in `zwift_routes/arches.json`, so hosting does not require game assets. After updating local route profiles, refresh the arch cache with `python -m tools.extract_zwift_routes --refresh-arches` (optionally `--world world1`); unavailable geometry or arch metadata is reported on the page
 

@@ -57,6 +57,9 @@ details > summary { cursor: pointer; color: #f7931e; padding: 8px 0; }
 .segment-band { opacity: 0.18; fill: #67b7ff; }
 .kom-band { fill: #ff6b81; }
 .sprint-band { fill: #64de98; }
+.escalator-line { fill: none; stroke: #f4bd50; stroke-width: 6; stroke-linecap: round; }
+.escalator-band { fill: #f4bd50; opacity: 0.2; }
+.escalator-key { color: #f4bd50; }
 .arch-dot { fill: #fff; stroke: #101827; stroke-width: 1.5; }
 .arch-dot.uncertain { fill: #ffd166; }
 .arch-number { fill: #fff; font-size: 12px; paint-order: stroke; stroke: #101827; stroke-width: 3px; }

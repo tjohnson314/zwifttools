@@ -117,6 +117,23 @@ def test_grade_checkpoints_show_feathers_and_uncertainty_without_relabeling_id_7
     assert "overlap" in finish["warning"]
 
 
+def test_new_york_escalators_use_same_race_distances_as_surface_map():
+    from shared.surface_map import get_route
+
+    route = get_route(4, 1178708985, mode="race")
+    preview = event_route.build_event_route(4, 1178708985, [], [])
+    assert len(preview["escalators"]) == 4
+    for escalator, source in zip(preview["escalators"], route["escalators"]):
+        assert escalator["name"] == source["name"]
+        assert escalator["start_km"] == source["start_distance_m"] / 1000
+        assert escalator["end_km"] == source["end_distance_m"] / 1000
+        assert escalator["trainer_slope_percent"] == pytest.approx(20)
+        assert escalator["profile_width"] == pytest.approx(
+            (source["end_distance_m"] - source["start_distance_m"]) / (preview["total_km"] * 1000) * 820
+        )
+        assert len(escalator["map"].split()) >= 2
+
+
 @pytest.mark.parametrize("tags,expected", [
     (['arch_powerup="11,8"', 'powerup_percent="1,100"'], "Arch override: Anvil (ID 8)"),
     (['arch_powerup="74,0"', 'powerup_percent="1,150,5,-50"'], "150%; Aero Boost (Helmet) (ID 5): -50%"),
@@ -156,3 +173,4 @@ def test_missing_geometry_and_arch_metadata_are_explicit(monkeypatch):
     assert preview["max_altitude"] == -20
     assert preview["paths"]["route"]["profile"] == "60.00,230.00 880.00,30.00"
     assert "not available" in preview["arch_error"]
+    assert preview["escalators"] == []
