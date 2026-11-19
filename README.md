@@ -8,6 +8,13 @@ A web app for analyzing Zwift rides. Includes **Bike Comparison**, **Race Replay
 
 ## Features
 
+### Feature documentation videos
+
+The optional [local video framework](tools/feature_videos/README.md) creates
+feature walkthroughs with slides, Copilot-assisted scripts, real website
+screenshots, and AI voiceover. It includes a ready-to-run Surface Map storyboard
+and exports MP4, captions, and a transcript without adding web-app dependencies.
+
 ### Active rider and public data
 
 Visitors never enter a Zwift password. Every page header has an **Active rider**

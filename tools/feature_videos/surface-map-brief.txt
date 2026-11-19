@@ -1,0 +1,36 @@
+Surface Map is an existing public tool at /surface-map, linked from the homepage.
+It requires no active rider and can use local cached world and route data.
+The sidebar contains a World selector, route search, All/Cycling/Running filters,
+and Race/Free Ride route version buttons. Not all routes have both versions.
+The world map colors roads by surface type and includes a surface legend.
+Selecting a route shows its highlighted path, distance and climbing statistics,
+surface breakdown, and a surface-colored elevation profile.
+Copy link shares the selected world, route, and route mode in the URL.
+The example demonstrates Watopia and Road to Ruins in the default Race mode.
+First show the unselected world map, so route highlighting does not obscure
+the road surface colors. Explain the legend without saying "with no highlight
+in the way." Then demonstrate clicking a road to list the routes that cover it.
+Present Road to Ruins as an example ("Suppose we pick Road to Ruins"), not as
+a search instruction or a route the viewer needs a reason to find.
+Show the selected route map next, followed by its profile; its dirt sections
+make a useful example. Do not describe the route highlight as surface coloring.
+Demo frames are static website screenshots, not footage of an interaction.
+Do not describe race-mode previews as the full distance of any specific event.
+Do not claim performance predictions, real-time telemetry, or automatic bike recommendations.
+End by explaining that knowing the surfaces helps you prepare with the right bike
+for the route; choosing the bike remains the rider's decision.
+The optional video-route satellite imagery is not demonstrated in this example.
+Lead with the hook: know exactly what surface you are riding on, rather than
+guessing from the scenery. Frame this as checking a route before a ride, not
+live rider tracking. End with the same benefit: less guessing, more riding.
+Use the subtle comparisons: dirt versus packed sand, and cobbles versus brick.
+Packed sand rides like tarmac, despite looking similar to dirt.
+Do not spend time on obvious tarmac-versus-cobbles comparisons or Show network.
+Keep the speech rate at +12% for a slightly brisker delivery.
+Use en-GB-SoniaNeural, a friendly British voice, and natural phrasing rather than
+a formal feature-list delivery.
+Do not show the narration script on screen. Keep optional closed captions
+separate from the slide artwork so viewers can turn them on themselves.
+Use "Road to Ruins" for the selected route's heading.
+Keep "Watopia" spelled normally in speech input, narration text, titles, and captions;
+the syllable-by-syllable phonetic spelling made the pronunciation worse.

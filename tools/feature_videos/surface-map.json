@@ -1,0 +1,92 @@
+{
+  "title": "Know exactly what you're riding on",
+  "voice": "en-GB-SoniaNeural",
+  "rate": "+12%",
+  "scenes": [
+    {
+      "id": "intro",
+      "kind": "slide",
+      "title": "Dirt or packed sand?",
+      "bullets": [
+        "Packed sand rides like tarmac",
+        "Cobbles or brick? Look closer.",
+        "Know the surface, not just the scenery"
+      ],
+      "narration": "Dirt or packed sand? They can look similar, but packed sand rides like tarmac. And is that cobbles, or brick? Surface Map helps you see past the scenery.",
+      "min_seconds": 4
+    },
+    {
+      "id": "world-network",
+      "kind": "demo",
+      "title": "First, see the surfaces",
+      "path": "/surface-map?world=watopia",
+      "screenshot_selector": ".map-panel",
+      "steps": [
+        {"action": "wait", "selector": "#route-list li:first-child"},
+        {"action": "wait", "selector": "#legend > :first-child"},
+        {"action": "wait", "selector": "#route-detail", "value": "hidden"},
+        {"action": "wait_text", "selector": "#status", "value": ""}
+      ],
+      "narration": "Start with the map. The road colors show the surface types. Match them to the legend."
+    },
+    {
+      "id": "road-routes",
+      "kind": "demo",
+      "title": "Click a road. Find its routes.",
+      "path": "/surface-map?world=watopia",
+      "screenshot_selector": "#road-route-picker",
+      "steps": [
+        {"action": "wait", "selector": "#route-list li:first-child"},
+        {"action": "wait_text", "selector": "#status", "value": ""},
+        {"action": "click", "selector": "#map-canvas", "position": {"x": 0.376472, "y": 0.574831}},
+        {"action": "wait", "selector": "#road-route-picker"},
+        {"action": "fill", "selector": "#road-picker-search", "value": "Ruins"},
+        {"action": "wait", "selector": "#road-picker-list li[data-hash='3701568815']:not([hidden])"}
+      ],
+      "narration": "Click a road to see which routes cover it. Suppose we pick Road to Ruins for a ride through Watopia's jungle."
+    },
+    {
+      "id": "route-selected",
+      "kind": "demo",
+      "title": "Road to Ruins",
+      "path": "/surface-map?world=watopia",
+      "screenshot_selector": ".map-panel",
+      "steps": [
+        {"action": "wait", "selector": "#route-list li:first-child"},
+        {"action": "wait_text", "selector": "#status", "value": ""},
+        {"action": "click", "selector": "#map-canvas", "position": {"x": 0.376472, "y": 0.574831}},
+        {"action": "wait", "selector": "#road-route-picker"},
+        {"action": "click", "selector": "#road-picker-list li[data-hash='3701568815'] button"},
+        {"action": "wait_text", "selector": "#rd-name", "value": "Road to Ruins"},
+        {"action": "wait", "selector": "#elevation-chart .svg-container > svg.main-svg:first-of-type"},
+        {"action": "wait", "selector": "#road-route-picker", "value": "hidden"}
+      ],
+      "narration": "The highlight traces Road to Ruins across Watopia, so you can follow exactly where you'll be riding."
+    },
+    {
+      "id": "route-detail",
+      "kind": "demo",
+      "title": "See the dirt before you reach it",
+      "path": "/surface-map?world=watopia&route=road-to-ruins",
+      "screenshot_selector": "#route-detail",
+      "steps": [
+        {"action": "wait_text", "selector": "#rd-name", "value": "Road to Ruins"},
+        {"action": "wait", "selector": "#elevation-chart .svg-container > svg.main-svg:first-of-type"},
+        {"action": "wait", "selector": "#rd-breakdown > :first-child"}
+      ],
+      "narration": "Now check the profile to see the surface breakdown alongside the climbs and descents, so you can see how much dirt you're taking on, and where it comes."
+    },
+    {
+      "id": "outro",
+      "kind": "slide",
+      "title": "Less guessing. More riding.",
+      "bullets": [
+        "Pick your next route",
+        "Check its surfaces",
+        "Be ready with the right bike"
+      ],
+      "narration": "Open Surface Map in ZwiftTools, check your next route, and you'll know what's coming. More importantly, you'll be prepared with the right bike for the route.",
+      "min_seconds": 4
+    }
+  ]
+}

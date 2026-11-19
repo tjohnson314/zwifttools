@@ -1,0 +1,5 @@
+# Optional local documentation tooling; not needed by the web app.
+playwright>=1.48.0
+Pillow>=11.0.0
+edge-tts>=7.0.0
+imageio-ffmpeg>=0.6.0
