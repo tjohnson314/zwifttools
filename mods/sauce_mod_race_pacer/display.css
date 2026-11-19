@@ -111,6 +111,36 @@ body {
     min-height: 1em;
 }
 
+/* Detail lines hidden from the settings window (classes on <html>) */
+.hide-ref-power .ref-power,
+.hide-ref-speed .ref-speed,
+.hide-bucket-avg .bucket-avg,
+.hide-bucket-info .bucket-info,
+.hide-names .route-name,
+.hide-names .ride-name { display: none; }
+
+/* Bucketed TT plans: rider's average in the current bucket vs its target */
+.bucket-avg {
+    font-size: 0.9em;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    margin-top: 0.25em;
+    color: rgba(255, 255, 255, 0.8);
+}
+.bucket-avg:empty { display: none; }
+.bucket-avg.on    { color: #4cff88; }
+.bucket-avg.under { color: #ff5555; }
+.bucket-avg.over  { color: #ffb347; }
+
+.bucket-info {
+    font-size: 0.65em;
+    color: rgba(255, 255, 255, 0.5);
+    font-variant-numeric: tabular-nums;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.bucket-info:empty { display: none; }
+
 .ride-name {
     font-size: 0.65em;
     color: rgba(255, 255, 255, 0.45);

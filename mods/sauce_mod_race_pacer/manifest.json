@@ -3,7 +3,7 @@
     "id": "sauce_mod_race_pacer",
     "name": "Race Pacer",
     "description": "Pace against a past ride. Load a reference CSV and see your time gap ahead or behind at every point on the course.",
-    "version": "1.0.0",
+    "version": "1.2.0",
     "author": "ZwiftTools",
     "windows": [{
         "id": "display",
@@ -14,7 +14,7 @@
         "frame": false,
         "default_bounds": {
             "width": 260,
-            "height": 160,
+            "height": 200,
             "x": 0.5,
             "y": 0.02
         }

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html class="settings-page" tabindex="0" data-settings-key="sauce-race-pacer-v1">
+    <head>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+        <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';"/>
+
+        <title>Race Pacer Settings - Sauce for Zwift™</title>
+
+        <script src="/pages/src/preloads.js"></script>
+
+        <link id="favicon" rel="shortcut icon" href="/pages/images/favicon.png"/>
+        <link rel="stylesheet" href="/pages/css/common.css"/>
+        <link rel="stylesheet" href="/pages/css/settings.css"/>
+
+        <script type="module">
+            import {settingsMain} from './display-settings.mjs';
+            settingsMain();
+        </script>
+    </head>
+    <body>
+        <div id="titlebar">
+            <header>
+                <div class="title">Race Pacer Settings</div>
+                <div class="filler"></div>
+                <div class="buttons">
+                    <div title="Close" class="button close electron-only"><ms>close</ms></div>
+                </div>
+            </header>
+        </div>
+        <div id="content">
+            <form id="options" class="section">
+                <h2>Details</h2>
+                <label>
+                    <input type="checkbox" name="showRefPower"/>
+                    <key>Target / reference power</key>
+                </label>
+                <label>
+                    <input type="checkbox" name="showRefSpeed"/>
+                    <key>Reference speed</key>
+                </label>
+                <label>
+                    <input type="checkbox" name="showBucketAvg"/>
+                    <key>Bucket average vs target</key>
+                </label>
+                <label>
+                    <input type="checkbox" name="showBucketInfo"/>
+                    <key>Bucket number and distance left</key>
+                </label>
+                <label>
+                    <input type="checkbox" name="showNames"/>
+                    <key>Route and ride name</key>
+                </label>
+            </form>
+        </div>
+    </body>
+</html>
