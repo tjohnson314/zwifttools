@@ -43,7 +43,7 @@ your average power in the current bucket against its target.
 - **Reference speed** is interpolated.
 - **Bucket average** appears only when the CSV has a `bucket` column, which means
   bucketed TT plans. It's your power over the current bucket, weighted by time.
-  - It restarts at each bucket and when you press **Reset**.
+  - It restarts at each bucket, when you press **Reset**, and when you switch watched athletes.
   - Readings without power, and gaps over 5 s (pauses), are not counted.
   - Colour: green within ±max(2%, 3 W) of the target, red when under, amber when over.
 - **Wrong course:** if the CSV's world doesn't match the world you're riding, the gap

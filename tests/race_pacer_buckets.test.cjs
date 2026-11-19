@@ -62,6 +62,73 @@ test('bucket average skips missing power and long gaps between samples', async (
     assert.equal(avg.average, 250);
 });
 
+test('switching watched athletes resets bucket power and status before accepting samples', async () => {
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const vm = require('node:vm');
+    const elements = new Map();
+    function element(selector) {
+        if (!elements.has(selector)) {
+            elements.set(selector, {
+                textContent: '', className: '',
+                querySelector: element,
+                addEventListener() {},
+            });
+        }
+        return elements.get(selector);
+    }
+    let onWatching;
+    const context = vm.createContext({
+        ...await tracker(),
+        ...await details(),
+        ...await import('../mods/sauce_mod_race_pacer/reference.mjs'),
+        Common: {
+            enableSentry() {},
+            initInteractionListeners() {},
+            settingsStore: { setDefault() {}, get() {}, addEventListener() {} },
+            subscribe(event, callback) {
+                assert.equal(event, 'athlete/watching');
+                onWatching = callback;
+            },
+        },
+        document: {
+            getElementById: element,
+            documentElement: { classList: { toggle() {} } },
+        },
+    });
+    const source = fs.readFileSync(path.join(__dirname, '../mods/sauce_mod_race_pacer/display.mjs'), 'utf8');
+    vm.runInContext(source.replace(/^import .*;\r?\n/gm, '').replace('export function main()', 'function main()'), context);
+    vm.runInContext(`
+        refTimes = [0, 100];
+        refDistances = [0, 1000];
+        refBucketSpans = [{ bucket: 1, start: 0, end: 1000, target: 200 }];
+        main();
+    `, context);
+    function sample(athleteId, time, power) {
+        onWatching({ athleteId, state: { time, power, routeDistance: 100 } });
+    }
+    const avgEl = element('.bucket-avg');
+    sample(1, 10, 400);
+    sample(1, 11, 400);
+    assert.equal(avgEl.textContent, 'avg 400 W / 200 W (+200)');
+    assert.equal(avgEl.className, 'bucket-avg over');
+
+    sample(2, 12, 200);
+    assert.equal(avgEl.textContent, 'avg —');
+    assert.equal(avgEl.className, 'bucket-avg');
+    sample(2, 13, 200);
+    assert.equal(avgEl.textContent, 'avg 200 W / 200 W (±0)');
+    assert.equal(avgEl.className, 'bucket-avg on');
+
+    onWatching({ athleteId: 1 });
+    assert.equal(avgEl.textContent, '');
+    sample(1, 14, 100);
+    assert.equal(avgEl.textContent, 'avg —');
+    sample(1, 15, 100);
+    assert.equal(avgEl.textContent, 'avg 100 W / 200 W (−100)');
+    assert.equal(avgEl.className, 'bucket-avg under');
+});
+
 test('pace status allows max(2%, 3 W) either side of target', async () => {
     const { paceStatus } = await tracker();
     assert.equal(paceStatus(295, 300), 'on');

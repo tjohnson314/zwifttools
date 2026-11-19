@@ -283,6 +283,7 @@ function onAthleteData(data) {
 
 // Store last known state so the reset button can anchor immediately
 let lastState = null;
+let lastAthleteId = null;
 
 // Hide the detail lines switched off in display-settings.html (see display.css).
 function applyDetailSettings() {
@@ -312,6 +313,12 @@ export function main() {
         clearBucketLine();
     });
     Common.subscribe('athlete/watching', data => {
+        const athleteId = data?.athleteId ?? null;
+        if (athleteId !== lastAthleteId) {
+            bucketAvg.reset();
+            clearBucketLine();
+            lastAthleteId = athleteId;
+        }
         lastState = data?.state ?? null;
         onAthleteData(data);
     });
