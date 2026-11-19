@@ -167,5 +167,5 @@ def build_event_route(map_id, route_id, tag_sets, rules):
         arches.append({**arch, "awards": awards, "warning": warning})
     return {
         **preview, "arches": arches,
-        "identical_tags": len(tag_sets) == 1 and tag_sets[0][0] == "Event and pen tags (identical)",
+        "identical_tags": len(tag_sets) == 1 and tag_sets[0][0] == "Event and pen powerup tags (identical)",
     }

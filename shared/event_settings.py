@@ -165,7 +165,18 @@ def _pen_summary(event, pen):
         tag_sets.append(("Pen tags", pen_tags))
     elif "tags" in pen:
         tag_sets = [("Event and pen tags (identical)", pen_tags)]
-    powerups = [{"title": title, "rows": _powerup_rows(tags)} for title, tags in tag_sets]
+    powerup_tag_sets = [
+        (title, [tag for tag in tags if tag.startswith(
+            ("starting_powerup=", "arch_powerup=", "powerup_percent=")
+        )])
+        for title, tags in tag_sets
+    ]
+    if "tags" in pen and (
+        len(powerup_tag_sets) == 1
+        or sorted(powerup_tag_sets[0][1]) == sorted(powerup_tag_sets[1][1])
+    ):
+        powerup_tag_sets = [("Event and pen powerup tags (identical)", powerup_tag_sets[0][1])]
+    powerups = [{"title": title, "rows": _powerup_rows(tags)} for title, tags in powerup_tag_sets]
     all_rules = (event.get("rulesSet") or []) + (pen.get("rulesSet") or [])
     powerup_note = (
         "Powerups disabled: NO_POWERUPS is present in the event or pen rules. "
@@ -243,7 +254,7 @@ def _pen_summary(event, pen):
         "has_pen": bool(pen),
         "powerups": powerups,
         "powerup_note": powerup_note,
-        "route_preview": build_event_route(map_id, route_id, tag_sets, all_rules),
+        "route_preview": build_event_route(map_id, route_id, powerup_tag_sets, all_rules),
         "controls": [
             {"title": title, "values": [
                 meaning for tag, meaning in [

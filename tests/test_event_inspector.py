@@ -301,7 +301,7 @@ def test_arch_sources_are_not_repeated_when_event_and_pen_tags_match(upstream, i
     assert response.status_code == 200
     html = response.get_json()["summary_html"]
     route_html = html.split('<section class="event-route"', 1)[1]
-    assert ("Event and pen tags are identical;" in route_html) is identical
+    assert ("Event and pen powerup tags are identical;" in route_html) is identical
     assert "Event and pen tags (identical):" not in route_html
     assert "Arch override: Draft" in route_html
     if identical:
@@ -342,7 +342,7 @@ def test_powerup_section_merges_matching_event_and_pen_tags(upstream, identical)
     assert response.status_code == 200
     html = response.get_json()["summary_html"]
     section = html.split('<section class="powerup-settings">', 1)[1].split("</section>", 1)[0]
-    assert ("Event and pen tags are identical; these powerup settings apply to both." in section) is identical
+    assert ("Event and pen powerup tags are identical; these powerup settings apply to both." in section) is identical
     assert section.count("Starting powerup</dt>") == (1 if identical else 2)
     if identical:
         assert "<h4>" not in section
@@ -350,6 +350,41 @@ def test_powerup_section_merges_matching_event_and_pen_tags(upstream, identical)
         assert "<h4>Event tags</h4>" in section
         assert "<h4>Pen tags</h4>" in section
         assert "Anvil (ID 8)" in section
+
+
+@pytest.mark.parametrize("pen_powerups,merged", [
+    (['arch_powerup="0,2,4,1,11,1"', "starting_powerup=0"], True),
+    (['arch_powerup="0,2,4,1,11,1"', "starting_powerup=8"], False),
+    (['arch_powerup="0,2,4,1,11,1"'], False),
+])
+def test_powerup_merging_ignores_unrelated_tags_and_tag_order(upstream, pen_powerups, merged):
+    upstream.return_value = event_response({
+        "id": 5781526, "mapId": 4, "routeId": 2898229208,
+        "tags": ["starting_powerup=0", 'arch_powerup="0,2,4,1,11,1"', "timestamp=1794850009577"],
+        "eventSubgroups": [{
+            "id": 7463519, "subgroupLabel": "A",
+            "tags": ["timestamp=1794850018998", "enable_power_segments", *pen_powerups],
+        }],
+    })
+    response = app_module.app.test_client().get("/api/events/5781526?view=readable")
+    assert response.status_code == 200
+    data = response.get_json()
+    html = data["summary_html"]
+    section = html.split('<section class="powerup-settings">', 1)[1].split("</section>", 1)[0]
+    route_html = html.split('<section class="event-route"', 1)[1].split("</table>", 1)[0]
+    assert ("Event and pen powerup tags are identical;" in section) is merged
+    assert ("Event and pen powerup tags are identical;" in route_html) is merged
+    assert section.count("Starting powerup</dt>") == (1 if merged else 2)
+    if merged:
+        assert "<strong>Event tags:</strong>" not in route_html
+        assert "<strong>Pen tags:</strong>" not in route_html
+    else:
+        assert "<strong>Event tags:</strong>" in route_html
+        assert "<strong>Pen tags:</strong>" in route_html
+    assert "timestamp=1794850009577" in html
+    assert "timestamp=1794850018998" in html
+    assert "<h3>Event tags</h3>" in html and "<h3>Pen tags</h3>" in html
+    assert json.loads(data["raw_json"])["tags"][-1] == "timestamp=1794850009577"
 
 
 def test_readable_pens_render_tabs_and_individual_routes_with_arch_awards(upstream):

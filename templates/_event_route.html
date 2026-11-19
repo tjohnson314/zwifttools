@@ -5,7 +5,7 @@
     {% else %}
     <h3>Route preview: {{ preview.name }}</h3>
     {% if preview.identical_tags %}
-    <p class="hint">Event and pen tags are identical; the expected powerups below apply to both.</p>
+    <p class="hint">Event and pen powerup tags are identical; the expected powerups below apply to both.</p>
     {% endif %}
     <p class="hint">Race lead-in plus one route lap. Distances include the lead-in; this preview is not expanded or shortened for event laps, distance, or time limits. The actual approach from an individual pen has not been identified.</p>
     <p><a href="/surface-map?world={{ preview.map_id }}&amp;route={{ preview.route_id }}&amp;mode=race">Open in Route Explorer</a></p>
