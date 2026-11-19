@@ -151,6 +151,21 @@ anchor**, not an exact spawn position. Missing roads stay unlocated. Raw names
 and road times are preserved; no paddock IDs or race start lines are inferred.
 `AdZ_Paddock` belongs to road 130 near the Alpe summit, not Road to Sky's start.
 
+### Route Change Report
+
+Run `python tools\route_changes.py` after refreshing route data to report new
+routes and renames in `zwift_routes/index.json` compared with `HEAD`. Staged
+and unstaged changes are included; no commit is needed. Use `--base <revision>`
+to compare against another Git revision.
+
+Both tables show friendly world names alongside the raw world identifiers,
+such as `Richmond (world2)`. Unrecognized worlds retain their raw identifiers.
+
+Routes are matched by world (`mapID`) and `nameHash`; matching routes with
+changed names appear in a separate previous-name/new-name table. Routes without
+a `nameHash` use their name as identity, so name changes for those routes appear
+as additions. Other metadata changes are not reported.
+
 ### Route Start Versions
 
 The route browser offers **Free Ride** and **Race**, preserved in shared links
