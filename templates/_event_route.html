@@ -76,11 +76,18 @@
     <h4>Arches and expected powerups</h4>
     <p class="hint">Missing arch IDs use 0. If event and pen sources differ, each source is evaluated separately; precedence between conflicting sources is not assumed. Yellow markers flag uncertain award locations.</p>
     {% if preview.arch_error %}<p class="route-warning" role="status">{{ preview.arch_error }}</p>{% endif %}
-    {% if preview.arches %}
+    {% if preview.arches or preview.starting_awards %}
     <div class="route-table-wrap">
         <table class="route-table">
             <thead><tr><th scope="col"># / km</th><th scope="col">Arch / ID</th><th scope="col">Configured / expected powerup</th></tr></thead>
             <tbody>
+            {% if preview.starting_awards %}
+            <tr class="starting-powerup">
+                <td>Before start</td>
+                <td>Starting pen</td>
+                <td>{% for source, award in preview.starting_awards %}<p>{% if not preview.identical_tags %}<strong>{{ source }}:</strong> {% endif %}{{ award }}</p>{% endfor %}</td>
+            </tr>
+            {% endif %}
             {% for arch in preview.arches %}
             <tr id="pen-{{ pen_index }}-arch-{{ arch.number }}" tabindex="-1">
                 <td>{{ arch.number }}<br>{{ '%.2f'|format(arch.distance_km) }} km{% if arch.leg == 'leadin' %}<br>Lead-in{% endif %}</td>

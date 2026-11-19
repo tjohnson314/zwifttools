@@ -251,6 +251,7 @@ def _pen_summary(event, pen):
         "sections": sections,
         "event_rules": _rule_labels(event.get("rulesSet") or []),
         "pen_rules": _rule_labels(pen.get("rulesSet") or []),
+        "identical_rules": "rulesSet" in pen and sorted(event.get("rulesSet") or []) == sorted(pen.get("rulesSet") or []),
         "has_pen": bool(pen),
         "powerups": powerups,
         "powerup_note": powerup_note,

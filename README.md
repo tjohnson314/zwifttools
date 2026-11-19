@@ -110,9 +110,11 @@ status and unavailable profiles are reported without breaking the Roster tab.
 - Event and pen powerup tags remain separate rather than guessing precedence between conflicting sources. Disabled powerup settings and malformed overrides remain visible for inspection
 - When event and pen tags are identical, the route preview notes this once at the top instead of repeating source labels at every arch
 - The Powerups section also shows matching event/pen settings once with a shared-source note; differing settings keep separate source headings
+- Identical event/pen rule lists also appear once with a shared-source note, regardless of rule order; differing rules remain separately labeled
 - Powerup merging compares only `starting_powerup`, `arch_powerup`, and `powerup_percent`, ignoring tag order and unrelated tags such as timestamps. Full source tags remain separate when they differ
 - Pens use accessible tabs (click or Arrow Left/Right, Home, and End) rather than stacked cards
 - Each pen includes a route map, elevation profile, timing segments, and numbered arches with configured powerups or fallback pools. Hover an arch for its award or select it to jump to the details table
+- When configured, the starting powerup appears first in the route award table as a "Before start" pen award, separate from arch crossings; `NO_POWERUPS` still disables it
 - New York escalators use the same cached race-route zones as Route Explorer, with gold map highlights and elevation bands; hover or expand the escalator list for distances and trainer-slope percentages
 - Previews show the cached race lead-in plus one route lap, not a reconstruction of event laps, distance/time limits, or individual pen approaches. Native disabled-award flags, overlapping arch entities, and arches at the preview start are explicitly marked as uncertain; configured awards remain visible
 - Arch crossings are shipped in `zwift_routes/arches.json`, so hosting does not require game assets. After updating local route profiles, refresh the arch cache with `python -m tools.extract_zwift_routes --refresh-arches` (optionally `--world world1`); unavailable geometry or arch metadata is reported on the page

@@ -35,6 +35,10 @@
         {% endfor %}
         <section>
             <h3>Rules</h3>
+            {% if pen.identical_rules %}
+            <p class="hint">Event and pen rules are identical; these rules apply to both.</p>
+            <ul>{% for rule in pen.event_rules %}<li>{{ rule }}</li>{% else %}<li>No rules listed</li>{% endfor %}</ul>
+            {% else %}
             <h4>Event rules</h4>
             <ul>{% for rule in pen.event_rules %}<li>{{ rule }}</li>{% else %}<li>No rules listed</li>{% endfor %}</ul>
             {% if pen.has_pen %}
@@ -42,6 +46,7 @@
             <ul>{% for rule in pen.pen_rules %}<li>{{ rule }}</li>{% else %}<li>No rules listed</li>{% endfor %}</ul>
             {% endif %}
             <p class="hint">Rules are shown at their source level, without assuming how event and pen settings combine.</p>
+            {% endif %}
             {% for source in pen.controls %}
             <h4>Controls and display &mdash; {{ source.title }}</h4>
             <ul>{% for value in source['values'] %}<li>{{ value }}</li>{% else %}<li>No recognized control/display tags listed</li>{% endfor %}</ul>

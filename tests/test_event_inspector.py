@@ -329,6 +329,55 @@ def test_event_route_escalator_overlays_and_details(upstream, map_id, route_id, 
         assert 'class="escalator-key"' not in html
 
 
+@pytest.mark.parametrize("pen_tags,rules,expected", [
+    (["starting_powerup=0"], [], ["Feather (ID 0)"]),
+    (["starting_powerup=8"], [], ["Feather (ID 0)", "Anvil (ID 8)"]),
+    (["starting_powerup=0"], ["NO_POWERUPS"], ["Powerups disabled (NO_POWERUPS)"]),
+])
+def test_route_award_list_starts_with_pen_powerup(upstream, pen_tags, rules, expected):
+    upstream.return_value = event_response({
+        "id": 1, "mapId": 4, "routeId": 2898229208,
+        "tags": ["starting_powerup=0"], "rulesSet": rules,
+        "eventSubgroups": [{"id": 2, "subgroupLabel": "A", "tags": pen_tags}],
+    })
+    response = app_module.app.test_client().get("/api/events/1?view=readable")
+    assert response.status_code == 200
+    html = response.get_json()["summary_html"]
+    table = html.split('<table class="route-table">', 1)[1].split("</table>", 1)[0]
+    starting = table.split('<tr class="starting-powerup">', 1)[1].split("</tr>", 1)[0]
+    assert "Before start" in starting and "Starting pen" in starting
+    for award in expected:
+        assert award in starting
+    assert table.index('class="starting-powerup"') < table.index('id="pen-1-arch-1"')
+    if pen_tags == ["starting_powerup=0"]:
+        assert "<strong>" not in starting
+    else:
+        assert "<strong>Event tags:</strong>" in starting and "<strong>Pen tags:</strong>" in starting
+
+
+@pytest.mark.parametrize("pen_rules,merged", [
+    (["NO_TT_BIKES", "SHOW_RACE_RESULTS"], True),
+    (["SHOW_RACE_RESULTS", "NO_TT_BIKES"], True),
+    (["NO_TT_BIKES"], False),
+    ([], False),
+])
+def test_matching_event_and_pen_rules_render_once(upstream, pen_rules, merged):
+    event = {
+        "id": 1, "rulesSet": ["NO_TT_BIKES", "SHOW_RACE_RESULTS"],
+        "eventSubgroups": [{"id": 2, "subgroupLabel": "A", "rulesSet": pen_rules}],
+    }
+    upstream.return_value = event_response(event)
+    response = app_module.app.test_client().get("/api/events/1?view=readable")
+    assert response.status_code == 200
+    data = response.get_json()
+    rules = data["summary_html"].split("<h3>Rules</h3>", 1)[1].split("</section>", 1)[0]
+    assert ("Event and pen rules are identical;" in rules) is merged
+    assert ("<h4>Event rules</h4>" in rules) is not merged
+    assert ("<h4>Pen rules</h4>" in rules) is not merged
+    assert rules.count("(NO_TT_BIKES)") == (1 if merged or not pen_rules else 2)
+    assert json.loads(data["raw_json"]) == event
+
+
 @pytest.mark.parametrize("identical", [True, False])
 def test_powerup_section_merges_matching_event_and_pen_tags(upstream, identical):
     tags = ["starting_powerup=0", 'arch_powerup="74,0"']

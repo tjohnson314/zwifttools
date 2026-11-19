@@ -144,6 +144,12 @@ def build_event_route(map_id, route_id, tag_sets, rules):
     configured_sources = [(title, tags) for title, tags in tag_sets
                           if any(tag.startswith(("arch_powerup=", "powerup_percent=")) for tag in tags)]
     sources = configured_sources or [("Default", [])]
+    starting_awards = [
+        (title, _powerup(tag.partition("=")[2].strip('"')))
+        for title, tags in tag_sets for tag in tags if tag.startswith("starting_powerup=")
+    ]
+    if starting_awards and "NO_POWERUPS" in rules:
+        starting_awards = [("Event/pen rules", "Powerups disabled (NO_POWERUPS)")]
     arches = []
     for arch in preview["arches"]:
         if "NO_POWERUPS" in rules:
@@ -167,5 +173,6 @@ def build_event_route(map_id, route_id, tag_sets, rules):
         arches.append({**arch, "awards": awards, "warning": warning})
     return {
         **preview, "arches": arches,
+        "starting_awards": starting_awards,
         "identical_tags": len(tag_sets) == 1 and tag_sets[0][0] == "Event and pen powerup tags (identical)",
     }
