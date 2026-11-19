@@ -446,8 +446,20 @@ async function loadRaceById(raceId, internal = false) {
 // ---------------------------------------------------------------------------
 // Initialize race data and UI
 // ---------------------------------------------------------------------------
+function updatePowerPlayLink(data) {
+    const link = document.getElementById('power-play-link');
+    if (!link) return;
+    const title = String(data.race_name || '').toLocaleLowerCase();
+    const eventId = String(data.event_id || '');
+    const matches = title.includes('zwift power play') && /\bstage\s+1\b/.test(title) && /^[1-9]\d*$/.test(eventId);
+    link.hidden = !matches;
+    if (matches) link.href = `/power-play?event_id=${encodeURIComponent(eventId)}`;
+    else link.removeAttribute('href');
+}
+
 function initRaceData(data) {
     raceData = data;
+    updatePowerPlayLink(data);
     data.route_segments = data.route_segments || [];
     const segmentsCheckbox = document.getElementById('show-route-segments');
     if (segmentsCheckbox) {

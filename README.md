@@ -161,6 +161,17 @@ status and unavailable profiles are reported without breaking the Roster tab.
 - Server-side caching for fast reloads
 - In-app FAQ panels for both Bike Comparison and Race Replay
 
+### Stage 1 - Zwift Power Play
+
+- Open `/power-play?event_id=<event ID>` or enter the event ID on the page; the event's single pen is resolved automatically, and locally cached events also work offline
+- Only Stage 1 is supported. Race Replay shows an event-ID leaderboard link when the race title contains both "Stage 1" and "Zwift Power Play" (case-insensitive); other stages are rejected
+- Separate 5-, 10-, and 20-second tables show each rider's best effort across the race's power arches, with independent watts and W/kg ranks. Click either power or rank column header to sort that table in either direction; there is no ranking dropdown or category column
+- Efforts begin at the directional arch crossing, interpolated from GPS, and end exactly the stated number of seconds later; they are not rolling power-curve peaks
+- Uses original recorded power, with time-weighted linear interpolation at interval boundaries, without clipping or resampling through the replay engine. Incomplete windows, missing samples, and gaps greater than 1.5 times the recording's median sample interval are excluded and reported
+- Race/activity start timestamps exclude warmup efforts; official result durations exclude post-race efforts. Missing start timestamps exclude the rider with a re-fetch warning; missing official finish times are flagged and use the recording end
+- W/kg uses event-recorded rider weight only. Older caches without weight provenance show watts and a warning; re-fetch the race to refresh weights
+- Links back to Race Replay. This is a telemetry-derived leaderboard, not official Zwift scoring
+
 ### Surface Map / Route Explorer
 
 - Browse worlds and routes at `/surface-map`, with surface-colored elevation profiles

@@ -114,6 +114,7 @@ def test_chase_subgroups_use_shared_event_clock(tmp_path, monkeypatch):
         },
     ]
     payload = data_response.get_json()
+    assert payload['race_name'] == 'Test Chase'
     assert payload['event_id'] == 123
     assert payload['race_start_time'] == '2026-09-28T16:00:00.000+0000'
     assert [group['offset_seconds'] for group in payload['start_groups']] == [

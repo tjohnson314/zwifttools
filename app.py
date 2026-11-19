@@ -293,6 +293,105 @@ def event_inspector():
     return render_template('event_inspector.html')
 
 
+@app.route('/power-play')
+def power_play():
+    return render_template('power_play.html')
+
+
+@app.route('/api/power-play/resolve/<event_id>')
+def api_power_play_resolve(event_id):
+    from shared.power_play import is_power_play
+
+    if not re.fullmatch(r'[0-9]{1,20}', event_id) or int(event_id) <= 0:
+        return jsonify({'error': 'Event ID must be a positive numeric ID.'}), 400
+    event_id = str(int(event_id))
+    force_refresh = request.args.get('force_refresh') == '1'
+    try:
+        for meta_path in Path('race_data').glob('race_data_*/race_meta.json'):
+            with meta_path.open(encoding='utf-8') as handle:
+                meta = json.load(handle)
+            if str(meta.get('event_id')) != event_id:
+                continue
+            if not is_power_play(meta.get('race_name')):
+                raise ValueError('This leaderboard is only available for Stage 1 - Zwift Power Play.')
+            if not force_refresh or meta.get('source_activity_id'):
+                return jsonify({
+                    'race_id': meta_path.parent.name,
+                    'source_activity_id': str(meta['source_activity_id']) if meta.get('source_activity_id') else None,
+                })
+
+        headers = get_headers()
+        if not headers:
+            return jsonify({'error': 'Zwift service unavailable.'}), 503
+        response = _request_with_retry(
+            'GET', f'{BASE_URL}/events/{event_id}', headers=headers, timeout=30)
+        _check_zwift_response(response, 'Could not fetch Power Play event settings.')
+        event = response.json()
+        if not isinstance(event, dict) or str(event.get('id')) != event_id:
+            raise ZwiftAPIError('Invalid event response from Zwift.', 502)
+        if not is_power_play(event.get('name')):
+            raise ValueError('This leaderboard is only available for Stage 1 - Zwift Power Play.')
+        pens = event.get('eventSubgroups', [])
+        if len(pens) != 1:
+            raise ValueError('Stage 1 - Zwift Power Play requires an event with exactly one pen.')
+        subgroup_id = str(pens[0]['id'])
+        if not re.fullmatch(r'[0-9]{1,20}', subgroup_id) or int(subgroup_id) <= 0:
+            raise ValueError('Invalid event pen ID.')
+        race_id = f'race_data_{subgroup_id}'
+        if not force_refresh and blob_storage.race_exists_in_blob(race_id):
+            return jsonify({'race_id': race_id, 'source_activity_id': None})
+        participants, error = get_race_entries(subgroup_id, headers)
+        if error:
+            raise ZwiftAPIError(error, 502)
+        source = next((rider['activity_id'] for rider in participants if rider.get('activity_id')), None)
+        if source is None:
+            return jsonify({'error': 'No rider activities are available for this event yet.'}), 404
+        return jsonify({'race_id': None, 'source_activity_id': str(source)})
+    except (ValueError, KeyError, TypeError) as error:
+        logger.warning("Invalid Power Play event %s: %s", event_id, error)
+        return jsonify({'error': str(error)}), 400
+    except OSError:
+        logger.exception("Could not read Power Play event %s", event_id)
+        return jsonify({'error': 'Could not read cached race metadata.'}), 500
+
+
+@app.route('/api/power-play/leaderboard/<race_id>')
+def api_power_play_leaderboard(race_id):
+    from shared.power_play import RACE_ID_PATTERN, build_leaderboard
+
+    if not re.fullmatch(RACE_ID_PATTERN, race_id):
+        return jsonify({'error': 'Invalid cached race ID.'}), 400
+
+    def restore(directory_id):
+        path = Path('race_data') / directory_id
+        if not (path / 'complete_race_summary.csv').exists() and not (path / 'event_manifest.json').exists():
+            if blob_storage.race_exists_in_blob(directory_id):
+                path.mkdir(parents=True, exist_ok=True)
+                blob_storage.download_race_dir(directory_id, path)
+        return path
+
+    try:
+        path = restore(race_id)
+        manifest_path = path / 'event_manifest.json'
+        if manifest_path.exists():
+            with manifest_path.open(encoding='utf-8') as handle:
+                manifest = json.load(handle)
+            for group in manifest['subgroups']:
+                if not re.fullmatch(RACE_ID_PATTERN, group['race_id']):
+                    raise ValueError('Invalid subgroup race ID.')
+                restore(group['race_id'])
+        return jsonify(build_leaderboard(path))
+    except FileNotFoundError:
+        logger.warning("Power Play race data not found: %s", race_id)
+        return jsonify({'error': 'Race data is unavailable. Fetch the race using an activity ID.'}), 404
+    except (ValueError, KeyError, TypeError) as error:
+        logger.warning("Invalid Power Play race %s: %s", race_id, error)
+        return jsonify({'error': str(error)}), 400
+    except OSError:
+        logger.exception("Could not read Power Play race %s", race_id)
+        return jsonify({'error': 'Could not read cached race data.'}), 500
+
+
 @app.route('/api/events/<event_id>')
 def api_event_settings(event_id):
     if not re.fullmatch(r'[0-9]{1,20}', event_id) or int(event_id) <= 0:
@@ -4521,6 +4620,7 @@ def _build_race_data_response(race_id):
 
     # Load race metadata (start time, event IDs) — needed for late joiner detection
     race_start_time = None
+    race_name = None
     event_id = None
     event_subgroup_id = None
     start_groups = _race_data_cache.get(race_id + '_start_groups', [])
@@ -4533,6 +4633,7 @@ def _build_race_data_response(race_id):
             with open(manifest_path) as f:
                 manifest = json.load(f)
             event_id = manifest.get('event_id')
+            race_name = manifest.get('race_name')
             if start_groups:
                 first_group = min(
                     start_groups, key=lambda group: group['offset_seconds']
@@ -4544,6 +4645,7 @@ def _build_race_data_response(race_id):
         try:
             with open(meta_path) as f:
                 meta = json.load(f)
+            race_name = meta.get('race_name')
             race_start_time = meta.get('race_start_time')
             event_id = meta.get('event_id')
             event_subgroup_id = meta.get('event_subgroup_id')
@@ -4680,6 +4782,7 @@ def _build_race_data_response(race_id):
 
     return jsonify({
         'race_id': race_id,
+        'race_name': race_name,
         'route_name': race_data.route_name,
         'route_slug': race_data.route_slug,
         'route_geometry_source': race_data.route_geometry_source,

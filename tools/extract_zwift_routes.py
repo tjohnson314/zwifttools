@@ -573,7 +573,7 @@ def parse_arch_definitions(data: bytes) -> list[dict]:
         road_time = float(attributes["m_roadTime"])
         if not math.isfinite(road_time):
             raise ValueError(f"Invalid road time for arch {index}")
-        definitions.append({
+        definition = {
             "entity": index,
             "name": attributes.get("m_Name") or attributes.get("m_ArchFriendlyName") or f"Arch {index}",
             "forward_name": attributes.get("m_ArchFriendlyName"),
@@ -585,7 +585,16 @@ def parse_arch_definitions(data: bytes) -> list[dict]:
             "reverse_enabled": attributes.get("m_bEnableBackward") != "0",
             "gives_powerup": attributes.get("m_bGivesPowerUp") != "0",
             "type": "power" if attributes["type"] == "ENTITY_TYPE_POWERARCH" else "timing",
-        })
+        }
+        if definition["type"] == "power":
+            duration = attributes.get("m_segmentDurationSecs")
+            if duration is None:
+                match = re.search(r"\b(\d+)\s+Sec\b", definition["name"], re.IGNORECASE)
+                duration = match.group(1) if match else None
+            if duration is not None:
+                definition["duration_sec"] = float(duration)
+            definition["network_hash"] = attributes.get("m_powerArchNetworkHash")
+        definitions.append(definition)
     return definitions
 
 
@@ -632,7 +641,7 @@ def derive_arch_passages(root: ET.Element, definitions: list[dict]) -> list[dict
             name = definition["forward_name" if forward else "reverse_name"] or definition["name"]
             if forward or definition["reverse_name"] == definition["forward_name"] or not definition["reverse_name"]:
                 name = _directional_segment_name(name, "F" if forward else "R")
-            passages.append({
+            passage = {
                 "name": name,
                 "entity_name": definition["name"],
                 "arch_id": definition["arch_id"],
@@ -643,7 +652,22 @@ def derive_arch_passages(root: ET.Element, definitions: list[dict]) -> list[dict
                 "gives_powerup": definition["gives_powerup"],
                 "leg": "leadin" if index < lead_count else "route",
                 "distance_m": round(distance, 2),
-            })
+            }
+            if definition["type"] == "power" and "duration_sec" in definition:
+                first_point = [points[index][axis] / UNITS_PER_METRE for axis in (0, 2)]
+                last_point = [points[index + 1][axis] / UNITS_PER_METRE for axis in (0, 2)]
+                tangent = [last - first for first, last in zip(first_point, last_point)]
+                start_point = [first + fraction * step for first, step in zip(first_point, tangent)]
+                norm = math.hypot(*tangent)
+                if norm == 0:
+                    raise ValueError(f"Power arch has no directional geometry: {name}")
+                passage.update({
+                    "duration_sec": definition["duration_sec"],
+                    "network_hash": definition["network_hash"],
+                    "start_line": [start_point, [value + step / norm * 10
+                                                 for value, step in zip(start_point, tangent)]],
+                })
+            passages.append(passage)
     return sorted(passages, key=lambda passage: passage["distance_m"])
 
 

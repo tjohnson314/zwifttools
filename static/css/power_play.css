@@ -1,0 +1,21 @@
+[hidden] { display: none !important; }
+#power-play-status { margin-top: 12px; color: #aaa; }
+#power-play-status.error { color: #ffab91; }
+#power-play-results p { color: #bbb; margin-bottom: 12px; line-height: 1.5; }
+.leaderboard-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 24px; }
+.leaderboard-controls .back-link { margin: 0; }
+.table-container { overflow-x: auto; }
+.race-input-group { min-width: 0; }
+table { width: 100%; border-collapse: collapse; min-width: 760px; }
+th, td { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); text-align: left; }
+th { color: #f7931e; white-space: nowrap; }
+th[data-power-sort] button { color: inherit; background: none; border: 0; font: inherit; font-weight: inherit; cursor: pointer; }
+th[data-power-sort] button:hover { color: #ffb45f; }
+td a { color: #4fc3f7; }
+#power-play-warnings { margin-top: 16px; color: #ffcc80; }
+#power-play-warnings ul { padding-left: 24px; margin-top: 10px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+@media (max-width: 600px) {
+    .input-row { flex-wrap: wrap; }
+    .input-row input[type="text"] { flex-basis: 100%; min-width: 0; }
+}

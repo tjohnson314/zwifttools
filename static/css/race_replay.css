@@ -51,6 +51,10 @@ h1 .header-icon {
     text-decoration: underline;
 }
 
+#power-play-link[hidden] {
+    display: none;
+}
+
 .header-bar {
     display: flex;
     justify-content: space-between;

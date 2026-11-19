@@ -78,6 +78,16 @@ def fetch_race(tmp_path, all_subgroups=False, **kwargs):
 
 
 @pytest.mark.parametrize('all_subgroups', [False, True])
+def test_summary_retains_event_weight_provenance(tmp_path, monkeypatch, race_api, all_subgroups):
+    rider = {**participant('101'), 'weight_kg': 62.5, 'weight_is_event_recorded': True}
+    monkeypatch.setattr(data_fetcher, 'get_race_entries', Mock(return_value=([rider], None)))
+    directory = fetch_race(tmp_path, all_subgroups)
+    summary = pd.read_csv(directory / 'complete_race_summary.csv')
+    assert summary.loc[0, 'weight_kg'] == 62.5
+    assert summary.loc[0, 'weight_is_event_recorded']
+
+
+@pytest.mark.parametrize('all_subgroups', [False, True])
 def test_refreshes_roster_but_reuses_activities(tmp_path, monkeypatch, race_api, all_subgroups):
     # Real Zwift IDs exceed exact floating-point integer precision.
     first_id = '2243088276573454336'

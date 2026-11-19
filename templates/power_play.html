@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
+    <title>Stage 1 - Zwift Power Play</title>
+    <link rel="stylesheet" href="/static/css/race_replay.css">
+    <link rel="stylesheet" href="/static/css/power_play.css">
+</head>
+<body>
+<div class="container">
+    <div class="header-bar">
+        <div>
+            <a href="/" class="back-link">&larr; Back to Tools</a>
+            <h1>Stage 1 - Zwift Power Play</h1>
+            <p class="subtitle">Best power-arch efforts per rider: 5, 10, and 20 seconds</p>
+        </div>
+        {% include '_rider_header.html' %}
+    </div>
+    <section class="panel">
+        <h2>Load Race</h2>
+        <form id="power-play-form" class="race-input-group">
+            <label for="event-input">Zwift Event ID</label>
+            <div class="input-row">
+                <input type="text" id="event-input" required inputmode="numeric" pattern="[0-9]+" placeholder="Event ID (not the pen ID)">
+                <button id="fetch-btn" class="btn btn-primary" type="submit">Load Leaderboard</button>
+                <button id="refetch-btn" class="btn btn-secondary" type="button">Re-fetch</button>
+            </div>
+        </form>
+        <p id="power-play-status" role="status" aria-live="polite"></p>
+    </section>
+    <section id="power-play-results" hidden>
+        <div class="panel">
+            <h2 id="race-title"></h2>
+            <p id="rider-count"></p>
+            <p>Each effort starts at its directional power arch and lasts exactly the stated duration.
+                These are not rolling power-curve peaks. Only complete recorded efforts are ranked.</p>
+            <div class="leaderboard-controls">
+                <a id="replay-link" class="back-link">Open Race Replay &rarr;</a>
+            </div>
+            <details id="power-play-warnings" hidden>
+                <summary id="warning-count"></summary>
+                <ul id="warning-list"></ul>
+            </details>
+        </div>
+        {% for duration in [5, 10, 20] %}
+        <section class="panel">
+            <h2>{{ duration }}-second leaderboard</h2>
+            <div class="table-container">
+                <table>
+                    <caption class="sr-only">Best {{ duration }}-second power-arch effort per rider</caption>
+                    <thead><tr>
+                        <th data-power-sort="watts_rank" data-duration="{{ duration }}" aria-sort="none"><button type="button">W Rank <span class="sort-indicator" aria-hidden="true">&varr;</span></button></th>
+                        <th data-power-sort="wkg_rank" data-duration="{{ duration }}" aria-sort="none"><button type="button">W/kg Rank <span class="sort-indicator" aria-hidden="true">&varr;</span></button></th>
+                        <th>Rider</th>
+                        <th data-power-sort="avg_power" data-duration="{{ duration }}" aria-sort="descending"><button type="button">Watts <span class="sort-indicator" aria-hidden="true">&darr;</span></button></th>
+                        <th data-power-sort="watts_per_kg" data-duration="{{ duration }}" aria-sort="none"><button type="button">W/kg <span class="sort-indicator" aria-hidden="true">&varr;</span></button></th>
+                        <th>Weight (kg)</th><th>Winning effort</th>
+                    </tr></thead>
+                    <tbody id="efforts-{{ duration }}"></tbody>
+                </table>
+            </div>
+        </section>
+        {% endfor %}
+    </section>
+</div>
+<script src="/static/js/power_play.js"></script>
+</body>
+</html>
