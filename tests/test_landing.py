@@ -15,8 +15,8 @@ def test_landing_shows_current_tools_by_default(query, monkeypatch):
     assert 'href="/?tab=archived"' in html
     assert 'href="/zrl/leaderboard"' not in html
     for path in (
-        "/bike-comparison", "/race-replay", "/surface-map", "/my-activities",
-        "/power", "/workout-analysis", "/ttt-analysis", "/ride-compare", "/critical-power",
+        "/dirt", "/bike-comparison", "/race-replay", "/event-inspector", "/surface-map", "/my-activities",
+        "/power", "/segment-prs", "/workout-analysis", "/ttt-analysis", "/ride-compare", "/critical-power",
         "/tt-pacing", "/ttt-pacing", "/top-performers",
     ):
         assert f'href="{path}" class="tool-card"' in html
@@ -36,19 +36,20 @@ def test_archived_tab_contains_only_zrl_tool():
     assert "Archived tool:" in html
 
 
-def test_landing_preserves_dev_tool_and_authentication(monkeypatch):
+def test_landing_preserves_dev_tool_and_clears_legacy_authentication(monkeypatch):
     monkeypatch.setattr(app_module, "_surface_map_dev_available", lambda: True)
     client = app_module.app.test_client()
 
-    assert b'Log in with Zwift' in client.get("/").data
+    assert b'Log in with Zwift' not in client.get("/").data
     with client.session_transaction() as session:
         session["tokens"] = {}
 
     assert b'href="/surface-map-dev"' in client.get("/").data
     for path in ("/", "/?tab=archived"):
         html = client.get(path).get_data(as_text=True)
-        assert "Logged in" in html
-        assert 'href="/auth/logout"' in html
+        assert "Logged in" not in html
+    with client.session_transaction() as session:
+        assert "tokens" not in session
 
 
 def test_archived_zrl_page_keeps_existing_url_and_controls(monkeypatch):
@@ -64,3 +65,18 @@ def test_archived_zrl_page_keeps_existing_url_and_controls(monkeypatch):
     assert 'id="subgroup-input" value="7354731"' in html
     assert 'id="load-btn"' in html
     assert 'id="refetch-btn"' in html
+
+
+@pytest.mark.parametrize("available", [False, True])
+def test_dev_timing_arch_endpoint_keeps_local_gate_and_exact_hash_strings(monkeypatch, available):
+    from shared import surface_map_dev
+
+    payload = {"mapID": 9, "arches": [{"hash": "-9223372036854775807"}]}
+    monkeypatch.setattr(app_module, "_surface_map_dev_available", lambda: available)
+    monkeypatch.setattr(surface_map_dev, "get_world_timing_arches", lambda _: payload)
+
+    response = app_module.app.test_client().get("/api/surface_map_dev/world/9/timing-arches")
+
+    assert response.status_code == (200 if available else 404)
+    if available:
+        assert response.get_json() == payload

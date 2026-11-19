@@ -11,6 +11,18 @@ function rider(athleteId, gap, overrides = {}) {
             altitude: 10, ...overrides}};
 }
 
+test('bike stats and road surfaces stay synchronized with Power Breakdown', async () => {
+    const nearbyModel = await import('../mods/sauce_mod_nearby_draft/bike-model.mjs');
+    const powerModel = await import('../mods/sauce_mod_power_breakdown/bike-model.mjs');
+    const nearbyRoads = await import('../mods/sauce_mod_nearby_draft/road-styles.mjs');
+    const powerRoads = await import('../mods/sauce_mod_power_breakdown/road-styles.mjs');
+    assert.deepEqual(nearbyModel.MODEL, powerModel.MODEL);
+    assert.deepEqual(nearbyRoads.ROAD_STYLES, powerRoads.ROAD_STYLES);
+    assert.ok(nearbyModel.MODEL.frames.length > 0);
+    assert.ok(nearbyModel.MODEL.wheels.length > 0);
+    assert.ok(Object.keys(nearbyRoads.ROAD_STYLES).length > 0);
+});
+
 test('nearby selection includes both 15-second boundaries and self, excluding unknown gaps', async () => {
     const context = await modelContext();
     const entries = [rider(1, 0), rider(2, -15), rider(3, 15), rider(4, -15.01),

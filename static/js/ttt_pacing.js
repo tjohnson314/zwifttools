@@ -15,33 +15,11 @@ let bikeSelector = null;
 let laps = 1;
 let riders = [];   // [{ name, height_cm, weight_kg, cp_w, w_prime_kj, zwift_id?, error? }]
 const charts = {};
-let isAuthenticated = false;
 let isPlanning = false;
 let powerUnit = 'W';
 let planRiderWeights = [];
 let powerChartData = null;
 let pullSchedule = [];
-
-// ── Login ────────────────────────────────────────────────────────────────────
-async function checkAuth() {
-    const text = document.getElementById('authStatusText');
-    const button = document.getElementById('authBtn');
-    try {
-        const resp = await fetch('/auth/status');
-        const auth = await resp.json();
-        isAuthenticated = !!auth.authenticated;
-    } catch (e) {
-        isAuthenticated = false;
-    }
-    text.textContent = isAuthenticated ? '✓ Logged in via Zwift' : 'Not logged in';
-    text.className = isAuthenticated ? 'auth-status logged-in' : 'auth-status';
-    button.textContent = isAuthenticated ? 'Log out' : 'Log in with Zwift';
-    button.className = isAuthenticated ? 'btn-auth logout' : 'btn-auth';
-}
-
-function handleAuth() {
-    window.location.href = isAuthenticated ? '/auth/logout' : '/auth/login?next=/ttt-pacing';
-}
 
 // ── Persistence ──────────────────────────────────────────────────────────────
 function loadSettings() {
@@ -74,7 +52,6 @@ function saveSettings() {
 
 // ── Initialise ───────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-    checkAuth();
     const settings = loadSettings();
     powerUnit = settings.powerUnit === 'W/kg' ? 'W/kg' : 'W';
     document.querySelectorAll('input[name="powerUnit"]').forEach(input => {
@@ -245,12 +222,6 @@ async function fetchRiders() {
             body: JSON.stringify({ zwift_ids: ids }),
         });
         const data = await resp.json();
-        if (resp.status === 401) {
-            isAuthenticated = false;
-            checkAuth();
-            showError('Log in with Zwift (top right) to look up riders.');
-            return;
-        }
         if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
         // Keep manual edits for riders that were already in the table.
         const previous = new Map(riders.filter(r => r.zwift_id).map(r => [r.zwift_id, r]));

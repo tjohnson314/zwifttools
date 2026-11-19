@@ -37,8 +37,13 @@ def _load_calibrated_route_boundaries():
         return None
     coefficient = np.asarray(calibration, dtype=float)
     path = route["segment_path"]
-    positions = np.arange(len(path["x"]), dtype=float)
-    projected = np.column_stack([path["x"], path["z"], np.ones(len(positions))]) @ coefficient
+    source_positions = np.asarray(path.get("d", np.arange(len(path["x"]))), dtype=float)
+    positions = np.arange(int(round(source_positions[-1])) + 1, dtype=float)
+    projected = np.column_stack([
+        np.interp(positions, source_positions, path["x"]),
+        np.interp(positions, source_positions, path["z"]),
+        np.ones(len(positions)),
+    ]) @ coefficient
     return projected, positions
 
 

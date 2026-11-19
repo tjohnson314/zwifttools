@@ -8,7 +8,7 @@
     <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
     <title>Surface Map - Zwift Tools</title>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-    <link rel="stylesheet" href="/static/css/surface_map.css?v=6">
+    <link rel="stylesheet" href="/static/css/surface_map.css?v=11">
 </head>
 <body>
     <div class="header-bar">
@@ -17,6 +17,7 @@
             <h1><span class="header-icon">🗺️</span> Surface Map</h1>
             <p class="subtitle">Explore each world's road network by surface type, then browse routes and inspect their elevation and surfaces.</p>
         </div>
+        {% include '_rider_header.html' %}
     </div>
 
     <div id="status" class="status"></div>
@@ -27,6 +28,10 @@
             <div class="world-select-wrap">
                 <label for="world-select">World</label>
                 <select id="world-select"><option value="">Loading…</option></select>
+            </div>
+            <div id="route-mode" class="sport-filter" role="group" aria-label="Route version">
+                <button type="button" class="sport-btn" data-mode="free_ride" aria-pressed="false">Free Ride</button>
+                <button type="button" class="sport-btn active" data-mode="race" aria-pressed="true">Race</button>
             </div>
             <div class="sidebar-head">
                 <h2>Routes</h2>
@@ -54,6 +59,10 @@
                 <div class="canvas-wrap">
                     <div id="satellite-map" role="region" aria-label="Satellite map of the selected video route" hidden></div>
                     <canvas id="map-canvas"></canvas>
+                    <div id="map-scale" class="map-scale" role="img" aria-label="Map distance scale" hidden>
+                        <div id="map-scale-label"></div>
+                        <div id="map-scale-bar" class="map-scale-bar"></div>
+                    </div>
                     <div id="map-hint" class="map-hint">Select a world, then pick a route.</div>
                 </div>
             </div>
@@ -61,6 +70,7 @@
             <div id="route-detail" class="route-detail" style="display:none;">
                 <div class="route-detail-head">
                     <h2 id="rd-name">—</h2>
+                    <span id="rd-start-status" class="r-badge" hidden></span>
                     <div class="route-detail-actions">
                         <button id="btn-copy-link" class="btn-sm" title="Copy a link to this route">Copy link</button>
                     </div>
@@ -72,7 +82,16 @@
         </main>
     </div>
 
-    <script src="/static/js/map_canvas.js?v=1"></script>
-    <script src="/static/js/surface_map.js?v=13"></script>
+    <dialog id="road-route-picker" class="road-route-picker" aria-labelledby="road-picker-title">
+        <div class="road-picker-head">
+            <h2 id="road-picker-title"></h2>
+            <button id="road-picker-close" type="button" class="btn-sm" aria-label="Close route picker" title="Close">&times;</button>
+        </div>
+        <input id="road-picker-search" type="search" placeholder="Search routes..." aria-label="Search routes at this point" autocomplete="off">
+        <p id="road-picker-status" class="road-picker-status" role="alert"></p>
+        <ul id="road-picker-list" class="route-list"></ul>
+    </dialog>
+    <script src="/static/js/map_canvas.js?v=2"></script>
+    <script src="/static/js/surface_map.js?v=24"></script>
 </body>
 </html>

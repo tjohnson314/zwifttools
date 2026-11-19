@@ -1,0 +1,97 @@
+<article class="event-overview">
+    <h2>{{ summary.name }}</h2>
+    <p>Event {{ summary.id }}</p>
+    <p class="description">{{ summary.description }}</p>
+    <details>
+        <summary>Event-wide visibility and settings</summary>
+        <dl class="setting-list">
+            {% for label, value in summary.settings %}
+            <div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>
+            {% endfor %}
+        </dl>
+    </details>
+</article>
+<div class="pen-nav" role="tablist" aria-label="Event pens">
+    {% for pen in summary.pens %}
+    <button type="button" role="tab" id="pen-tab-{{ loop.index }}" aria-controls="pen-{{ loop.index }}"
+            aria-selected="{{ 'true' if loop.first else 'false' }}" tabindex="{{ 0 if loop.first else -1 }}">{{ 'Pen ' if pen.has_pen else '' }}{{ pen.label }}</button>
+    {% endfor %}
+</div>
+{% for pen in summary.pens %}
+{% set pen_index = loop.index %}
+<article class="pen-card" id="pen-{{ pen_index }}" role="tabpanel" aria-labelledby="pen-tab-{{ pen_index }}" tabindex="0"{% if not loop.first %} hidden{% endif %}>
+    <h2>{{ 'Pen ' if pen.has_pen else '' }}{{ pen.label }}</h2>
+    <div class="pen-sections">
+        {% for section in pen.sections[:4] %}
+        <section>
+            <h3>{{ section.title }}</h3>
+            <dl class="setting-list">
+                {% for label, value in section.rows %}
+                <div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>
+                {% endfor %}
+            </dl>
+            {% if section.note %}<p class="hint">{{ section.note }}</p>{% endif %}
+        </section>
+        {% endfor %}
+        <section>
+            <h3>Rules</h3>
+            <h4>Event rules</h4>
+            <ul>{% for rule in pen.event_rules %}<li>{{ rule }}</li>{% else %}<li>No rules listed</li>{% endfor %}</ul>
+            {% if pen.has_pen %}
+            <h4>Pen rules</h4>
+            <ul>{% for rule in pen.pen_rules %}<li>{{ rule }}</li>{% else %}<li>No rules listed</li>{% endfor %}</ul>
+            {% endif %}
+            <p class="hint">Rules are shown at their source level, without assuming how event and pen settings combine.</p>
+            {% for source in pen.controls %}
+            <h4>Controls and display &mdash; {{ source.title }}</h4>
+            <ul>{% for value in source['values'] %}<li>{{ value }}</li>{% else %}<li>No recognized control/display tags listed</li>{% endfor %}</ul>
+            {% endfor %}
+        </section>
+        <section class="powerup-settings">
+            <h3>Powerups</h3>
+            {% for source in pen.powerups %}
+            {% if source.title == 'Event and pen powerup tags (identical)' %}
+            <p class="hint">Event and pen powerup tags are identical; these powerup settings apply to both.</p>
+            {% else %}
+            <h4>{{ source.title }}</h4>
+            {% endif %}
+            <dl class="setting-list">
+                {% for label, value in source.rows %}
+                <div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>
+                {% endfor %}
+            </dl>
+            {% endfor %}
+            <p class="hint">{{ pen.powerup_note }}</p>
+        </section>
+    </div>
+    {% with preview = pen.route_preview %}
+    {% include '_event_route.html' %}
+    {% endwith %}
+    <details>
+        <summary>Equipment, account state, and all tags</summary>
+        <div class="pen-sections">
+            {% for section in pen.sections[4:] %}
+            <section>
+                <h3>{{ section.title }}</h3>
+                <dl class="setting-list">
+                    {% for label, value in section.rows %}
+                    <div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>
+                    {% endfor %}
+                </dl>
+                {% if section.note %}<p class="hint">{{ section.note }}</p>{% endif %}
+            </section>
+            {% endfor %}
+            {% for source in pen.tags %}
+            <section>
+                <h3>{{ source.title }}</h3>
+                <ul class="tag-list">
+                    {% for tag in source['values'] %}
+                    <li><code>{{ tag.raw }}</code>{% if tag.meaning %} &mdash; {{ tag.meaning }}{% endif %}</li>
+                    {% else %}<li>No tags listed</li>{% endfor %}
+                </ul>
+            </section>
+            {% endfor %}
+        </div>
+    </details>
+</article>
+{% endfor %}

@@ -8,6 +8,9 @@
 'use strict';
 
 let allRoutes = [];       // full list from /api/tt_pacing/routes
+let allSegments = [];
+let planMode = 'route';
+let routeMode = 'race';
 let bikeSelector = null;  // shared BikeSelector instance (frame/wheels/level)
 let selectedRoute = null; // currently selected route object
 let planChart = null;     // Chart.js instance
@@ -20,6 +23,7 @@ let laps = 1;             // number of laps for looped routes
 let routeSlugMap = {};    // slug → route object, for URL deep-linking
 
 let routeGeometry = null; // { key, leadin, route, combined, background, bounds, stitchGap }
+let mapRequestSeq = 0;
 let mapView = null;       // { canvas, ctx, dpr, project() } cached map transform
 let mapSelectionKm = null;// currently highlighted distance (km) on the map
 let mapDividerKm = [];    // smart-bucket divider distances (km) to mark on the map
@@ -76,6 +80,24 @@ function getCustomDistanceKm() {
     return isImperial() ? value / KM_TO_MI : value;
 }
 
+function getStartDistanceKm() {
+    const value = parseFloat(document.getElementById('startDistance').value);
+    if (isNaN(value)) return 0;
+    return isImperial() ? value / KM_TO_MI : value;
+}
+
+function portionError() {
+    if (planMode === 'segment') return '';
+    const start = getStartDistanceKm();
+    const end = getCustomDistanceKm();
+    if (!document.getElementById('startDistance').checkValidity()
+        || !document.getElementById('customDistance').checkValidity()
+        || !Number.isFinite(start) || start < 0 || (end != null && (!Number.isFinite(end) || end <= start))) {
+        return 'End distance must be greater than start distance; start must be zero or more.';
+    }
+    return '';
+}
+
 function setUnits(unit) {
     if (unit === currentUnit) return;
     convertInputs(unit);          // convert field values before switching
@@ -88,18 +110,20 @@ function setUnits(unit) {
 function convertInputs(newUnit) {
     const wEl = document.getElementById('riderWeight');
     const hEl = document.getElementById('riderHeight');
-    const distanceEl = document.getElementById('customDistance');
     const w = parseFloat(wEl.value);
     const h = parseFloat(hEl.value);
-    const distance = parseFloat(distanceEl.value);
     if (newUnit === 'imperial') {
         if (!isNaN(w)) wEl.value = Math.round(w * KG_TO_LB);
         if (!isNaN(h)) hEl.value = (h * CM_TO_IN).toFixed(1);
-        if (!isNaN(distance)) distanceEl.value = (distance * KM_TO_MI).toFixed(1);
     } else {
         if (!isNaN(w)) wEl.value = (w / KG_TO_LB).toFixed(1);
         if (!isNaN(h)) hEl.value = Math.round(h / CM_TO_IN);
-        if (!isNaN(distance)) distanceEl.value = (distance / KM_TO_MI).toFixed(1);
+    }
+    for (const id of ['startDistance', 'customDistance']) {
+        const el = document.getElementById(id);
+        const distance = parseFloat(el.value);
+        if (!isNaN(distance)) el.value = (newUnit === 'imperial'
+            ? distance * KM_TO_MI : distance / KM_TO_MI).toFixed(3);
     }
 }
 
@@ -111,13 +135,15 @@ function updateInputConstraints() {
         wEl.min = 66; wEl.max = 440; wEl.step = 1;
         document.getElementById('heightLabel').textContent = 'Height (in)';
         hEl.min = 55; hEl.max = 87; hEl.step = 0.5;
-        document.getElementById('customDistanceLabel').textContent = 'Custom distance (mi)';
+        document.getElementById('startDistanceLabel').textContent = 'Start distance (mi)';
+        document.getElementById('customDistanceLabel').textContent = 'End distance (mi)';
     } else {
         document.getElementById('weightLabel').textContent = 'Weight (kg)';
         wEl.min = 30; wEl.max = 200; wEl.step = 0.5;
         document.getElementById('heightLabel').textContent = 'Height (cm)';
         hEl.min = 140; hEl.max = 220; hEl.step = 1;
-        document.getElementById('customDistanceLabel').textContent = 'Custom distance (km)';
+        document.getElementById('startDistanceLabel').textContent = 'Start distance (km)';
+        document.getElementById('customDistanceLabel').textContent = 'End distance (km)';
     }
 }
 
@@ -142,9 +168,18 @@ function applyUnitToUI() {
 // Rider/bike/route choices are saved to localStorage so they survive reloads.
 // Rider weight/height are stored in canonical metric regardless of display unit.
 const TT_SETTINGS_KEY = 'ttSettings';
+const editedRiderFields = new Set();
 
 function loadSettings() {
-    try { return JSON.parse(localStorage.getItem(TT_SETTINGS_KEY)) || {}; }
+    try {
+        const settings = JSON.parse(localStorage.getItem(TT_SETTINGS_KEY)) || {};
+        if (settings.riderId !== (window.ZwiftRider.get()?.id || null)) {
+            delete settings.weightKg;
+            delete settings.heightCm;
+            delete settings.npTarget;
+        }
+        return settings;
+    }
     catch (e) { return {}; }
 }
 
@@ -153,6 +188,7 @@ function saveSettings() {
     const h = getHeightCm();
     const np = parseFloat(document.getElementById('avgPower').value);
     const data = {
+        riderId: window.ZwiftRider.get()?.id || null,
         weightKg: isNaN(w) ? null : +w.toFixed(2),
         heightCm: isNaN(h) ? null : +h.toFixed(1),
         npTarget: isNaN(np) ? null : np,
@@ -164,6 +200,9 @@ function saveSettings() {
         includeLeadin: document.getElementById('includeLeadin').checked,
         draftLevel: document.getElementById('draftLevel').value,
         laps: laps,
+        planMode,
+        routeMode,
+        startDistanceKm: getStartDistanceKm(),
         customDistanceKm: getCustomDistanceKm(),
     };
     try { localStorage.setItem(TT_SETTINGS_KEY, JSON.stringify(data)); } catch (e) { /* ignore */ }
@@ -199,8 +238,14 @@ function restoreSelections(settings) {
 }
 
 // ── Initialise ───────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    await window.ZwiftRider.ready;
     const settings = loadSettings();
+    planMode = settings.planMode === 'segment' ? 'segment' : 'route';
+    const urlMode = new URL(window.location.href).searchParams.get('mode');
+    routeMode = ['race', 'free_ride'].includes(urlMode) ? urlMode
+        : settings.routeMode === 'free_ride' ? 'free_ride' : 'race';
+    updateCourseUI();
 
     // Restore rider inputs (canonical metric) before any unit conversion.
     if (settings.weightKg != null) document.getElementById('riderWeight').value = settings.weightKg;
@@ -208,8 +253,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (settings.npTarget != null) document.getElementById('avgPower').value = settings.npTarget;
     if (settings.customDistanceKm != null) {
         const value = isImperial() ? settings.customDistanceKm * KM_TO_MI : settings.customDistanceKm;
-        document.getElementById('customDistance').value = value.toFixed(1);
+        document.getElementById('customDistance').value = value.toFixed(3);
     }
+    if (settings.startDistanceKm != null) document.getElementById('startDistance').value = settings.startDistanceKm;
     if (settings.includeLeadin != null) document.getElementById('includeLeadin').checked = settings.includeLeadin;
     if (settings.draftLevel != null) document.getElementById('draftLevel').value = settings.draftLevel;
     onDraftLevelInput();
@@ -239,24 +285,60 @@ document.addEventListener('DOMContentLoaded', () => {
         .catch(err => showError('Failed to load data: ' + err.message));
     updateWperKg();
     document.getElementById('includeLeadin')
-        .addEventListener('change', () => { if (selectedRoute) showRouteStats(selectedRoute); });
+        .addEventListener('change', () => {
+            invalidateRoutePlan();
+            updateRouteModeUI();
+            if (selectedRoute) showRouteStats(selectedRoute);
+        });
 
     // Persist choices whenever the user changes them. Bike selections persist
     // via the BikeSelector onChange handler.
-    ['riderWeight', 'riderHeight', 'avgPower', 'customDistance', 'worldFilter', 'routeSelect',
+    ['riderWeight', 'riderHeight', 'avgPower', 'startDistance', 'customDistance', 'worldFilter', 'routeSelect',
      'includeLeadin', 'draftLevel'].forEach(id => {
         const el = document.getElementById(id);
+        if (['riderWeight', 'riderHeight'].includes(id)) {
+            el.addEventListener('input', () => editedRiderFields.add(id));
+        }
         el.addEventListener('change', saveSettings);
         if (el.type === 'number') el.addEventListener('input', saveSettings);
     });
+    for (const id of ['startDistance', 'customDistance']) {
+        document.getElementById(id).addEventListener('input', updatePlanButton);
+    }
+    loadRiderProfile(settings);
 });
+
+async function loadRiderProfile(settings) {
+    if (!window.ZwiftRider.get()) return;
+    const status = document.getElementById('riderProfileStatus');
+    try {
+        const profile = await window.ZwiftRider.profile();
+        for (const [id, key, value, conversion] of [
+            ['riderWeight', 'weightKg', profile.weight_kg, KG_TO_LB],
+            ['riderHeight', 'heightCm', profile.height_cm, CM_TO_IN],
+        ]) {
+            if (settings[key] == null && !editedRiderFields.has(id) && value != null) {
+                document.getElementById(id).value = isImperial() ? value * conversion : value;
+            }
+        }
+        status.textContent = 'Active rider loaded. All values remain editable; enter any missing measurements manually.';
+        updateWperKg();
+        updatePlanButton();
+        saveSettings();
+    } catch (error) {
+        status.textContent = `Profile unavailable: ${error.message} Enter measurements manually.`;
+    }
+}
 
 // ── Data loading ─────────────────────────────────────────────────────────────
 async function loadRoutes() {
-    const resp = await fetch('/api/tt_pacing/routes');
-    if (!resp.ok) throw new Error('Could not load routes');
-    const data = await resp.json();
-    allRoutes = data.routes || [];
+    const responses = await Promise.all([
+        fetch('/api/tt_pacing/routes'), fetch('/api/tt_pacing/segments'),
+    ]);
+    if (responses.some(resp => !resp.ok)) throw new Error('Could not load courses');
+    const [routes, segments] = await Promise.all(responses.map(resp => resp.json()));
+    allRoutes = routes.routes || [];
+    allSegments = segments.segments || [];
     buildRouteSlugMap();
     populateWorldFilter();
     filterRoutes();
@@ -279,31 +361,134 @@ function convertToSlug(routeName) {
 // the original route. First match wins when two worlds share a slug.
 function buildRouteSlugMap() {
     routeSlugMap = {};
-    allRoutes.forEach(r => {
-        const slug = convertToSlug(r.name);
-        if (slug && !(slug in routeSlugMap)) routeSlugMap[slug] = r;
-    });
+    for (const [mode, courses] of [['route', allRoutes], ['segment', allSegments]]) {
+        courses.forEach(r => {
+            const slug = `${mode}:${convertToSlug(r.name)}`;
+            if (!(slug in routeSlugMap)) routeSlugMap[slug] = r;
+        });
+    }
+}
+
+function availableCourses() {
+    return planMode === 'segment' ? allSegments : allRoutes;
+}
+
+function updateCourseUI() {
+    const isSegment = planMode === 'segment';
+    document.getElementById('courseLabel').textContent = isSegment ? 'Segment' : 'Route';
+    document.getElementById('leadinGroup').style.display = isSegment ? 'none' : '';
+    document.getElementById('routeStartModeGroup').style.display = isSegment ? 'none' : '';
+    document.getElementById('portionGroup').style.display = isSegment ? 'none' : '';
+    for (const mode of ['route', 'segment']) {
+        const btn = document.getElementById(`${mode}Mode`);
+        btn.classList.toggle('active', planMode === mode);
+        btn.setAttribute('aria-pressed', String(planMode === mode));
+    }
+    updateRouteModeUI();
+}
+
+function getLeadinDistanceKm(route) {
+    return route[`${routeMode}_leadin_distance_km`]
+        ?? route[`${routeMode}_declared_leadin_distance_km`]
+        ?? (routeMode === 'race' ? route.leadin_distance_km : null)
+        ?? null;
+}
+
+function routeModeError() {
+    if (planMode === 'segment' || !selectedRoute) return '';
+    if (!(selectedRoute.available_modes || ['race']).includes(routeMode)) {
+        return `${routeMode === 'free_ride' ? 'Free Ride' : 'Race'} is unavailable for this route. Choose another start mode or route.`;
+    }
+    if (document.getElementById('includeLeadin').checked
+        && (selectedRoute[`${routeMode}_geometry_status`] === 'missing_leadin'
+            || (`${routeMode}_leadin_distance_km` in selectedRoute
+                && selectedRoute[`${routeMode}_leadin_distance_km`] == null))) {
+        const distance = getLeadinDistanceKm(selectedRoute);
+        const detail = distance == null ? 'Lead-in distance is unknown.'
+            : `${routeMode === 'free_ride' ? 'Free Ride' : 'Race'} lead-in: ${fmtDistance(distance, 3)} (declared distance).`;
+        return `${detail} Route data for this lead-in is missing, so it cannot be simulated. Uncheck Include lead-in or choose another start mode.`;
+    }
+    return '';
+}
+
+function updateRouteModeUI() {
+    const available = selectedRoute?.available_modes || ['free_ride', 'race'];
+    for (const [mode, id] of [['free_ride', 'freeRideStart'], ['race', 'raceStart']]) {
+        const button = document.getElementById(id);
+        button.classList.toggle('active', routeMode === mode);
+        button.setAttribute('aria-pressed', String(routeMode === mode));
+        button.disabled = !available.includes(mode);
+        button.title = button.disabled ? 'This start mode is unavailable for the selected route' : '';
+    }
+    document.getElementById('routeModeHint').textContent = routeModeError();
+}
+
+function invalidateRoutePlan() {
+    planRequestSeq++;
+    clearTimeout(bucketSliderTimer);
+    clearTimeout(draftSliderTimer);
+    lastPlanData = null;
+    serverDividerIdx = [];
+    mapDividerKm = [];
+    mapSelectionKm = null;
+    document.getElementById('resultsSection').style.display = 'none';
+    hideRouteMap();
+    const button = document.getElementById('planBtn');
+    button.classList.remove('loading');
+    button.textContent = '▶ Build Pacing Plan';
+    document.getElementById('bucketSlider').disabled = false;
+    updatePlanButton();
+}
+
+function setRouteMode(mode) {
+    if (!['race', 'free_ride'].includes(mode) || mode === routeMode) return;
+    if (selectedRoute && !(selectedRoute.available_modes || ['race']).includes(mode)) return;
+    routeMode = mode;
+    invalidateRoutePlan();
+    updateRouteModeUI();
+    if (selectedRoute) {
+        showRouteStats(selectedRoute);
+        setRouteUrlParam(selectedRoute);
+    }
+    saveSettings();
+}
+
+function setPlanMode(mode) {
+    if (mode === planMode) return;
+    planMode = mode;
+    selectedRoute = null;
+    invalidateRoutePlan();
+    laps = 1;
+    updateCourseUI();
+    populateWorldFilter();
+    filterRoutes();
+    clearRouteUrlParam();
+    saveSettings();
 }
 
 // ── World filter ─────────────────────────────────────────────────────────────
 function populateWorldFilter() {
-    const worldNames = new Map(allRoutes.map(r => [r.world, r.world_name || r.world]));
+    const worldNames = new Map(availableCourses().map(r => [r.world, r.world_name || r.world]));
     const worlds = [...worldNames.keys()].sort();
     const sel = document.getElementById('worldFilter');
+    const previous = sel.value;
+    sel.innerHTML = '<option value="">All Worlds</option>';
     worlds.forEach(w => {
         const opt = document.createElement('option');
         opt.value = w;
         opt.textContent = worldNames.get(w);
         sel.appendChild(opt);
     });
+    sel.value = worlds.includes(previous) ? previous : '';
 }
 
 function filterRoutes() {
     const world = document.getElementById('worldFilter').value;
-    const filtered = world ? allRoutes.filter(r => r.world === world) : allRoutes;
+    const courses = availableCourses();
+    const filtered = world ? courses.filter(r => r.world === world) : courses;
 
     const sel = document.getElementById('routeSelect');
-    sel.innerHTML = '<option value="">Select a route…</option>';
+    sel.innerHTML = `<option value="">Select a ${planMode}...</option>`;
     filtered.forEach(r => {
         const opt = document.createElement('option');
         opt.value = r.id;
@@ -314,16 +499,20 @@ function filterRoutes() {
     if (selectedRoute && filtered.find(r => r.id === selectedRoute.id)) {
         sel.value = selectedRoute.id;
     } else {
+        if (selectedRoute) invalidateRoutePlan();
         selectedRoute = null;
         hideRouteStats();
         updateLapUI();
     }
+    updateRouteModeUI();
     updatePlanButton();
 }
 
 function onRouteChange() {
     const id = document.getElementById('routeSelect').value;
-    selectedRoute = allRoutes.find(r => r.id === id) || null;
+    selectedRoute = availableCourses().find(r => r.id === id) || null;
+    invalidateRoutePlan();
+    updateRouteModeUI();
     laps = 1;
     updateLapUI();
     if (selectedRoute) {
@@ -339,7 +528,7 @@ function onRouteChange() {
 // ── Laps (looped routes only) ─────────────────────────────────────────────────
 function updateLapUI() {
     const group = document.getElementById('lapGroup');
-    const isLoop = !!(selectedRoute && selectedRoute.is_loop);
+    const isLoop = planMode === 'route' && !!(selectedRoute && selectedRoute.is_loop);
     group.style.display = isLoop ? 'block' : 'none';
     if (!isLoop) laps = 1;
     document.getElementById('lapCount').textContent = laps;
@@ -357,7 +546,11 @@ function changeLaps(delta) {
 function setRouteUrlParam(route) {
     try {
         const url = new URL(window.location.href);
-        url.searchParams.set('route', convertToSlug(route.name));
+        url.searchParams.delete('route');
+        url.searchParams.delete('segment');
+        url.searchParams.set(planMode, convertToSlug(route.name));
+        if (planMode === 'route') url.searchParams.set('mode', routeMode);
+        else url.searchParams.delete('mode');
         window.history.replaceState(null, '', url);
     } catch (e) { /* ignore */ }
 }
@@ -366,6 +559,8 @@ function clearRouteUrlParam() {
     try {
         const url = new URL(window.location.href);
         url.searchParams.delete('route');
+        url.searchParams.delete('segment');
+        url.searchParams.delete('mode');
         window.history.replaceState(null, '', url);
     } catch (e) { /* ignore */ }
 }
@@ -373,11 +568,20 @@ function clearRouteUrlParam() {
 // Resolve a ?route= slug to a route and select it. Returns true on success.
 function selectRouteFromUrl() {
     let slug = null;
-    try { slug = new URL(window.location.href).searchParams.get('route'); }
+    let mode = 'route';
+    try {
+        const params = new URL(window.location.href).searchParams;
+        mode = params.has('segment') ? 'segment' : 'route';
+        slug = params.get(mode);
+    }
     catch (e) { return false; }
     if (!slug) return false;
-    const route = routeSlugMap[slug];
+    const route = routeSlugMap[`${mode}:${slug}`];
     if (!route) return false;
+    planMode = mode;
+    updateCourseUI();
+    populateWorldFilter();
+    filterRoutes();
 
     const wf = document.getElementById('worldFilter');
     if ([...wf.options].some(o => o.value === route.world)) {
@@ -395,13 +599,22 @@ function selectRouteFromUrl() {
 
 function showRouteStats(route) {
     document.getElementById('routeStats').style.display = 'flex';
-    const includeLeadin = document.getElementById('includeLeadin').checked;
-    const dist = (includeLeadin ? (route.leadin_distance_km || 0) : 0)
-        + route.distance_km * laps;
-    const ascent = (includeLeadin ? (route.leadin_ascent_m || 0) : 0)
-        + route.ascent_m * laps;
-    document.getElementById('statDist').textContent = fmtDistance(dist);
-    document.getElementById('statAscent').textContent = fmtElevation(ascent);
+    if (planMode === 'route' && !(route.available_modes || ['race']).includes(routeMode)) {
+        document.getElementById('statDist').textContent = 'Unavailable';
+        document.getElementById('statAscent').textContent = 'Unavailable';
+        return;
+    }
+    const includeLeadin = planMode === 'route' && document.getElementById('includeLeadin').checked;
+    const leadinDistance = getLeadinDistanceKm(route);
+    const leadinAscent = route[`${routeMode}_leadin_ascent_m`] ?? (routeMode === 'race' ? route.leadin_ascent_m : null);
+    const dist = route.distance_km * laps;
+    const ascent = route.ascent_m * laps;
+    document.getElementById('statDist').textContent = includeLeadin && leadinDistance == null
+        ? `${fmtDistance(dist)} + unknown lead-in`
+        : fmtDistance(dist + (includeLeadin ? leadinDistance : 0));
+    document.getElementById('statAscent').textContent = includeLeadin && leadinAscent == null
+        ? `${fmtElevation(ascent)} + unknown lead-in`
+        : fmtElevation(ascent + (includeLeadin ? leadinAscent : 0));
 }
 
 function hideRouteStats() {
@@ -426,11 +639,12 @@ function updateWperKg() {
 }
 
 function updatePlanButton() {
-    const ready = !!selectedRoute && !!bikeSelector && bikeSelector.isReady();
+    const error = portionError() || routeModeError();
+    const ready = !!selectedRoute && !!bikeSelector && bikeSelector.isReady() && !error;
     const btn = document.getElementById('planBtn');
     btn.disabled = !ready;
     document.getElementById('planHint').textContent =
-        ready ? 'Ready — click to build the plan' : 'Select a route and bike to continue';
+        error || (ready ? 'Ready — click to build the plan' : `Select a ${planMode} and bike to continue`);
 }
 
 function showError(msg) {
@@ -477,6 +691,9 @@ function onBucketSliderInput() {
 
 async function requestPlan({ numBuckets = null, isBuild = false } = {}) {
     if (!selectedRoute) return;
+    const error = portionError() || routeModeError();
+    if (error) { showError(error); return; }
+    const isSegment = planMode === 'segment';
 
     const weightKg  = getWeightKg();
     const heightCm  = getHeightCm();
@@ -504,9 +721,11 @@ async function requestPlan({ numBuckets = null, isBuild = false } = {}) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 route_id:        selectedRoute.id,
+                segment_id:      isSegment ? selectedRoute.id : undefined,
                 route_name:      selectedRoute.name,
                 world:           selectedRoute.world,
-                include_leadin:  document.getElementById('includeLeadin').checked,
+                include_leadin:  !isSegment && document.getElementById('includeLeadin').checked,
+                route_mode:      isSegment ? undefined : routeMode,
                 rider_weight_kg: weightKg,
                 rider_height_cm: heightCm,
                 avg_power_watts: avgPowerW,
@@ -514,8 +733,9 @@ async function requestPlan({ numBuckets = null, isBuild = false } = {}) {
                 wheel_id:        wheelId,
                 upgrade_level:   level,
                 draft_fraction:  getDraftFraction(),
-                laps:            (selectedRoute.is_loop ? laps : 1),
-                custom_distance_km: getCustomDistanceKm(),
+                laps:            (!isSegment && selectedRoute.is_loop ? laps : 1),
+                start_distance_km: isSegment ? undefined : getStartDistanceKm(),
+                custom_distance_km: isSegment ? undefined : getCustomDistanceKm(),
                 num_buckets:     numBuckets != null ? numBuckets : undefined,
             }),
         });
@@ -543,7 +763,8 @@ async function requestPlan({ numBuckets = null, isBuild = false } = {}) {
 function displayResults(data, isBuild = false) {
     lastPlanData = data;
     document.getElementById('resultsSection').style.display = 'block';
-    document.getElementById('resultsRouteName').textContent = data.route_name;
+    document.getElementById('resultsRouteName').textContent = data.route_name
+        + (data.route_mode ? ` (${data.route_mode === 'free_ride' ? 'Free Ride' : 'Race'})` : '');
 
     document.getElementById('totalTime').textContent = data.total_time_formatted;
     document.getElementById('totalDist').textContent = fmtDistance(data.total_distance_km);
@@ -640,7 +861,7 @@ async function exportSaucePlan() {
     if (!routeGeometry) await loadRouteMap();
     const csv = buildSaucePlanCsv(lastPlanData, {
         courseId: selectedRoute.course_id || '',
-        routeId: selectedRoute.id || '',
+        routeId: planMode === 'route' ? selectedRoute.id || '' : '',
         name: lastPlanData.route_name || selectedRoute.name || '',
         date: new Date().toISOString().substring(0, 10),
         weightKg: getWeightKg(),
@@ -663,6 +884,7 @@ async function exportSaucePlan() {
 function interpolateRouteGps(distanceM) {
     const points = routeGeometry && routeGeometry.combined;
     if (!points || points.length < 2 || points.some(p => p.lat == null || p.lng == null)) return null;
+    distanceM = mapDistanceToGeometry(distanceM);
     if (distanceM <= points[0].d) return [points[0].lat, points[0].lng];
     if (distanceM >= points[points.length - 1].d) {
         const last = points[points.length - 1];
@@ -905,8 +1127,11 @@ function formatTime(sec) {
 // Fetch the lead-in + route geometry for the current route and draw it.
 async function loadRouteMap() {
     if (!selectedRoute) return;
-    const includeLeadin = document.getElementById('includeLeadin').checked;
-    const key = `${selectedRoute.id}|${selectedRoute.name}|${selectedRoute.world}|${includeLeadin}`;
+    const isSegment = planMode === 'segment';
+    const includeLeadin = !isSegment && document.getElementById('includeLeadin').checked;
+    const seq = ++mapRequestSeq;
+    const key = `${planMode}|${selectedRoute.id}|${selectedRoute.name}|${selectedRoute.world}|${includeLeadin}|${routeMode}`;
+    document.getElementById('mapLeadinLegend').style.display = includeLeadin ? '' : 'none';
 
     if (!routeGeometry || routeGeometry.key !== key) {
         const params = new URLSearchParams({
@@ -915,12 +1140,16 @@ async function loadRouteMap() {
             world: selectedRoute.world || '',
             include_leadin: includeLeadin ? 'true' : 'false',
         });
+        if (isSegment) params.set('segment_id', selectedRoute.id);
+        else params.set('mode', routeMode);
         try {
             const res = await fetch('/api/tt_pacing/route_geometry?' + params.toString());
             const data = await res.json();
+            if (seq !== mapRequestSeq) return;
             if (!res.ok) { hideRouteMap(data.error); return; }
             routeGeometry = buildGeometry(key, data);
         } catch (e) {
+            if (seq !== mapRequestSeq) return;
             hideRouteMap('Map unavailable: ' + e.message);
             return;
         }
@@ -930,6 +1159,7 @@ async function loadRouteMap() {
 }
 
 function hideRouteMap() {
+    mapRequestSeq++;
     routeGeometry = null;
     document.getElementById('mapSection').style.display = 'none';
 }
@@ -1057,6 +1287,7 @@ function drawRouteMap() {
 
 // Map a full-plan distance onto the single lap represented by the map geometry.
 function mapDistanceToGeometry(targetM) {
+    targetM += ((lastPlanData && lastPlanData.start_distance_km) || 0) * 1000;
     if (!routeGeometry) return targetM;
     const route = routeGeometry.legs.find(l => l.name === 'route');
     if (!route || route.pts.length < 2) return targetM;

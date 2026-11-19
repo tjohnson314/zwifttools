@@ -5,7 +5,14 @@ const test = require('node:test');
 const vm = require('node:vm');
 
 function context(globals = {}) {
-    const scope = vm.createContext({ document: { addEventListener() {} }, URL, console, ...globals });
+    const scope = vm.createContext({
+        document: { addEventListener() {} }, URL, console,
+        window: { ZwiftRider: {
+            get: () => ({ id: '7', name: 'Test Rider' }), ready: Promise.resolve(),
+            url: (url, id = '7') => `${url}?zwift_id=${id}`,
+        } },
+        ...globals,
+    });
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../static/js/workout_analysis.js'), 'utf8'), scope);
     return scope;
 }
@@ -168,11 +175,31 @@ test('profile FTP prefills and missing FTP explicitly requests manual entry', as
         document: { addEventListener() {}, getElementById(id) { return elements[id]; } },
         fetch: async () => ({ ok: true, json: async () => ({ ftp_w: ftp }) }),
     });
+
     vm.runInContext('renderComparison = () => {};', scope);
     await scope.loadProfileFtp();
     assert.equal(elements.ftp.value, 280);
     ftp = null;
     await scope.loadProfileFtp();
+    assert.equal(elements.ftp.value, '');
+    assert.match(elements.ftpStatus.textContent, /manually/);
+});
+
+test('activity owner FTP uses the activity rider rather than the active-rider context', async () => {
+    const requested = [];
+    const elements = { ftp: { value: '' }, ftpStatus: { textContent: '' } };
+    const scope = context({
+        document: { addEventListener() {}, getElementById(id) { return elements[id]; } },
+        fetch: async url => {
+            requested.push(url);
+            return { ok: true, json: async () => ({ ftp_w: 280 }) };
+        },
+    });
+    vm.runInContext('renderComparison = () => {};', scope);
+    await scope.loadProfileFtp('8');
+    assert.deepEqual(requested, ['/api/my_profile?zwift_id=8']);
+    await scope.loadProfileFtp(null);
+    assert.equal(requested.length, 1);
     assert.match(elements.ftpStatus.textContent, /manually/);
 });
 

@@ -5,11 +5,28 @@ const test = require('node:test');
 const vm = require('node:vm');
 
 function dashboardContext(globals = {}) {
-    const context = vm.createContext({ document: { addEventListener() {} }, ...globals });
+    const context = vm.createContext({
+        document: { addEventListener() {} },
+        window: { ZwiftRider: { url: url => `${url}?zwift_id=7681059` } },
+        ...globals,
+    });
     const source = fs.readFileSync(path.join(__dirname, '../static/js/power_dashboard.js'), 'utf8');
     vm.runInContext(source.replace(/\ninit\(\);\s*$/, '\n'), context);
     return context;
 }
+
+test('per-activity power requests include the active rider ID', async () => {
+    const requests = [];
+    const context = dashboardContext({
+        fetch: async url => {
+            requests.push(url);
+            return { ok: true, json: async () => ({ has_power: true, peak_watts: [900] }) };
+        },
+    });
+    const data = await context.fetchActivityCurve({ activity_id: '2260150967800512560' });
+    assert.deepEqual(requests, ['/api/power_dashboard/activity/2260150967800512560?zwift_id=7681059']);
+    assert.equal(data.has_power, true);
+});
 
 test('Morton fit recovers known parameters with a fixed peak power', () => {
     const context = dashboardContext();
@@ -57,6 +74,111 @@ test('Morton fit omits unavailable or incompatible inputs without clipping raw d
     assert.equal(context.fitMortonModel([{ duration: 300, power: 400 }, { duration: 600, power: null }], 1200), null);
     assert.equal(context.fitMortonModel([{ duration: 300, power: 400 }, { duration: 600, power: 350 }], null), null);
     assert.equal(context.fitMortonModel([{ duration: 300, power: 1400 }, { duration: 600, power: 350 }], 1200), null);
+});
+
+function inspectContext() {
+    function element() {
+        return {
+            children: [], style: {}, textContent: '',
+            set innerHTML(html) { this.html = html; this.children = []; },
+            get innerHTML() { return this.html || ''; },
+            appendChild(child) { this.children.push(child); },
+            addEventListener(event, callback) { this[event] = callback; },
+        };
+    }
+    const elements = Object.fromEntries(['partitionMetrics', 'selectedInterval', 'selectedIntervalLabel',
+        'criticalPowerToggle'].map(id => [id, element()]));
+    const context = dashboardContext({
+        document: {
+            getElementById(id) { return elements[id]; },
+            createElement: element,
+            querySelectorAll() { return []; },
+        },
+    });
+    return { context, elements };
+}
+
+test('inspect panel reuses activity actions for the winning point in each visible group', () => {
+    const { context, elements } = inspectContext();
+    vm.runInContext(`
+        durationsSec = [1, 300];
+        activities = [
+            { activity_id: 'ride', name: 'Ride', peak_watts: [900, 200] },
+            { activity_id: 'race', name: 'Race', peak_watts: [800, 300], is_race: true, event_id: 'event' },
+            { activity_id: 'hidden', name: 'Hidden', peak_watts: [2000, 1000] },
+            { activity_id: 'empty', name: 'Empty', peak_watts: [null, null] },
+        ];
+        dividers = new Set([2, 3]);
+        hiddenPartitions.add(partitionKey(2));
+    `, context);
+    context.updateInspectPanel(1);
+    const rows = elements.partitionMetrics.children;
+    assert.equal(rows.length, 2);
+    const details = rows[0].children[1];
+    assert.equal(details.children[1].textContent, 'Race');
+    assert.equal(details.children[3].innerHTML, context.actionsCellHtml({
+        activity_id: 'race', is_race: true, event_id: 'event',
+    }));
+    assert.equal(rows[1].children[1].children.length, 3);
+
+    context.updateInspectPanel(0);
+    const actions = elements.partitionMetrics.children[0].children[1].children[3].innerHTML;
+    assert.match(actions, /bike-comparison\?activity_id=ride/);
+    assert.match(actions, /www.zwift.com\/activity\/ride/);
+    assert.doesNotMatch(actions, /race-replay|zwiftpower/);
+});
+
+test('inspect panel shows the plotted Morton prediction and three parameters in the selected units', () => {
+    const { context, elements } = inspectContext();
+    vm.runInContext(`
+        durationsSec = [1, 300, 600, 1200, 7200];
+        activities = [{ activity_id: 'ride', weight_kg: 75,
+            peak_watts: durationsSec.map(duration => duration === 1 ? 1200 : 300 + 20000 / (duration + 20000 / 900)) }];
+        showMortonModel = true;
+        powerCurveChart = { data: { datasets: buildChartDatasets() } };
+    `, context);
+    context.updateInspectPanel(1);
+    function modelDetails() {
+        const row = elements.partitionMetrics.children.at(-1);
+        assert.equal(row.className, 'partition-metric-row morton-metric-row');
+        return {
+            prediction: row.children[0].children[1].textContent,
+            parameters: row.children[1].children[1].children.flatMap(parameter => {
+                assert.equal(parameter.className, 'morton-parameter');
+                assert.equal(parameter.children.length, 2);
+                return parameter.children.map(child => child.textContent);
+            }),
+        };
+    }
+    assert.equal(modelDetails().prediction, context.formatPower(context.buildMortonDataset().data[1].y));
+    assert.deepEqual(modelDetails().parameters, ['CP', '300 W', "W'", '20.0 kJ', 'Pmax', '1200 W']);
+    context.updateInspectPanel(4);
+    assert.equal(modelDetails().prediction, '\u2014');
+
+    vm.runInContext('powerUnit = "W/kg"; powerCurveChart.data.datasets = buildChartDatasets();', context);
+    context.updateInspectPanel(1);
+    assert.deepEqual(modelDetails().parameters, ['CP', '4.00 W/kg', "W'", '266.7 J/kg', 'Pmax', '16.00 W/kg']);
+    vm.runInContext('activities[0].peak_watts[0] = null; powerCurveChart.data.datasets = buildChartDatasets();', context);
+    context.updateInspectPanel(1);
+    assert.equal(elements.partitionMetrics.children.length, 1);
+});
+
+test('Morton toggle immediately refreshes the pinned interval in the inspect panel', () => {
+    const { context, elements } = inspectContext();
+    vm.runInContext(`
+        durationsSec = [1, 300, 600, 1200];
+        activities = [{ activity_id: 'ride', peak_watts: [1200, 360, 330, 315] }];
+        pinnedIndex = 2;
+        powerCurveChart = { data: { datasets: [] }, update() {} };
+    `, context);
+    context.bindControls();
+    elements.criticalPowerToggle.checked = true;
+    elements.criticalPowerToggle.change();
+    assert.equal(elements.partitionMetrics.children.length, 2);
+    assert.equal(elements.selectedInterval.textContent, '00:10:00');
+    elements.criticalPowerToggle.checked = false;
+    elements.criticalPowerToggle.change();
+    assert.equal(elements.partitionMetrics.children.length, 1);
 });
 
 test('progressive loading updates only the changed row and preserves partition cells', () => {
@@ -140,6 +262,7 @@ test('large cached loads yield between bounded batches without fetching or chang
 test('progressive loading still fetches cache misses and continues after failed activities', async () => {
     const requests = [];
     const writes = [];
+    const removals = [];
     const updates = [];
     const summaries = [];
     const context = dashboardContext({
@@ -154,12 +277,13 @@ test('progressive loading still fetches cache misses and continues after failed 
                 return key.endsWith('invalid') ? '{broken' : null;
             },
             setItem(key, value) { writes.push([key, JSON.parse(value)]); },
+            removeItem(key) { removals.push(key); },
         },
         async fetch(url) {
             requests.push(url);
             return {
-                status: url.endsWith('failed') ? 500 : 200,
-                ok: !url.endsWith('failed'),
+                status: new URL(url, 'http://localhost').pathname.endsWith('failed') ? 500 : 200,
+                ok: !new URL(url, 'http://localhost').pathname.endsWith('failed'),
                 async json() { return { has_power: true, peak_watts: [900], avg_power: 250 }; },
             };
         },
@@ -173,12 +297,90 @@ test('progressive loading still fetches cache misses and continues after failed 
     `, context);
     await context.loadAllActivities();
     assert.deepEqual(Array.from(vm.runInContext('activities.map(activity => activity.status)', context)),
-        ['cached-nodata', 'loaded', 'error', 'loaded']);
-    assert.equal(requests.length, 3);
-    assert.equal(writes.length, 2);
+        ['loaded', 'loaded', 'error', 'loaded']);
+    assert.equal(requests.length, 4);
+    assert.equal(writes.length, 3);
+    assert.deepEqual(removals, ['powerDashboardCurveV2::nodata']);
     assert.deepEqual(updates.map(update => Array.from(update)), [
-        [0, 'cached-nodata'], [1, 'loading'], [1, 'loaded'],
+        [0, 'loading'], [0, 'loaded'], [1, 'loading'], [1, 'loaded'],
         [2, 'loading'], [2, 'error'], [3, 'loading'], [3, 'loaded'],
     ]);
     assert.deepEqual(summaries, [4]);
+});
+
+test('only curves containing actual numeric power are cached or reused', () => {
+    const entries = new Map();
+    const context = dashboardContext({
+        localStorage: {
+            getItem(key) { return entries.get(key) ?? null; },
+            setItem(key, value) { entries.set(key, value); },
+            removeItem(key) { entries.delete(key); },
+        },
+    });
+    vm.runInContext('durationsSec = [1, 300];', context);
+    const invalid = [
+        { has_power: false, peak_watts: [null, null] },
+        { has_power: false, peak_watts: [900, 250] },
+        { has_power: true, peak_watts: [null, null] },
+        { has_power: true, peak_watts: [] },
+        { has_power: true },
+        { has_power: true, peak_watts: ['900', null] },
+    ];
+    for (const data of invalid) {
+        context.cacheActivityCurve('ride', data);
+        assert.equal(entries.size, 0);
+        const key = context.powerCurveCacheKey('ride');
+        entries.set(key, JSON.stringify({ durations_sec: [1, 300], data }));
+        assert.equal(context.readCachedActivityCurve('ride'), null);
+        assert.equal(entries.has(key), false);
+        const activity = {};
+        context.applyActivityCurveData(activity, data);
+        assert.equal(activity.status, 'nodata');
+    }
+    for (const peak_watts of [[0, null], [-20, null], [2500, 300]]) {
+        context.cacheActivityCurve('ride', { has_power: true, peak_watts });
+        assert.deepEqual(Array.from(context.readCachedActivityCurve('ride').peak_watts), peak_watts);
+        entries.clear();
+    }
+});
+
+test('activities without power are fetched again and cached once power becomes available', async () => {
+    const entries = new Map();
+    let requests = 0;
+    const context = dashboardContext({
+        setTimeout(callback) { callback(); },
+        performance: { now() { return 0; } },
+        requestAnimationFrame() {},
+        localStorage: {
+            getItem(key) { return entries.get(key) ?? null; },
+            setItem(key, value) { entries.set(key, value); },
+            removeItem(key) { entries.delete(key); },
+        },
+        async fetch() {
+            requests += 1;
+            return {
+                status: 200, ok: true,
+                async json() {
+                    return requests === 1
+                        ? { has_power: false, peak_watts: [null] }
+                        : { has_power: true, peak_watts: [900] };
+                },
+            };
+        },
+    });
+    vm.runInContext(`
+        durationsSec = [1];
+        activities = [{ activity_id: 'ride', status: 'pending' }];
+        updateActivityRow = () => {};
+        updateLoadSummary = () => {};
+    `, context);
+    await context.loadAllActivities();
+    assert.equal(vm.runInContext('activities[0].status', context), 'nodata');
+    assert.equal(entries.size, 0);
+    await context.loadAllActivities();
+    assert.equal(vm.runInContext('activities[0].status', context), 'loaded');
+    assert.equal(entries.size, 1);
+    await context.loadAllActivities();
+    assert.equal(vm.runInContext('activities[0].status', context), 'cached');
+    assert.equal(requests, 2);
 });

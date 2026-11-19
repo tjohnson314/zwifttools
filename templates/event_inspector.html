@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event Inspector - Zwift Tools</title>
+    <link rel="icon" href="/static/img/favicon.ico">
+    <link rel="stylesheet" href="/static/css/event_inspector.css">
+    <script src="/static/js/event_inspector.js" defer></script>
+</head>
+<body>
+    <div class="container">
+        <a class="back-link" href="/">&larr; Zwift Tools</a>
+        <header>
+            <h1>Event Inspector</h1>
+            {% include '_rider_header.html' %}
+        </header>
+        <main>
+            <p>Explore each pen's course, schedule, rules, and powerups, with the full event JSON available below. No active rider selection is needed.</p>
+            <form id="event-form">
+                <label for="event-id">Event ID</label>
+                <div class="controls">
+                    <input id="event-id" name="event_id" type="text" inputmode="numeric" pattern="[0-9]{1,20}" required placeholder="5795670">
+                    <button id="load-event" type="submit">Load event</button>
+                </div>
+            </form>
+            <p class="hint">Uses the site's server account. Private or inaccessible events may not be available.</p>
+            <p id="event-status" role="status" aria-live="polite">Enter an event ID to inspect its settings.</p>
+            <section id="event-result" hidden aria-label="Event settings">
+                <div id="event-summary"></div>
+                <details class="raw-settings">
+                    <summary>Full event JSON</summary>
+                <div class="toolbar">
+                    <h2>Full event JSON</h2>
+                    <button id="copy-json" type="button">Copy JSON</button>
+                    <a id="download-json" download>Download JSON</a>
+                </div>
+                <pre id="event-json" tabindex="0" aria-label="Full event JSON"></pre>
+                </details>
+            </section>
+        </main>
+    </div>
+</body>
+</html>

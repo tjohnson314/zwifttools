@@ -9,6 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="/static/css/tt_pacing.css">
     <link rel="stylesheet" href="/static/css/ttt_pacing.css">
+    <link rel="stylesheet" href="/static/css/bike_selector.css">
 </head>
 <body>
 <div class="container">
@@ -19,10 +20,7 @@
             <h1><span class="logo-emoji">🚴</span> TTT Pacing Planner</h1>
             <p class="subtitle">Group speed, pull lengths and rider drops for a WTRL team time trial</p>
         </div>
-        <div class="auth-section">
-            <span id="authStatusText" class="auth-status">Checking login…</span>
-            <button id="authBtn" class="btn-auth" type="button" onclick="handleAuth()">Log in with Zwift</button>
-        </div>
+        {% include '_rider_header.html' %}
     </div>
 
     <div class="panels">
@@ -283,7 +281,7 @@
     <div class="error-toast" id="errorToast" style="display:none;"></div>
 </div>
 
-<script src="/static/js/bike_selector.js"></script>
+<script src="/static/js/bike_selector.js?v=2"></script>
 <script src="/static/js/ttt_pacing.js"></script>
 </body>
 </html>

@@ -10,9 +10,14 @@
 </head>
 <body>
 <main class="container">
-    <a href="/" class="back-link">&larr; Back to Tools</a>
-    <h1>Workout Analysis</h1>
-    <p class="subtitle">Compare your recorded power with a built-in or custom Zwift time-based cycling workout.</p>
+    <header class="rider-page-header">
+        <div>
+            <a href="/" class="back-link">&larr; Back to Tools</a>
+            <h1>Workout Analysis</h1>
+            <p class="subtitle">Compare your recorded power with a built-in or custom Zwift time-based cycling workout.</p>
+        </div>
+        {% include '_rider_header.html' %}
+    </header>
     <section class="panel">
         <h2>Activity</h2>
         <form id="activityForm" class="controls">

@@ -7,6 +7,7 @@ let powerChart = null;
 let planRequest = 0;
 let ftpEdited = false;
 let customWorkout = null;
+let profileRequest = 0;
 
 function typicalInterval(times) {
     const deltas = times.slice(1).map((time, index) => time - times[index]).sort((a, b) => a - b);
@@ -331,6 +332,7 @@ async function loadActivity(event) {
     }
     const button = document.getElementById('loadActivity');
     button.disabled = true;
+    ++profileRequest;
     loadedActivity = null;
     renderComparison();
     document.getElementById('activityStatus').textContent = 'Loading activity power...';
@@ -338,6 +340,7 @@ async function loadActivity(event) {
         loadedActivity = await fetchJson(`/api/workout_activity/${encodeURIComponent(id)}`);
         document.getElementById('activityStatus').textContent =
             `${loadedActivity.name}: ${loadedActivity.time_sec.length} recorded samples.`;
+        await loadProfileFtp(loadedActivity.profile_id || null);
         renderComparison();
     } catch (error) {
         document.getElementById('activityStatus').textContent = 'Activity not loaded.';
@@ -358,10 +361,17 @@ async function loadCatalog() {
     }
 }
 
-async function loadProfileFtp() {
+async function loadProfileFtp(id = window.ZwiftRider.get()?.id) {
+    const request = ++profileRequest;
     const status = document.getElementById('ftpStatus');
+    if (!ftpEdited) {
+        document.getElementById('ftp').value = '';
+        renderComparison();
+    }
     try {
-        const profile = await fetchJson('/api/my_profile');
+        if (!id) throw new Error('Select a rider in the header or enter FTP manually');
+        const profile = await fetchJson(window.ZwiftRider.url('/api/my_profile', id));
+        if (request !== profileRequest) return;
         if (Number.isFinite(profile.ftp_w) && profile.ftp_w > 0) {
             if (!ftpEdited) document.getElementById('ftp').value = profile.ftp_w;
             status.textContent = `Current Zwift profile FTP: ${profile.ftp_w} W. You can override it for this analysis.`;
@@ -370,11 +380,11 @@ async function loadProfileFtp() {
             status.textContent = 'Zwift did not provide a valid current FTP. Enter the workout FTP manually.';
         }
     } catch (error) {
-        status.textContent = `Could not load profile FTP: ${error.message}. Enter it manually.`;
+        if (request === profileRequest) status.textContent = `Could not load profile FTP: ${error.message}. Enter it manually.`;
     }
 }
 
-function init() {
+async function init() {
     document.getElementById('activityForm').addEventListener('submit', loadActivity);
     document.getElementById('workoutSearch').addEventListener('input', filterWorkouts);
     document.getElementById('workoutSelect').addEventListener('change', chooseWorkout);
@@ -387,12 +397,12 @@ function init() {
         });
     }
     loadCatalog();
-    loadProfileFtp();
+    await window.ZwiftRider.ready;
     const activityId = new URLSearchParams(location.search).get('activity_id');
     if (activityId) {
         document.getElementById('activityId').value = activityId;
         loadActivity();
-    }
+    } else loadProfileFtp();
 }
 
 document.addEventListener('DOMContentLoaded', init);

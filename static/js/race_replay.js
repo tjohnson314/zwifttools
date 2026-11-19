@@ -16,7 +16,6 @@
 let raceData = null;          // Full race JSON from server
 let currentTime = 0;          // Current playback time (seconds)
 let isPlaying = false;
-let isAuthenticated = false;
 let playbackSpeed = 5;        // Multiplier
 let lastFrameTs = null;       // For requestAnimationFrame delta
 let animFrameId = null;
@@ -33,7 +32,7 @@ let effSortAsc = true;
 // Rider analysis state
 let analysisRank = null;       // Rider the analysis panel is showing
 let analysisRequestId = 0;     // Drops stale responses when the rider changes quickly
-const CP_MODEL_STORAGE_KEY = 'criticalPowerModelV1';  // Written by the Critical Power page
+const CP_MODEL_STORAGE_PREFIX = 'criticalPowerModelV2:';
 
 // Rider lookup for O(1) access: rank -> rider object with typed arrays
 let riderLookup = {};
@@ -97,7 +96,6 @@ const CATEGORY_COLORS = {
 // Initialization
 // ---------------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', () => {
-    checkAuth();
     bindEvents();
 
     // Auto-load race from URL parameters (e.g. ?activity_id=12345&all_subgroups=1)
@@ -110,7 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (urlActivityId) {
         document.getElementById('activity-input').value = urlActivityId;
         // If it looks like a cached race ID, load directly without hitting
-        // the fetch_stream endpoint (which requires authentication).
+        // the fetch_stream endpoint.
         if (urlActivityId.startsWith('race_data_') || urlActivityId.startsWith('race_event_')) {
             loadRaceById(urlActivityId);
         } else {
@@ -179,7 +177,7 @@ function bindEvents() {
         }
         updateFrame();
     });
-    document.getElementById('show-route-segments').addEventListener('change', e => {
+    document.getElementById('show-route-segments')?.addEventListener('change', e => {
         showRouteSegments = e.target.checked;
         updateFrame();
     });
@@ -188,16 +186,16 @@ function bindEvents() {
     });
 
     // Rider analysis controls
-    document.getElementById('analysis-rider-select').addEventListener('change', e => {
+    document.getElementById('analysis-rider-select')?.addEventListener('change', e => {
         selectAnalysisRider(parseInt(e.target.value), true);
     });
-    document.getElementById('analysis-run-btn').addEventListener('click', runAnalysis);
-    document.getElementById('analysis-use-saved-cp').addEventListener('click', () => {
+    document.getElementById('analysis-run-btn')?.addEventListener('click', runAnalysis);
+    document.getElementById('analysis-use-saved-cp')?.addEventListener('click', () => {
         fillSavedCp();
         runAnalysis();
     });
     ['analysis-cp', 'analysis-wprime'].forEach(id => {
-        document.getElementById(id).addEventListener('keydown', e => {
+        document.getElementById(id)?.addEventListener('keydown', e => {
             if (e.key === 'Enter') runAnalysis();
         });
     });
@@ -230,48 +228,6 @@ function bindEvents() {
             renderEfficiencyTable();
         });
     });
-}
-
-// ---------------------------------------------------------------------------
-// Auth
-// ---------------------------------------------------------------------------
-async function checkAuth() {
-    try {
-        const resp = await fetch('/auth/status');
-        const data = await resp.json();
-        const text = document.getElementById('auth-status-text');
-        const btn = document.getElementById('authBtn');
-        isAuthenticated = data.authenticated;
-        if (data.authenticated && data.method === 'oauth') {
-            text.textContent = '✓ Logged in via Zwift';
-            text.className = 'auth-status logged-in';
-            btn.textContent = 'Logout';
-            btn.className = 'btn-auth logout';
-        } else if (data.authenticated && data.method === 'config') {
-            text.textContent = 'Using config token (may be stale)';
-            text.className = 'auth-status';
-            btn.textContent = 'Login with Zwift';
-            btn.className = 'btn-auth';
-            isAuthenticated = false;
-        } else {
-            text.textContent = 'Not logged in';
-            text.className = 'auth-status';
-            btn.textContent = 'Login with Zwift';
-            btn.className = 'btn-auth';
-        }
-        btn.style.display = 'inline-block';
-        // Show/hide unauthenticated banner
-        const banner = document.getElementById('unauth-banner');
-        if (banner) banner.style.display = isAuthenticated ? 'none' : 'block';
-    } catch (e) { /* ignore */ }
-}
-
-function handleAuth() {
-    if (isAuthenticated) {
-        window.location.href = '/auth/logout';
-    } else {
-        window.location.href = '/auth/login?next=/race-replay';
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -477,6 +433,7 @@ async function loadRaceById(raceId, internal = false) {
 
         hideLoading();
         initRaceData(fullData);
+        return true;
     } catch (e) {
         hideLoading();
         console.error('Race load exception:', e);
@@ -493,10 +450,12 @@ function initRaceData(data) {
     raceData = data;
     data.route_segments = data.route_segments || [];
     const segmentsCheckbox = document.getElementById('show-route-segments');
-    segmentsCheckbox.disabled = data.route_segments.length === 0;
-    segmentsCheckbox.checked = showRouteSegments && !segmentsCheckbox.disabled;
-    document.getElementById('route-segments-label').textContent = segmentsCheckbox.disabled
-        ? 'Route segments unavailable' : 'Show route segments';
+    if (segmentsCheckbox) {
+        segmentsCheckbox.disabled = data.route_segments.length === 0;
+        segmentsCheckbox.checked = showRouteSegments && !segmentsCheckbox.disabled;
+        document.getElementById('route-segments-label').textContent = segmentsCheckbox.disabled
+            ? 'Route segments unavailable' : 'Show route segments';
+    }
     currentTime = data.min_time;
     isPlaying = false;
     selectedRank = null;
@@ -548,6 +507,7 @@ function initRaceData(data) {
             team: r.team,
             category: r.category || null,
             activity_id: r.activity_id || null,
+            zwift_id: r.zwift_id || null,
             weight_kg: r.weight_kg || 75.0,
             is_late_joiner: r.is_late_joiner || false,
             start_offset_sec: Number(r.start_offset_sec) || 0,
@@ -1603,32 +1563,32 @@ function renderEfficiencyTable() {
 // ---------------------------------------------------------------------------
 // Rider analysis — where contact was lost, what it took, and why
 // ---------------------------------------------------------------------------
-function loadSavedCp() {
+function loadSavedCp(rank) {
+    const id = riderLookup[rank]?.zwift_id;
+    if (typeof id !== 'string' || !/^[1-9][0-9]*$/.test(id)) return null;
     try {
-        const saved = JSON.parse(localStorage.getItem(CP_MODEL_STORAGE_KEY) || 'null');
-        if (saved && saved.cp > 0 && saved.wPrime > 0) return saved;
-    } catch { /* storage blocked or corrupt */ }
+        const saved = JSON.parse(localStorage.getItem(CP_MODEL_STORAGE_PREFIX + id) || 'null');
+        if (saved && Number.isFinite(saved.cp) && saved.cp > 0 &&
+            Number.isFinite(saved.wPrime) && saved.wPrime > 0) return saved;
+    } catch (error) {
+        console.warn('Could not load saved critical power:', error);
+    }
     return null;
 }
 
 function fillSavedCp() {
-    const saved = loadSavedCp();
+    const saved = loadSavedCp(analysisRank);
     if (!saved) return;
     document.getElementById('analysis-cp').value = Math.round(saved.cp);
     document.getElementById('analysis-wprime').value = (saved.wPrime / 1000).toFixed(1);
 }
 
-function isSourceRider(rank) {
-    const rl = riderLookup[rank];
-    return !!(rl && raceData.source_activity_id && rl.activity_id === raceData.source_activity_id);
-}
-
 function initAnalysisPanel(data, sortedRiders) {
     const select = document.getElementById('analysis-rider-select');
+    if (!select) return;
     select.innerHTML = sortedRiders
         .map(r => `<option value="${r.rank}">${r.name}</option>`)
         .join('');
-    document.getElementById('analysis-use-saved-cp').style.display = loadSavedCp() ? '' : 'none';
     document.getElementById('analysis-panel').style.display = 'block';
     document.getElementById('analysis-events').innerHTML = '';
     Plotly.purge('analysis-chart');
@@ -1638,14 +1598,17 @@ function initAnalysisPanel(data, sortedRiders) {
 }
 
 // Switch the analysis to a rider.  CP/W' belong to a rider, so they're reset
-// on change — pre-filled from the Critical Power page for the source rider.
+// on change — pre-filled only when this rider has a matching saved model.
 function selectAnalysisRider(rank, force = false) {
+    if (!document.getElementById('analysis-rider-select')) return;
     if (!raceData || (!force && rank === analysisRank)) return;
     analysisRank = rank;
     document.getElementById('analysis-rider-select').value = String(rank);
     document.getElementById('analysis-cp').value = '';
     document.getElementById('analysis-wprime').value = '';
-    if (isSourceRider(rank)) fillSavedCp();
+    const saved = loadSavedCp(rank);
+    document.getElementById('analysis-use-saved-cp').style.display = saved ? '' : 'none';
+    if (saved) fillSavedCp();
     runAnalysis();
 }
 
@@ -2159,6 +2122,7 @@ function initMap(config, routeLatlng) {
         routePoints,
         // Background color
         bgColor: config.bg_color || '#0a1a2e',
+        segmentBoundaries: replaySegmentBoundaries(raceData?.route_segments || [], raceData?.finish_line_km),
     };
 
     img.onload = () => {
@@ -2173,7 +2137,17 @@ function initMap(config, routeLatlng) {
     canvas.addEventListener('mousedown', onMapMouseDown);
     canvas.addEventListener('mousemove', onMapMouseMove);
     canvas.addEventListener('mouseup', onMapMouseUp);
-    canvas.addEventListener('mouseleave', onMapMouseUp);
+    canvas.addEventListener('mouseleave', onMapMouseLeave);
+    hideMapBoundaryTooltip();
+
+    const boundariesControl = document.getElementById('show-map-boundaries');
+    if (boundariesControl) {
+        boundariesControl.disabled = !mapState.segmentBoundaries.length;
+        boundariesControl.onchange = () => {
+            hideMapBoundaryTooltip();
+            drawMap(lastMapPositions);
+        };
+    }
 
     // Map zoom buttons
     const zoomInBtn = document.getElementById('map-zoom-in');
@@ -2201,6 +2175,7 @@ function initMap(config, routeLatlng) {
         canvas.height = r.height * window.devicePixelRatio;
         canvas.style.width = r.width + 'px';
         canvas.style.height = r.height + 'px';
+        drawMap(lastMapPositions);
     });
 }
 
@@ -2329,11 +2304,78 @@ function canvasToGps(px, py) {
     return { lat, lng };
 }
 
+function replaySegmentBoundaries(segments, finishDistanceKm) {
+    const boundaries = new Map();
+    for (const segment of segments) {
+        const path = segment.latlng;
+        if (!path || path.length < 2) continue;
+        for (const [kind, index, distance] of [
+            ['Start', 0, segment.start_distance_km],
+            ['Finish', path.length - 1, segment.end_distance_km],
+        ]) {
+            if (!Number.isFinite(distance) || distance < 0 ||
+                (Number.isFinite(finishDistanceKm) && distance > finishDistanceKm)) continue;
+            const [lat, lng] = path[index];
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+            const key = `${kind}:${lat}:${lng}`;
+            if (!boundaries.has(key)) boundaries.set(key, {kind, lat, lng, labels: []});
+            const pass = segment.pass > 1 ? ` (pass ${segment.pass})` : '';
+            const lap = segment.lap > 1 ? ` (lap ${segment.lap})` : '';
+            boundaries.get(key).labels.push(`${segment.name}${pass}${lap} - ${kind}`);
+        }
+    }
+    return [...boundaries.values()];
+}
+
+function updateReplayMapScale() {
+    const element = document.getElementById('map-scale');
+    if (!element || !mapState) return;
+    const dpr = window.devicePixelRatio || 1;
+    const left = canvasToGps(16 * dpr, mapState.canvas.height - 16 * dpr);
+    const right = canvasToGps(17 * dpr, mapState.canvas.height - 16 * dpr);
+    const metersPerCssPixel = Math.abs(right.lng - left.lng) * 111320 * Math.cos(left.lat * Math.PI / 180);
+    const measurement = mapScaleMeasurement(metersPerCssPixel);
+    element.hidden = !measurement;
+    if (!measurement) return;
+    element.setAttribute('aria-label', `Map distance scale: ${measurement.label}`);
+    document.getElementById('map-scale-label').textContent = measurement.label;
+    document.getElementById('map-scale-bar').style.width = `${measurement.width}px`;
+}
+
+function mapBoundariesVisible() {
+    return document.getElementById('show-map-boundaries')?.checked ?? true;
+}
+
+function hideMapBoundaryTooltip() {
+    const tooltip = document.getElementById('map-boundary-tooltip');
+    if (tooltip) tooltip.hidden = true;
+}
+
+function drawReplaySegmentBoundaries(ctx, dpr) {
+    if (!mapBoundariesVisible()) return;
+    for (const boundary of mapState.segmentBoundaries || []) {
+        const point = gpsToCanvas(boundary.lat, boundary.lng);
+        if (point.x < 0 || point.y < 0 || point.x > mapState.canvas.width || point.y > mapState.canvas.height) continue;
+        ctx.beginPath();
+        if (boundary.kind === 'Start') {
+            ctx.arc(point.x, point.y, 5 * dpr, 0, Math.PI * 2);
+        } else {
+            ctx.rect(point.x - 5 * dpr, point.y - 5 * dpr, 10 * dpr, 10 * dpr);
+        }
+        ctx.fillStyle = boundary.kind === 'Start' ? '#6adf71' : '#ff6b6b';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.5 * dpr;
+        ctx.stroke();
+    }
+}
+
 function drawMap(positions) {
     const ms = mapState;
     if (!ms) return;
     const { ctx, canvas, config: cfg } = ms;
     const dpr = window.devicePixelRatio;
+    updateReplayMapScale();
 
     // Clear
     ctx.fillStyle = ms.bgColor;
@@ -2400,12 +2442,6 @@ function drawMap(positions) {
             ctx.moveTo(points[0].x, points[0].y);
             for (const point of points.slice(1)) ctx.lineTo(point.x, point.y);
             ctx.stroke();
-            for (const point of [points[0], points[points.length - 1]]) {
-                ctx.beginPath();
-                ctx.arc(point.x, point.y, 3 * dpr, 0, Math.PI * 2);
-                ctx.fillStyle = color;
-                ctx.fill();
-            }
             const end = points[points.length - 1];
             ctx.font = `${11 * dpr}px sans-serif`;
             const width = ctx.measureText(segment.name).width + 8 * dpr;
@@ -2424,6 +2460,8 @@ function drawMap(positions) {
             ctx.fillText(segment.name, left + 4 * dpr, top + height / 2);
         }
     }
+
+    drawReplaySegmentBoundaries(ctx, dpr);
 
     // Draw rider dots
     if (!positions || positions.length === 0) return;
@@ -2525,6 +2563,7 @@ function onMapWheel(e) {
 
 function onMapMouseDown(e) {
     if (!mapState) return;
+    hideMapBoundaryTooltip();
     mapState.dragging = true;
     mapState.dragStartX = e.clientX;
     mapState.dragStartY = e.clientY;
@@ -2533,7 +2572,22 @@ function onMapMouseDown(e) {
 }
 
 function onMapMouseMove(e) {
-    if (!mapState || !mapState.dragging) return;
+    if (!mapState) return;
+    if (!mapState.dragging) {
+        const tooltip = document.getElementById('map-boundary-tooltip');
+        if (!tooltip) return;
+        const rect = mapState.canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        const x = (e.clientX - rect.left) * dpr;
+        const y = (e.clientY - rect.top) * dpr;
+        const hits = mapBoundariesVisible() ? (mapState.segmentBoundaries || []).filter(boundary => {
+            const point = gpsToCanvas(boundary.lat, boundary.lng);
+            return Math.hypot(point.x - x, point.y - y) <= 9 * dpr;
+        }) : [];
+        tooltip.hidden = !hits.length;
+        tooltip.textContent = hits.flatMap(boundary => boundary.labels).join('\n');
+        return;
+    }
     const dpr = window.devicePixelRatio;
     const dx = (e.clientX - mapState.dragStartX) * dpr;
     const dy = (e.clientY - mapState.dragStartY) * dpr;
@@ -2561,6 +2615,11 @@ function onMapMouseMove(e) {
 function onMapMouseUp() {
     if (!mapState) return;
     mapState.dragging = false;
+}
+
+function onMapMouseLeave() {
+    onMapMouseUp();
+    hideMapBoundaryTooltip();
 }
 
 // Keep track of last positions for redraw during zoom/pan

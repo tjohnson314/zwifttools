@@ -15,7 +15,8 @@
 
 const POWER_CURVE_X_TICKS = [1, 2, 5, 10, 30, 60, 120, 300, 600, 1200, 3600, 7200];
 const MORTON_PR_DURATIONS = [300, 600, 1200];
-const POWER_CURVE_CACHE_PREFIX = 'powerDashboardCurveV1:';
+const POWER_CURVE_CACHE_PREFIX = 'powerDashboardCurveV2:';
+let dashboardRiderId = '';
 
 // Distinct colours for the partition curves (cycled if there are more groups).
 const PARTITION_COLORS = [
@@ -370,6 +371,7 @@ function buildMortonDataset() {
 
     return {
         label: 'Morton model (1s peak; 5/10/20 min fit)',
+        mortonFit: fit,
         data: durationsSec.map((duration) => ({
             x: duration,
             y: duration >= 1 && duration <= 3600 ? fit.cp + fit.wPrime / (duration + fit.timeConstant) : null,
@@ -579,6 +581,12 @@ function updateInspectPanel(index) {
         context.appendChild(label);
         context.appendChild(link);
         context.appendChild(date);
+        if (activity) {
+            const actions = document.createElement('div');
+            actions.className = 'activity-actions';
+            actions.innerHTML = actionsCellHtml(activity);
+            context.appendChild(actions);
+        }
 
         const head = document.createElement('div');
         head.className = 'partition-metric-head';
@@ -589,6 +597,55 @@ function updateInspectPanel(index) {
         row.appendChild(context);
         container.appendChild(row);
     });
+
+    const model = showMortonModel && powerCurveChart?.data.datasets.find((dataset) => dataset.mortonFit);
+    if (model) {
+        const row = document.createElement('div');
+        row.className = 'partition-metric-row morton-metric-row';
+
+        const head = document.createElement('div');
+        head.className = 'partition-metric-head';
+        const swatch = document.createElement('span');
+        swatch.className = 'partition-swatch';
+        swatch.style.background = model.borderColor;
+        const value = document.createElement('div');
+        value.className = 'metric-value';
+        value.textContent = formatPower(model.data[index]?.y);
+        head.appendChild(swatch);
+        head.appendChild(value);
+
+        const context = document.createElement('div');
+        context.className = 'metric-context';
+        const label = document.createElement('div');
+        label.className = 'metric-label';
+        label.textContent = 'Morton model';
+        const parameters = document.createElement('dl');
+        parameters.className = 'morton-parameters';
+        const fit = model.mortonFit;
+        const values = [
+            ['CP', 'Critical power', formatPower(fit.cp)],
+            ["W'", 'Work capacity above critical power', powerUnit === 'W'
+                ? `${(fit.wPrime / 1000).toFixed(1)} kJ` : `${fit.wPrime.toFixed(1)} J/kg`],
+            ['Pmax', 'Peak power', formatPower(fit.peakPower)],
+        ];
+        values.forEach(([name, title, text]) => {
+            const parameter = document.createElement('div');
+            parameter.className = 'morton-parameter';
+            const term = document.createElement('dt');
+            term.textContent = name;
+            term.title = title;
+            const definition = document.createElement('dd');
+            definition.textContent = text;
+            parameter.appendChild(term);
+            parameter.appendChild(definition);
+            parameters.appendChild(parameter);
+        });
+        context.appendChild(label);
+        context.appendChild(parameters);
+        row.appendChild(head);
+        row.appendChild(context);
+        container.appendChild(row);
+    }
 }
 
 // ── Weekly bars (computed client-side from loaded peaks) ───────────────────────
@@ -713,6 +770,10 @@ function partitionIndexOf(activityIndex) {
     return 0;
 }
 
+function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+}
+
 function statusCellHtml(activity) {
     switch (activity.status) {
         case 'loaded':
@@ -725,14 +786,12 @@ function statusCellHtml(activity) {
                 return '<span class="status-badge warning">Cached &middot; Weight unavailable</span>';
             }
             return '<span class="status-badge ok">&#10003; Cached</span>';
-        case 'cached-nodata':
-            return '<span class="status-badge muted">Cached &middot; No power data</span>';
         case 'loading':
             return '<span class="status-badge loading"><span class="mini-spinner"></span> Loading…</span>';
         case 'nodata':
             return '<span class="status-badge muted">No power data</span>';
         case 'error':
-            return '<span class="status-badge err">Failed</span>';
+            return `<span class="status-badge err">Failed: ${escapeHtml(activity.error || 'Request unavailable')}</span>`;
         default:
             return '<span class="status-badge muted">Pending…</span>';
     }
@@ -892,8 +951,11 @@ function updateLoadSummary(loadedCount) {
     }
     el.style.display = '';
     if (loadedCount >= activities.length) {
-        el.textContent = `All ${activities.length} activities loaded`;
-        el.classList.add('done');
+        const failures = activities.filter(activity => activity.status === 'error').length;
+        el.textContent = failures
+            ? `${activities.length} activities processed; ${failures} unavailable. Curves are incomplete.`
+            : `All ${activities.length} activities loaded`;
+        el.classList.toggle('done', failures === 0);
     } else {
         el.textContent = `Loading power data… ${loadedCount} / ${activities.length}`;
         el.classList.remove('done');
@@ -901,29 +963,34 @@ function updateLoadSummary(loadedCount) {
 }
 
 async function fetchActivityCurve(activity) {
-    const resp = await fetch(`/api/power_dashboard/activity/${encodeURIComponent(activity.activity_id)}`);
-    if (resp.status === 401) {
-        window.location.href = '/auth/login?next=/power';
-        throw new Error('Not authenticated');
-    }
+    const resp = await fetch(window.ZwiftRider.url(`/api/power_dashboard/activity/${encodeURIComponent(activity.activity_id)}`));
     if (!resp.ok) {
-        throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${resp.status}`);
     }
     return resp.json();
 }
 
 function powerCurveCacheKey(activityId) {
-    return `${POWER_CURVE_CACHE_PREFIX}${encodeURIComponent(activityId)}`;
+    return `${POWER_CURVE_CACHE_PREFIX}${dashboardRiderId}:${encodeURIComponent(activityId)}`;
+}
+
+function hasActivityPowerData(data) {
+    return data && data.has_power && Array.isArray(data.peak_watts) &&
+        data.peak_watts.some(Number.isFinite);
 }
 
 function readCachedActivityCurve(activityId) {
     try {
         const cached = JSON.parse(localStorage.getItem(powerCurveCacheKey(activityId)) || 'null');
-        if (!cached || !Array.isArray(cached.durations_sec) || !cached.data ||
-            !Array.isArray(cached.data.peak_watts) ||
+        if (!cached) {
+            return null;
+        }
+        if (!Array.isArray(cached.durations_sec) || !hasActivityPowerData(cached.data) ||
             cached.durations_sec.length !== durationsSec.length ||
             cached.data.peak_watts.length !== durationsSec.length ||
             !cached.durations_sec.every((duration, index) => duration === durationsSec[index])) {
+            localStorage.removeItem(powerCurveCacheKey(activityId));
             return null;
         }
         return cached.data;
@@ -933,6 +1000,9 @@ function readCachedActivityCurve(activityId) {
 }
 
 function cacheActivityCurve(activityId, data) {
+    if (!hasActivityPowerData(data)) {
+        return;
+    }
     try {
         localStorage.setItem(powerCurveCacheKey(activityId), JSON.stringify({
             durations_sec: durationsSec,
@@ -948,7 +1018,7 @@ function prunePowerCurveCache() {
     try {
         for (let index = localStorage.length - 1; index >= 0; index -= 1) {
             const key = localStorage.key(index);
-            if (key && key.startsWith(POWER_CURVE_CACHE_PREFIX) && !activeKeys.has(key)) {
+            if (key && key.startsWith(`${POWER_CURVE_CACHE_PREFIX}${dashboardRiderId}:`) && !activeKeys.has(key)) {
                 localStorage.removeItem(key);
             }
         }
@@ -958,7 +1028,7 @@ function prunePowerCurveCache() {
 }
 
 function applyActivityCurveData(activity, data, fromCache = false) {
-    if (data.has_power && Array.isArray(data.peak_watts)) {
+    if (hasActivityPowerData(data)) {
         activity.peak_watts = data.peak_watts;
         activity.weight_kg = data.weight_kg ?? null;
         activity.avg_power = data.avg_power ?? null;
@@ -967,7 +1037,7 @@ function applyActivityCurveData(activity, data, fromCache = false) {
         activity.event_id = data.event_id || null;
         activity.status = fromCache ? 'cached' : 'loaded';
     } else {
-        activity.status = fromCache ? 'cached-nodata' : 'nodata';
+        activity.status = 'nodata';
     }
 }
 
@@ -986,8 +1056,6 @@ function clearPowerCurveCache() {
     activities.forEach((activity) => {
         if (activity.status === 'cached') {
             activity.status = 'loaded';
-        } else if (activity.status === 'cached-nodata') {
-            activity.status = 'nodata';
         }
     });
     renderActivityList();
@@ -1012,10 +1080,8 @@ async function loadAllActivities() {
             }
             applyActivityCurveData(activity, data, fromCache);
         } catch (err) {
-            if (err && err.message === 'Not authenticated') {
-                return;
-            }
             activity.status = 'error';
+            activity.error = err.message;
         }
 
         loaded += 1;
@@ -1040,6 +1106,7 @@ function bindControls() {
         criticalPowerToggle.addEventListener('change', () => {
             showMortonModel = criticalPowerToggle.checked;
             refreshChart();
+            updateInspectPanel(pinnedIndex !== null ? pinnedIndex : selectedIndex);
         });
     }
 
@@ -1090,11 +1157,9 @@ async function init() {
     setStatusText('loadingProgress', 'Fetching activity list…');
 
     try {
-        const resp = await fetch('/api/power_dashboard/activities');
-        if (resp.status === 401) {
-            window.location.href = '/auth/login?next=/power';
-            return;
-        }
+        await window.ZwiftRider.ready;
+        dashboardRiderId = window.ZwiftRider.get()?.id || '';
+        const resp = await fetch(window.ZwiftRider.url('/api/power_dashboard/activities'));
         if (!resp.ok) {
             const body = await resp.json().catch(() => ({}));
             throw new Error(body.error || `HTTP ${resp.status}`);

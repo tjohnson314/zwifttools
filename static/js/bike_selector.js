@@ -3,6 +3,25 @@
 // Memoised frame/wheel fetch shared across every BikeSelector instance on a page
 // (the comparison page mounts two), so the data is only requested once.
 let _bikeDataPromise = null;
+let _topPerformerDataPromise = null;
+
+function _loadTopPerformerData() {
+    if (!_topPerformerDataPromise) {
+        _topPerformerDataPromise = Promise.all(
+            ['/api/top_performers', '/api/top_performers_tt'].map(async url => {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`Failed to load top performers (${response.status})`);
+                return response.json();
+            })
+        ).then(lists => ({
+            frames: new Set(lists.flatMap(list => list.frames.map(frame => frame.id))),
+            // Chart IDs are "brand|model"; catalogue IDs use BikeDatabase's slug.
+            wheels: new Set(lists.flatMap(list => list.wheels.map(wheel =>
+                wheel.id.toLowerCase().replace(/[^a-z0-9]/g, '')))),
+        })).catch(err => { _topPerformerDataPromise = null; throw err; });
+    }
+    return _topPerformerDataPromise;
+}
 
 function _loadBikeData() {
     if (!_bikeDataPromise) {
@@ -57,6 +76,23 @@ class BikeSelector {
         this.wheels = [];
         this._stats = null;    // { weightKg, cdaBias } once loaded
         this._ready = false;
+        this._topPerformers = null;
+        this._onlyTopPerformers = false;
+
+        const filter = document.createElement('div');
+        filter.className = 'form-group bike-selector-filter';
+        const label = document.createElement('label');
+        this.topPerformersCheckbox = document.createElement('input');
+        this.topPerformersCheckbox.type = 'checkbox';
+        this.topPerformersCheckbox.id = `${opts.frameSelect}TopPerformers`;
+        label.htmlFor = this.topPerformersCheckbox.id;
+        label.append(this.topPerformersCheckbox, 'Top performers only');
+        this.filterError = document.createElement('div');
+        this.filterError.setAttribute('role', 'alert');
+        filter.append(label, this.filterError);
+        const frameGroup = this.frameSel.closest('.form-group');
+        frameGroup.before(filter);
+        this.topPerformersCheckbox.addEventListener('change', () => this._onFilterChange());
 
         this.frameSel.addEventListener('change', () => this._onFrameChange());
         this.wheelSel.addEventListener('change', () => this._updateStats());
@@ -85,6 +121,15 @@ class BikeSelector {
     }
 
     setConfig({ frameId, wheelId, level } = {}) {
+        // Explicit restores/copies must still select equipment outside the shortlist.
+        if (this._onlyTopPerformers &&
+            ((frameId != null && !this._topPerformers.frames.has(frameId)) ||
+             (wheelId && !this._topPerformers.wheels.has(wheelId) &&
+              !this.wheels.some(w => w.id === wheelId && w.exclusiveFrameId === (frameId || this.frameSel.value))))) {
+            this._onlyTopPerformers = false;
+            this.topPerformersCheckbox.checked = false;
+            this._populateFrames();
+        }
         if (frameId != null && [...this.frameSel.options].some(o => o.value === frameId)) {
             this.frameSel.value = frameId;
         }
@@ -115,14 +160,42 @@ class BikeSelector {
     }
 
     // ── internals ─────────────────────────────────────────────────────────────
+    async _onFilterChange() {
+        this.filterError.textContent = '';
+        if (this.topPerformersCheckbox.checked && !this._topPerformers) {
+            this.topPerformersCheckbox.disabled = true;
+            try {
+                this._topPerformers = await _loadTopPerformerData();
+            } catch (err) {
+                console.error('Failed to load top performers:', err);
+                this.topPerformersCheckbox.checked = false;
+                this.filterError.textContent = 'Could not load top performers. Please try again.';
+                return;
+            } finally {
+                this.topPerformersCheckbox.disabled = false;
+            }
+        }
+        this._onlyTopPerformers = this.topPerformersCheckbox.checked;
+        this._populateFrames();
+        this._syncWheels();
+        this._syncLevels();
+        await this._updateStats();
+    }
+
     _populateFrames() {
-        const opts = this.frames.map(f =>
+        const previous = this.frameSel.value;
+        const frames = this.frames.filter(f =>
+            !this._onlyTopPerformers || this._topPerformers.frames.has(f.id));
+        const opts = frames.map(f =>
             `<option value="${f.id}">${f.name}${f.cdaBias != null
                 ? ` (CdA ${f.cdaBias >= 0 ? '+' : ''}${f.cdaBias} · ${Math.round(f.weightG)}g)`
                 : ''}</option>`);
         this.frameSel.innerHTML =
             (this.framePlaceholder ? `<option value="">${this.framePlaceholder}</option>` : '') +
             opts.join('');
+        if ([...this.frameSel.options].some(o => o.value === previous)) {
+            this.frameSel.value = previous;
+        }
     }
 
     _frameById(id) { return this.frames.find(f => f.id === id); }
@@ -141,6 +214,8 @@ class BikeSelector {
         return this.wheels.filter(w => {
             if (w.id === '') return false;   // skip the built-in placeholder
             if (w.exclusiveFrameId && w.exclusiveFrameId !== this.frameSel.value) return false;
+            if (this._onlyTopPerformers && !this._topPerformers.wheels.has(w.id) &&
+                w.exclusiveFrameId !== this.frameSel.value) return false;
             const fits = (w.fitsFrame || 'Standard,TT').split(',').map(s => s.trim());
             return fits.includes(frameType) &&
                 (!this.wheels.some(candidate => candidate.exclusiveFrameId === this.frameSel.value) ||

@@ -18,6 +18,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .utils import calculate_normalized_power
 from . import blob_storage
+from .zwift_auth import ServiceHeaders, ZwiftAPIError
+from .http_pacing import retry_after_seconds
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +46,7 @@ def _request_with_retry(method, url, **kwargs):
     """
     # Ensure we ask for JSON — Zwift returns protobuf by default on some endpoints
     headers = kwargs.get('headers', {})
+    manager = headers.manager if isinstance(headers, ServiceHeaders) else None
     if headers is None:
         headers = {}
     else:
@@ -55,19 +58,39 @@ def _request_with_retry(method, url, **kwargs):
     kwargs['headers'] = headers
 
     last_response = None
-    for attempt in range(_MAX_RETRIES):
-        response = requests.request(method, url, **kwargs)
+    auth_retried = False
+    attempt = 0
+    while attempt < _MAX_RETRIES:
+        if manager:
+            headers['Authorization'] = f'Bearer {manager.access_token()}'
+            manager.wait()
+        try:
+            response = requests.request(method, url, **kwargs)
+        except requests.RequestException:
+            if manager:
+                raise ZwiftAPIError('Zwift service could not be reached.') from None
+            raise
+        if manager and response.status_code == 401:
+            if auth_retried:
+                raise ZwiftAPIError('Zwift service authentication was rejected.')
+            manager.access_token(rejected_token=headers['Authorization'][7:])
+            auth_retried = True
+            continue
+        attempt += 1
         if response.status_code == 429:
             # Rate limited — back off and retry
-            retry_after = int(response.headers.get('Retry-After', 5))
-            _time.sleep(retry_after)
+            retry_after = retry_after_seconds(response.headers.get('Retry-After')) or 5
+            if manager:
+                manager.defer(retry_after)
+            elif attempt < _MAX_RETRIES:
+                _time.sleep(retry_after)
             last_response = response
             continue
         if response.status_code < 500:
             return response
         last_response = response
-        if attempt < _MAX_RETRIES - 1:
-            _time.sleep(_RETRY_BACKOFF[attempt])
+        if attempt < _MAX_RETRIES:
+            _time.sleep(_RETRY_BACKOFF[attempt - 1])
     return last_response
 
 
@@ -105,6 +128,7 @@ def get_activity_details(activity_id, headers):
     response = _request_with_retry('GET', url, headers=headers, timeout=30)
     
     if response.status_code != 200:
+        _raise_service_data_error(response, headers, 'Could not fetch public activity.')
         body = response.text[:200] if response.text else ''
         return None, f"Error fetching activity: {response.status_code} — {body}"
     
@@ -192,6 +216,7 @@ def fetch_rider_telemetry(activity_id, headers):
     telem_response = _request_with_retry('GET', telem_url, headers=headers, timeout=30)
     
     if telem_response.status_code != 200:
+        _raise_service_data_error(telem_response, headers, 'Could not fetch public activity telemetry.')
         body = telem_response.text[:200] if telem_response.text else ''
         return None, activity_data, f"Telemetry error: {telem_response.status_code} — {body}"
     
@@ -199,6 +224,14 @@ def fetch_rider_telemetry(activity_id, headers):
         return telem_response.json(), activity_data, None
     except Exception as e:
         return None, activity_data, f"Failed to parse telemetry JSON: {e} — body: {(telem_response.text or '')[:200]}"
+
+
+def _raise_service_data_error(response, headers, message):
+    if isinstance(headers, ServiceHeaders):
+        status = response.status_code
+        if status == 401 or status >= 500:
+            status = 503
+        raise ZwiftAPIError(message, status, response.headers.get('Retry-After'))
 
 
 def convert_telemetry_to_dataframe(telem_data):
@@ -275,6 +308,7 @@ def get_race_entries(event_subgroup_id, headers, limit=50):
         response = _request_with_retry('GET', url, headers=headers, params=params, timeout=30)
         
         if response.status_code != 200:
+            _raise_service_data_error(response, headers, 'Could not fetch public race results.')
             body = response.text[:200] if response.text else ''
             return None, f"Error fetching race results: {response.status_code} — {body}"
         
@@ -452,6 +486,13 @@ def _reuse_cached_rider(participant, output_dir, cached_riders):
     return result
 
 
+def _race_summary_dataframe(rows):
+    return pd.DataFrame([
+        {**row, 'player_id': str(row['player_id']) if row.get('player_id') is not None else None}
+        for row in rows
+    ])
+
+
 def get_event_subgroups(event_id, headers):
     """
     Fetch all subgroups for a Zwift event.
@@ -466,6 +507,7 @@ def get_event_subgroups(event_id, headers):
     url = f"{BASE_URL}/events/{event_id}"
     response = _request_with_retry('GET', url, headers=headers, timeout=15)
     if response.status_code != 200:
+        _raise_service_data_error(response, headers, 'Could not fetch public event.')
         return None, f"Error fetching event {event_id}: {response.status_code}"
     try:
         event_data = response.json()
@@ -646,7 +688,7 @@ def fetch_all_subgroups_from_activity(activity_url_or_id, headers, output_base_d
             for idx in range(len(participants)):
                 summary_data.append(results_by_idx[idx])
 
-        summary_df = pd.DataFrame(summary_data)
+        summary_df = _race_summary_dataframe(summary_data)
         summary_df = flag_segment_distance_anomalies(summary_df)
         summary_df.to_csv(os.path.join(output_dir, "complete_race_summary.csv"), index=False)
         success_count = len([s for s in summary_data if s.get('status') == 'SUCCESS'])
@@ -901,7 +943,7 @@ def fetch_race_from_activity(activity_url_or_id, headers, output_base_dir=".", p
             summary_data.append(results_by_idx[idx])
     
     # Step 7: Save summary
-    summary_df = pd.DataFrame(summary_data)
+    summary_df = _race_summary_dataframe(summary_data)
     summary_df = flag_segment_distance_anomalies(summary_df)
     summary_df.to_csv(os.path.join(output_dir, "complete_race_summary.csv"), index=False)
     

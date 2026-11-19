@@ -18,6 +18,7 @@ render every world identically.
 """
 
 import json
+import math
 from pathlib import Path
 from functools import lru_cache
 
@@ -220,16 +221,17 @@ def _load_segment_names() -> dict[int, str]:
     return names
 
 
-def _path_slice(points, start_fraction, end_fraction):
+def _path_slice(points, start_fraction, end_fraction, positions=None):
     """Return the route polyline between normalized WAD checkpoint positions."""
     if len(points) < 2:
         return []
     points = np.asarray(points, dtype=float)
-    start = start_fraction * (len(points) - 1)
-    end = end_fraction * (len(points) - 1)
-    interior = points[(np.arange(len(points)) > start) & (np.arange(len(points)) < end)]
+    positions = np.asarray(positions if positions is not None else np.arange(len(points)), dtype=float)
+    start = start_fraction * positions[-1]
+    end = end_fraction * positions[-1]
+    interior = points[(positions > start) & (positions < end)]
     samples = [
-        [float(np.interp(position, np.arange(len(points)), points[:, i])) for i in range(2)]
+        [float(np.interp(position, positions, points[:, i])) for i in range(2)]
         for position in (start, end)
     ]
     return [samples[0], *interior.tolist(), samples[1]]
@@ -240,7 +242,7 @@ def _route_path_slice(route, leadin, main, start_fraction, end_fraction):
     segment_path = route.get("segment_path")
     if segment_path and segment_path.get("x") and segment_path.get("z"):
         points = list(zip(segment_path["x"], segment_path["z"]))
-        return _path_slice(points, start_fraction, end_fraction)
+        return _path_slice(points, start_fraction, end_fraction, segment_path.get("d"))
     lead_points = list(zip(leadin.get("local_x", []), leadin.get("local_z", []))) if leadin else []
     main_points = list(zip(main.get("local_x", []), main.get("local_z", []))) if main else []
     lead_count = max(int(route.get("leadin_checkpoint_count", len(lead_points))), 1)
@@ -273,7 +275,7 @@ def _route_path_slice(route, leadin, main, start_fraction, end_fraction):
 
 
 def _route_segment_markers(map_id: int, route: dict, leadin: dict | None, main: dict | None) -> list[dict]:
-    """Project WAD segment percentage boundaries into surface-map plot space."""
+    """Project timing-line checkpoint crossings, with legacy percentage fallback."""
     segment_entries = route.get("segments")
     if segment_entries is None:
         segment_entries = _load_wad_segments().get(route.get("name", "").strip(), {}).get("segments", [])
@@ -283,10 +285,26 @@ def _route_segment_markers(map_id: int, route: dict, leadin: dict | None, main: 
     names = _load_segment_names()
     markers = []
     pass_numbers = {}
+    segment_path = route.get("segment_path") or {}
+    positions = segment_path.get("d")
+    checkpoint_last = positions[-1] if positions else max(
+        route.get("leadin_checkpoint_count", 0) + route.get("route_checkpoint_count", 0) - 1, 1)
     for index, segment in enumerate(segment_entries, start=1):
-        local_path = _route_path_slice(
-            route, leadin, main, segment["percent_start"], segment["percent_end"]
-        )
+        distance = segment.get("distance_m")
+        maximum = segment.get("max_distance_m")
+        if distance is not None and maximum is not None and round(maximum - distance, 2) > 25:
+            continue
+        start_fraction = (segment["start_checkpoint"] / checkpoint_last
+                          if "start_checkpoint" in segment else segment["percent_start"])
+        end_fraction = (segment["end_checkpoint"] / checkpoint_last
+                        if "end_checkpoint" in segment else segment.get("resolved_percent_end", segment["percent_end"]))
+        local_path = _route_path_slice(route, leadin, main, start_fraction, end_fraction)
+        if segment.get("boundary_source") == "closed_route_lap":
+            arch_fraction = segment["timing_arch_checkpoint"] / checkpoint_last
+            local_path = (
+                _route_path_slice(route, leadin, main, arch_fraction, end_fraction)
+                + _route_path_slice(route, leadin, main, start_fraction, arch_fraction)[1:]
+            )
         if len(local_path) < 2:
             continue
         x, y = projection["project"](
@@ -301,6 +319,7 @@ def _route_segment_markers(map_id: int, route: dict, leadin: dict | None, main: 
             "pass": pass_numbers[segment_hash],
             "name": name,
             "type": "kom" if "kom" in name.casefold() else "sprint" if "sprint" in name.casefold() else "segment",
+            "direction": segment.get("direction"),
             "start_distance_m": segment.get("start_distance_m"),
             "end_distance_m": segment.get("end_distance_m"),
             "latlng": local_to_latlng(
@@ -381,6 +400,16 @@ def get_world_surfaces(map_id: int) -> dict:
         })
 
     routes = []
+    def projected_paths(paths):
+        result = {}
+        for road_id, pieces in paths.items():
+            result[str(road_id)] = []
+            for piece in pieces:
+                X, Y = proj["project"](piece["x"], piece["z"])
+                result[str(road_id)].append({"x": [round(float(value), 3) for value in X],
+                                             "y": [round(float(value), 3) for value in Y]})
+        return result
+
     for r in _load_route_world(map_id).get("routes", []):
         routes.append({
             "nameHash": r.get("nameHash"),
@@ -391,6 +420,18 @@ def get_world_surfaces(map_id: int) -> dict:
             "leadin_ascent_m": r.get("leadin_ascent_m", 0.0),
             "sport_type": r.get("sport_type", 0),
             "event_only": r.get("event_only", False),
+            "free_ride_leadin_distance_m": r.get("start_locations", {}).get("free_ride", {}).get("leadin_distance_m"),
+            "free_ride_leadin_ascent_m": r.get("start_locations", {}).get("free_ride", {}).get("leadin_ascent_m"),
+            "available_modes": [mode for mode, version in r.get("route_versions", {"race": {"available": True}}).items()
+                                if version.get("available")],
+            "road_ids": {mode: version.get("road_ids", [road["road_id"] for road in r.get("road_nodes", [])])
+                         for mode, version in r.get("route_versions", {"race": {"available": True}}).items()
+                         if version.get("available")},
+            "road_paths": {mode: projected_paths(version.get("road_paths", {
+                str(road["road_id"]): [leg for leg in (r.get("leadin"), r.get("route")) if leg]
+                for road in r.get("road_nodes", [])}))
+                for mode, version in r.get("route_versions", {"race": {"available": True}}).items()
+                if version.get("available")},
         })
     routes.sort(key=lambda r: r["name"].lower())
 
@@ -399,6 +440,13 @@ def get_world_surfaces(map_id: int) -> dict:
         key=lambda s: SURFACE_ORDER.index(s) if s in SURFACE_ORDER else 99,
     )
 
+    tolerance_x, tolerance_y = proj["project"]([0, 5, 0], [0, 0, 5])
+    basis_x, basis_y = proj["project"]([0, 1, 0], [0, 0, 1])
+    basis = np.array([
+        [basis_x[1] - basis_x[0], basis_x[2] - basis_x[0]],
+        [basis_y[1] - basis_y[0], basis_y[2] - basis_y[0]],
+    ], dtype=float)
+    meters_per_plot_x = float(np.linalg.norm(np.linalg.solve(basis, [1.0, 0.0])))
     return {
         "mapID": map_id,
         "name": _WORLD_NAMES.get(map_id, f"World {map_id}"),
@@ -406,8 +454,11 @@ def get_world_surfaces(map_id: int) -> dict:
         "disconnected_routes": map_id == VIDEO_ROUTES_MAP_ID,
         "background": proj["background"],
         "bounds": proj["bounds"],
+        "meters_per_plot_x": meters_per_plot_x,
         "segments": segments,
         "routes": routes,
+        "road_match_tolerance": math.sqrt(sum((float(tolerance_x[index]) - float(tolerance_x[0])) ** 2 +
+            (float(tolerance_y[index]) - float(tolerance_y[0])) ** 2 for index in (1, 2))),
         "colors": {s: SURFACE_COLORS.get(s, SURFACE_COLORS["Unknown"])
                    for s in surfaces_present},
     }
@@ -506,21 +557,76 @@ def route_is_loop(map_id: int, name_hash: int, threshold_m: float = 100.0) -> bo
     return (dx * dx + dz * dz) ** 0.5 < threshold_m
 
 
-def get_route(map_id: int, name_hash: int) -> dict | None:
+def _route_profile_offset_m(route: dict) -> float:
+    """Measured main-leg start on the displayed axis, including its connector."""
+    leadin = route.get("leadin")
+    if not leadin or not leadin.get("d"):
+        return 0.0
+    offset = leadin["d"][-1]
+    main = route.get("route")
+    if main and main.get("x") and main.get("z"):
+        offset += float(np.hypot(
+            main["x"][0] - leadin["x"][-1],
+            main["z"][0] - leadin["z"][-1],
+        ))
+    if route.get("leadin_view"):
+        offset -= route["leadin_view"]["paddock_distance_m"]
+    return round(offset, 2)
+
+
+def get_route_start_options(map_id: int, name_hash: int) -> dict | None:
+    """Return start-mode availability and lead-in totals without packing a map."""
+    route = next((r for r in _load_route_world(map_id).get("routes", [])
+                  if r.get("nameHash") == name_hash), None)
+    if route is None:
+        return None
+    versions = route.get("route_versions", {"race": {"available": True}})
+    options = {}
+    for mode, version in versions.items():
+        leg = version.get("leadin") if mode == "free_ride" else route.get("leadin")
+        distances = (leg or {}).get("d", [])
+        declared_distance = (version.get("leadin_distance_m") if mode == "free_ride" else
+                             version.get("leadin_distance_m", route.get("leadin_distance_m", 0.0)))
+        options[mode] = {
+            "distance_m": float(distances[-1]) if distances else (0.0 if declared_distance == 0 else None),
+            "declared_distance_m": declared_distance,
+            "ascent_m": (version.get("leadin_ascent_m") if mode == "free_ride" else
+                         version.get("leadin_ascent_m", route.get("leadin_ascent_m", 0.0))),
+            "geometry_status": version.get("geometry_status"),
+        }
+    return {
+        "available_modes": [mode for mode, version in versions.items() if version.get("available")],
+        "leadin_by_mode": options,
+    }
+
+
+def get_route(map_id: int, name_hash: int, mode: str | None = None) -> dict | None:
     """Return full geometry + elevation + per-point surface for one route."""
     routes = _load_route_world(map_id).get("routes", [])
     route = next((r for r in routes if r.get("nameHash") == name_hash), None)
     if route is None:
         return None
+    if mode not in (None, "race", "free_ride"):
+        raise ValueError("Unknown route mode")
+    versions = route.get("route_versions", {"race": {"available": True}})
+    available_modes = [key for key, value in versions.items() if value.get("available")]
+    if mode == "free_ride" and mode not in available_modes:
+        mode = "race"
+    version = versions.get(mode, {})
 
-    leadin = _pack_leg(map_id, route.get("leadin"))
+    raw_leadin = _pack_leg(map_id, route.get("leadin"))
+    leadin_view = route.get("leadin_view") if mode is None else None
+    lead_profile = version.get("leadin") if mode == "free_ride" else route.get("leadin")
+    leadin = _pack_leg(map_id, leadin_view["profile"] if leadin_view else lead_profile)
     main = _pack_leg(map_id, route.get("route"))
+    mode_offset = (_route_profile_offset_m(route) if mode is None else
+                   _route_profile_offset_m({"leadin": lead_profile, "route": route.get("route")}))
 
     # Scale each leg's altitude to physical metres by this world's stored
     # WAD->physical factor so the elevation profile and gradients are correct
     # (WAD vertical geometry is not always physical — see helper).
     world_scale = get_world_altitude_scale(map_id)
-    anchor_leg = leadin if leadin and leadin.get("alt") else main
+    anchor_leg = raw_leadin if raw_leadin and raw_leadin.get("alt") else main
     if anchor_leg and anchor_leg.get("alt"):
         anchor_alt = anchor_leg["alt"][0]
         _anchor_leg_alt(leadin, world_scale, anchor_alt)
@@ -547,6 +653,24 @@ def get_route(map_id: int, name_hash: int) -> dict | None:
         key=lambda e: -e["distance_m"],
     )
 
+    segments = _route_segment_markers(map_id, route, raw_leadin, main)
+    escalators = route.get("escalators", [])
+    if mode == "free_ride":
+        raw_offset = _route_profile_offset_m({"leadin": route.get("leadin"), "route": route.get("route")})
+        segments = [segment for segment in segments if segment["start_distance_m"] >= raw_offset]
+        for segment in segments:
+            for key in ("start_distance_m", "end_distance_m"):
+                segment[key] = round(segment[key] + mode_offset - raw_offset, 2)
+        escalators = [passage for passage in escalators if passage.get("leg") != "leadin"]
+    if leadin_view:
+        escalators = [dict(passage) for passage in escalators]
+        shifted_markers = segments + [passage for passage in escalators
+                                      if passage.get("leg") == "leadin"]
+        for marker in shifted_markers:
+            for key in ("start_distance_m", "end_distance_m"):
+                if marker.get(key) is not None:
+                    marker[key] = round(marker[key] - leadin_view["paddock_distance_m"], 2)
+
     return {
         "mapID": map_id,
         "world_name": _WORLD_NAMES.get(map_id, f"World {map_id}"),
@@ -554,14 +678,22 @@ def get_route(map_id: int, name_hash: int) -> dict | None:
         "name": route.get("name", ""),
         "distance_m": route.get("distance_m", 0.0),
         "ascent_m": route.get("ascent_m", 0.0),
-        "leadin_distance_m": route.get("leadin_distance_m", 0.0),
-        "leadin_ascent_m": route.get("leadin_ascent_m", 0.0),
+        "leadin_distance_m": version.get("leadin_distance_m", route.get("leadin_distance_m", 0.0)),
+        "leadin_ascent_m": version.get("leadin_ascent_m", route.get("leadin_ascent_m", 0.0)),
         "sport_type": route.get("sport_type", 0),
         "event_only": route.get("event_only", False),
+        "route_mode": mode,
+        "available_modes": available_modes,
+        "start_geometry_status": version.get("geometry_status"),
+        "start_position_source": version.get("position_source"),
+        "fallback_paddock_road_id": version.get("fallback_paddock_road_id"),
+        "fallback_paddock_basis": version.get("fallback_paddock_basis"),
+        "start_locations": route.get("start_locations", {}),
+        "route_offset_m": mode_offset,
         "leadin": leadin,
         "route": main,
-        "segments": _route_segment_markers(map_id, route, leadin, main),
-        "escalators": route.get("escalators", []),
+        "segments": segments,
+        "escalators": escalators,
         "road_nodes": route.get("road_nodes", []),
         "breakdown": breakdown_list,
         "bounds": bounds,

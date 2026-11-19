@@ -7,15 +7,20 @@ differ (or ``--force`` is passed), reruns the full pipeline in order:
 
     1. extract_zwift_routes.py   (zwift_routes/)
     2. extract_zwift_surfaces.py (zwift_surfaces/ road-network geometry)
-    3. extract_zwift_bikes.py    (game_frames.json / game_wheels.json, pass 1)
-    4. zi_stage_solve.py         (frame_upgrade_measurements.json)
-    5. extract_zwift_bikes.py    (pass 2, bakes in the fresh measurements)
+    3. extract_zwift_routes.py   (video routes/roads, if the Mochi cache exists)
+    4. extract_zwift_bikes.py    (game_frames.json / game_wheels.json, pass 1)
+    5. zi_stage_solve.py         (frame_upgrade_measurements.json)
+    6. extract_zwift_bikes.py    (pass 2, bakes in the fresh measurements)
 
 Usage:
     python tools/regenerate_zwift_data.py \
         [--zwift-dir "C:\\Program Files (x86)\\Zwift"] \
         [--out-routes zwift_routes] [--out-surfaces zwift_surfaces] \
-        [--out-data zwiftdata] [--force]
+        [--out-data zwiftdata] [--video-cache PATH] [--force]
+
+    Video routes default to the local %LOCALAPPDATA%\\Zwift\\mochi cache. If that
+    cache is unavailable, existing video exports are kept. An explicitly supplied
+    cache must exist. Use --force to refresh a changed cache at the same client version.
 """
 from __future__ import annotations
 
@@ -58,6 +63,9 @@ def main() -> int:
                     help="Output directory for road-network geometry.")
     ap.add_argument("--out-data", default="zwiftdata",
                     help="Output directory for frame/wheel datasets.")
+    ap.add_argument("--video-cache", default=None,
+                    help="Mochi cache directory (default: %%LOCALAPPDATA%%/Zwift/mochi; "
+                         "skip video routes if the default cache is unavailable).")
     ap.add_argument("--force", action="store_true",
                     help="Regenerate even if the installed version matches.")
     args = ap.parse_args()
@@ -76,12 +84,27 @@ def main() -> int:
         print("up to date -- no regeneration needed.")
         return 0
 
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    video_cache = args.video_cache or (
+        os.path.join(local_app_data, "Zwift", "mochi") if local_app_data else None
+    )
+    if args.video_cache and not os.path.isdir(video_cache):
+        ap.error(f"video cache directory does not exist: {video_cache}")
+
     tools_dir = os.path.dirname(os.path.abspath(__file__))
     py = sys.executable
     run([py, os.path.join(tools_dir, "extract_zwift_routes.py"),
          "--zwift-dir", args.zwift_dir, "--out", args.out_routes])
     run([py, os.path.join(tools_dir, "extract_zwift_surfaces.py"),
          "--zwift-dir", args.zwift_dir, "--out", args.out_surfaces])
+    if video_cache and os.path.isdir(video_cache):
+        run([py, os.path.join(tools_dir, "extract_zwift_routes.py"),
+             "--video-cache", video_cache, "--out", args.out_routes,
+             "--out-surfaces", args.out_surfaces])
+    else:
+        reason = video_cache or "LOCALAPPDATA is not set"
+        print(f"video routes: skipped (cache unavailable: {reason}); "
+              "existing video exports left unchanged.", file=sys.stderr)
     run([py, os.path.join(tools_dir, "extract_zwift_bikes.py"),
          "--zwift-dir", args.zwift_dir, "--out", args.out_data])
     run([py, os.path.join(tools_dir, "zi_stage_solve.py")])

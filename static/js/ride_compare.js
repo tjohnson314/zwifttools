@@ -3,18 +3,8 @@
  * comparing arbitrary activities on the same route.
  *
  * Loaded after race_replay.js; replaces DOMContentLoaded init,
- * fetchRace, and handleAuth to adapt the UI.
+ * and fetchRace to adapt the UI.
  */
-
-// Override handleAuth to redirect back to ride-compare
-const _origHandleAuth = typeof handleAuth === 'function' ? handleAuth : null;
-handleAuth = function () {
-    if (isAuthenticated) {
-        window.location.href = '/auth/logout';
-    } else {
-        window.location.href = '/auth/login?next=/ride-compare';
-    }
-};
 
 // After race_replay.js's DOMContentLoaded runs (which calls bindEvents),
 // we re-bind the fetch button to our custom handler.
@@ -102,8 +92,8 @@ async function fetchRideCompare() {
         }
 
         if (finalData.success) {
+            if (!await loadRaceById(finalData.race_id, true)) return;
             showStatus(finalData.message, 'success');
-            await loadRaceById(finalData.race_id);
 
             // Update URL for sharing (remove activity_id set by initRaceData)
             const url = new URL(window.location);

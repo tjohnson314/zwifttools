@@ -18,6 +18,7 @@
                 <p class="subtitle">Best power curve from your last 90 days. Add dividers in the activity list to compare date ranges. W/kg is only shown when an event weight is available.</p>
             </div>
             <div id="loadSummary" class="load-summary" style="display:none;"></div>
+            {% include '_rider_header.html' %}
         </header>
 
         <div id="loadingState" class="state-card loading">
@@ -92,7 +93,7 @@
                 <div class="activity-list-tools">
                     <span id="dividerHint" class="divider-hint">Use the &ldquo;+ divider&rdquo; buttons between rows to split activities into power-curve groups.</span>
                     <button id="clearDividersBtn" class="range-btn" type="button" style="display:none;">Clear dividers</button>
-                    <button id="clearPowerCurveCacheBtn" class="range-btn" type="button">Clear cache</button>
+                    <button id="clearPowerCurveCacheBtn" class="range-btn" type="button" title="Only activities with power data are cached. Activities without power data are retried when you reload the dashboard.">Clear cache</button>
                 </div>
             </div>
             <div class="activity-table-wrap">

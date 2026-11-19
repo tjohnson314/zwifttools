@@ -17,6 +17,7 @@ import os
 import re
 import sys
 from functools import lru_cache
+import xml.etree.ElementTree as ET
 
 import numpy as np
 
@@ -30,7 +31,7 @@ _TOOLS = os.path.join(
 if _TOOLS not in sys.path:
     sys.path.insert(0, _TOOLS)
 
-from extract_zwift_routes import read_wad_entries  # noqa: E402
+from extract_zwift_routes import read_wad_entries, load_multiroot, _directional_segment_name  # noqa: E402
 import extract_zwift_surfaces as _exs  # noqa: E402
 
 ZWIFT_DIR = os.environ.get("ZWIFT_DIR", r"C:\Program Files (x86)\Zwift")
@@ -151,6 +152,154 @@ def _subpath(pts, cum, total, t0, t1):
     return out
 
 
+def _road_time_point(intervals, road_time: float):
+    if not math.isfinite(road_time):
+        return None
+    candidates = [interval for interval in intervals
+                  if min(interval[0], interval[1]) <= road_time <= max(interval[0], interval[1])
+                  and interval[0] != interval[1]]
+    if not candidates:
+        return None
+    start, end, first, last, source = min(candidates, key=lambda interval: abs(interval[1] - interval[0]))
+    weight = (road_time - start) / (end - start)
+    return {"local_x": first[0] + weight * (last[0] - first[0]),
+            "local_z": first[1] + weight * (last[1] - first[1]),
+            "source_route": source}
+
+
+def _spawn_markers(entity_data, intervals, map_id):
+    projection = _projection(map_id)
+    roads = None
+    markers = []
+    for index, entity in enumerate(load_multiroot(entity_data).iter("ent")):
+        if entity.get("type") != "ENTITY_TYPE_SPAWNMARKER":
+            continue
+        try:
+            road_id = int(entity.attrib["m_roadId"])
+        except (KeyError, ValueError):
+            road_id = None
+        try:
+            road_time = float(entity.attrib["m_roadTime"])
+            if not math.isfinite(road_time):
+                road_time = None
+        except (KeyError, ValueError):
+            road_time = None
+        point = _road_time_point(intervals.get(road_id, []), road_time) if road_time is not None else None
+        position_source = "native_route_checkpoint_interpolation" if point else None
+        if point is None and road_id is not None:
+            if roads is None:
+                road_txt, _styles = _read_road_style(map_id)
+                roads = {int(road.findtext("id")): road for road in load_multiroot(road_txt.encode()).iter("road")}
+            road = roads.get(road_id)
+            if road is not None:
+                block = ET.tostring(road, encoding="unicode")
+                nodes = _exs._nodes_full(block, auto_tangents=True)
+                points = _exs._spline_points(nodes, looped=_LOOPED_RE.search(block) is not None) if len(nodes) >= 2 else [node[0] for node in nodes]
+                if points:
+                    cumulative = _exs._cumulative(points)
+                    local_x, local_z = _exs._sample_at(points, cumulative, cumulative[-1] / 2)
+                    point = {"local_x": local_x, "local_z": local_z, "source_route": None}
+                    position_source = "road_geometry_midpoint"
+        if point is not None:
+            xs, ys = projection["project"]([point["local_x"]], [point["local_z"]])
+            point = {**point, "x": float(xs[0]), "y": float(ys[0])}
+        markers.append({
+            "id": str(index), "name": entity.get("m_Name") or entity.get("m_label") or f"Spawn marker {index}",
+            "label": entity.get("m_label"), "road_id": road_id, "road_time": road_time,
+            "position": point, "position_source": position_source,
+            "xml": ET.tostring(entity, encoding="unicode").strip(),
+        })
+    markers.sort(key=lambda marker: (marker["name"].casefold(), marker["id"]))
+    return markers
+
+
+@lru_cache(maxsize=None)
+def get_world_timing_arches(map_id: int) -> dict:
+    wad = _world_wads().get(map_id)
+    if wad is None:
+        raise FileNotFoundError(f"No WAD for world {map_id}")
+    entries = read_wad_entries(wad, keep_substrings=("/routes/", "entities.xml"))
+    entity_data = next((data for name, data in entries.items()
+                        if name.lower().endswith("/entities.xml")), None)
+    if entity_data is None:
+        return {"mapID": map_id, "arches": [], "spawn_markers": []}
+    intervals = {}
+    for filename, data in entries.items():
+        if "/routes/" not in filename or not filename.endswith(".xml"):
+            continue
+        root = load_multiroot(data)
+        header = root.find("route")
+        source = (header.get("name", "").strip() if header is not None else "") or filename
+        for leg_name in ("leadinhighrescheckpoint", "highrescheckpoint"):
+            leg = root.find(leg_name)
+            checkpoints = leg.findall("entry") if leg is not None else []
+            for first, last in zip(checkpoints, checkpoints[1:]):
+                try:
+                    road_id = int(first.attrib["road"])
+                    if road_id != int(last.attrib["road"]) or first.get("dir") != last.get("dir"):
+                        continue
+                    start, end = float(first.attrib["time"]), float(last.attrib["time"])
+                    direction = first.get("dir")
+                    if (start == end or (direction == "1" and end < start)
+                            or (direction == "0" and end > start)):
+                        continue
+                    points = [tuple(float(entry.attrib[axis]) / _exs.UNITS_PER_METRE
+                                    for axis in ("x", "z")) for entry in (first, last)]
+                    if not all(math.isfinite(value) for value in (start, end, *points[0], *points[1])):
+                        continue
+                except (KeyError, ValueError):
+                    continue
+                intervals.setdefault(road_id, []).append((start, end, *points, source))
+    projection = _projection(map_id)
+    arches = []
+    for index, entity in enumerate(load_multiroot(entity_data).iter("ent")):
+        if entity.get("type") != "ENTITY_TYPE_TIMINGARCH":
+            continue
+        attributes = entity.attrib
+        try:
+            road_id = int(attributes.get("m_roadId", "0"))
+        except ValueError:
+            road_id = None
+
+        def number(key):
+            try:
+                value = float(attributes[key])
+                return value if math.isfinite(value) else None
+            except (KeyError, ValueError):
+                return None
+
+        directions = [direction for direction in ("F", "R")
+                      if any(f"{field}{direction}" in attributes for field in
+                             ("m_startLineSplineTime", "m_overrideNetworkHash"))] or ["F"]
+        for direction in directions:
+            name = next((attributes[key].strip() for key in (
+                f"m_ArchFriendlyMaleName{direction}", f"m_ArchFriendlyName{direction}",
+                "m_ArchFriendlyMaleName", "m_ArchFriendlyName", "m_Name",
+            ) if attributes.get(key, "").strip()), f"Timing arch {index}")
+            start_time = number(f"m_startLineSplineTime{direction}")
+            end_time = number("m_roadTime")
+            boundaries = {}
+            for boundary, road_time in (("start", start_time), ("finish", end_time)):
+                point = _road_time_point(intervals.get(road_id, []), road_time) if road_time is not None else None
+                if point is not None:
+                    xs, ys = projection["project"]([point["local_x"]], [point["local_z"]])
+                    point = {**point, "x": float(xs[0]), "y": float(ys[0])}
+                boundaries[boundary] = point
+            distance = number(f"m_ArchSegmentDistance{direction}")
+            arches.append({
+                "id": f"{index}:{direction}", "entity_name": attributes.get("m_Name", ""),
+                "name": _directional_segment_name(name, direction), "direction": direction,
+                "hash": attributes.get(f"m_overrideNetworkHash{direction}"),
+                "road_id": road_id, "start_time": start_time, "end_time": end_time,
+                "declared_distance_m": distance * 1000 if distance is not None else None,
+                "xml": ET.tostring(entity, encoding="unicode").strip(), **boundaries,
+                "position_source": "native_route_checkpoint_interpolation",
+            })
+    arches.sort(key=lambda arch: (arch["name"].casefold(), arch["direction"], arch["id"]))
+    return {"mapID": map_id, "arches": arches,
+            "spawn_markers": _spawn_markers(entity_data, intervals, map_id)}
+
+
 def _project_xy(proj, pts) -> tuple[list[float], list[float]]:
     if not pts:
         return [], []
@@ -186,7 +335,7 @@ def get_world_roads(map_id: int) -> dict:
         rid = int(rid_m.group(1))
         name_m = _NAME_RE.search(block)
         name = name_m.group(1).strip() if name_m else ""
-        nodes = _exs._nodes_full(block)
+        nodes = _exs._nodes_full(block, auto_tangents=True)
         looped = _LOOPED_RE.search(block) is not None
         ds_m = _DEFSTYLE_RE.search(block)
         base = int(ds_m.group(1)) if ds_m else _exs.UNSET_STYLE
@@ -257,7 +406,7 @@ def get_road_detail(map_id: int, road_id: int) -> dict | None:
 
     name_m = _NAME_RE.search(block)
     name = name_m.group(1).strip() if name_m else ""
-    nodes = _exs._nodes_full(block)
+    nodes = _exs._nodes_full(block, auto_tangents=True)
     looped = _LOOPED_RE.search(block) is not None
     ds_m = _DEFSTYLE_RE.search(block)
     base = int(ds_m.group(1)) if ds_m else _exs.UNSET_STYLE

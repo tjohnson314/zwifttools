@@ -74,6 +74,7 @@ h1 .logo-emoji {
 }
 
 .unit-btn:hover { color: #fff; }
+.unit-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .unit-btn.active {
     background: linear-gradient(90deg, #ff6b35, #f7931e);

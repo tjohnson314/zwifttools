@@ -1,6 +1,6 @@
 # ZwiftTools
 
-A web app for analyzing Zwift rides. Includes **Bike Comparison**, **Race Replay**, **Ride Compare**, **Workout Analysis**, and **TTT Analysis** tools, plus a collection of **Sauce4Zwift mods** for live in-game overlays.
+A web app for analyzing Zwift rides. Includes **Bike Comparison**, **Race Replay**, **Ride Compare**, **Workout Analysis**, **Workout Route Check**, and **TTT Analysis** tools, plus a collection of **Sauce4Zwift mods** for live in-game overlays.
 
 ## Live Site
 
@@ -8,15 +8,120 @@ A web app for analyzing Zwift rides. Includes **Bike Comparison**, **Race Replay
 
 ## Features
 
+### Active rider and public data
+
+Visitors never enter a Zwift password. Every page header has an **Active rider**
+Zwift ID selector that resolves and displays the rider's name and ID. Confirmed
+selections are remembered in browser local storage; **Clear** forgets the rider.
+Changing riders reloads the page (and updates other open tabs), discarding any
+in-memory uploaded analysis. `?zwift_id=<id>` links select a specific rider.
+Critical Power inputs and saved CP/W′ are stored per selected Zwift ID. Calculations
+still work without a selection but are not saved. Previous unassigned inputs can
+be explicitly imported for the selected rider; they are never assigned automatically.
+Race Replay applies saved CP/W′ only to the rider with the matching ID.
+
+Activities, Power Dashboard, and Segment PRs use the active rider. Profile-based
+inputs remain editable; activity analysis uses the activity owner's profile,
+which may differ from the active rider. Race Replay, Ride Compare, static tools,
+and manual planners do not require a selected rider.
+My Activities caches computed normalized power and average heart rate, along
+with race-link information, in browser local storage per rider and activity.
+Entries are refreshed when the activity's listed date, distance, or duration
+changes; clearing browser site data removes them.
+
+API access uses a dedicated server-side account and only publicly available
+data. Private or unavailable data is reported rather than treated as zero;
+results may be incomplete. This is a rider lookup, not proof of account ownership.
+ZRL Leaderboard, TTT Analysis, and Ride Compare skip inaccessible activities and
+indicate when telemetry is missing; service-wide failures are reported.
+FIT uploads remain an alternative in Bike Comparison: uploaded files, telemetry,
+and derived analysis are not persistently cached on the server or in the browser,
+and must be uploaded again after reloading.
+
 The homepage separates current **Tools** from **Archived** tools. The ZRL
 Leaderboard is available under **Archived** (`/?tab=archived`) and remains
 accessible at its existing `/zrl/leaderboard` URL with event loading and scoring
 unchanged.
 
+### DIRT Racing Series
+
+- Season 14 roster at `/dirt`, with riders, Zwift IDs, and team assignments
+- Filter by time zone, league, category, team, rider name, or Zwift ID
+- Switch between Riders and Teams, sort columns, share filtered URLs, and download filtered assignments as CSV
+- The public page reads `dirt_s14_roster.json`; visitors do not need a DIRT or Zwift login
+- Only current-series teams are collected. Team managers are not added from the separate managers section
+- Missing IDs and incomplete collection are reported explicitly; multiple team assignments are preserved
+- **Roster**, **vELO**, and **Power** tabs share filters and export their current metrics as CSV
+- vELO shows the overall live score plus Endurance, Pursuit, Sprint, Punch, Climb, and Time Trial scores, capped at 1000 before rounding to nearest integers to match ZwiftRacing's display
+- Power switches between Live estimates and 90-day bests for 5s, 15s, 30s, 1m, 2m, 5m, and 20m, in W or W/kg; the selected source is preserved in shared URLs and CSV exports
+- Stats tables omit Category (the category filter remains available), fit without horizontal scrolling, and stack labeled values on small screens
+- Snapshots and CSV preserve source numbers without rounding, clipping, or deriving W/kg from watts; absent values remain missing
+
+Team and rider pages require a DIRT account. Install the optional collector
+dependencies, then sign in directly in the browser opened by the collector:
+
+```powershell
+python -m pip install -r requirements-scraping.txt
+python -m playwright install chromium
+python tools/fetch_dirt_roster.py --login --team "RtB Yaks" --output race_data/dirt_s14_yaks.json
+python tools/fetch_dirt_roster.py --login
+```
+
+Progress is saved after every page; repeat the command to resume. Use `--refresh`
+to refetch team membership and rider profiles for a new snapshot. Requests are
+sequential and paced at 0.5 seconds by default, with rate-limit backoff. Rider
+profiles must identify Series 14 before they are accepted. Authentication stays
+in a local browser profile under `~/.zwifttools/dirt-browser`, not in the roster
+or repository. Long runs reload the browser after each 100-page batch to release
+browser resources. `--browser-relay` supports collection from an already authenticated
+DIRT browser via the module's `BROWSER_WORKER` and a temporary localhost relay;
+only parsed roster data is saved.
+
+Collect the ZwiftRacing metrics separately, signing in directly in the opened
+browser. Each unique Zwift ID is requested once, regardless of team assignments:
+
+```powershell
+python tools/fetch_dirt_stats.py --login --rider-id 7681059 --output race_data/dirt_s14_stats_tim.json
+python tools/fetch_dirt_stats.py --login
+```
+
+The deployable snapshot is `dirt_s14_stats.json`, served at `/api/dirt/stats`.
+Collection is sequential, paced, and resumable after every rider; `--refresh`
+starts a fresh snapshot. The collector reads the authenticated Power route's
+loaded rider data, including the overall live and six category vELO scores, and reloads after
+each 60-rider batch. Authentication stays under
+`~/.zwifttools/zwiftracing-browser`, not in the snapshot. The browser-relay mode
+can serve its worker at `/worker` on its temporary local port. Stats collection
+status and unavailable profiles are reported without breaking the Roster tab.
+
+### Event Inspector
+
+- Open `/event-inspector` and enter a Zwift event ID, or share `/event-inspector?event_id=5795670`
+- View, copy, or download the full event JSON, including every subgroup, rules, and tags
+- Read per-pen summaries with map/route names, local route measurements, UTC schedules, rider counts, equipment settings, decoded rules, and powerup IDs/percentages
+- Event timestamps accept compact offsets (`+0000`, `-0800`), colon-separated offsets, and `Z`; displayed times are converted to UTC
+- Pens are sorted by label. Event and pen rules/tags remain distinguishable; unknown codes and unspecified settings are not guessed. Account-relative signup/followed-rider fields are labeled as service-account state
+- Rider visibility distinguishes the same pen (`CULLING_SUBGROUP_ONLY`) from the same event across all pens (`CULLING_EVENT_ONLY`)
+- Uses the existing server-side Zwift account; no active rider selection is required
+- Preserves large numeric IDs in the displayed and downloaded JSON; no event fields are filtered out
+- Private, missing, or inaccessible events and service failures are reported explicitly
+- Powerup summaries use the working rule model: `NO_POWERUPS` in event or pen rules disables powerups; otherwise `starting_powerup` assigns the pen powerup, `arch_powerup` supplies arch-ID/powerup-ID override pairs, and `powerup_percent` supplies the distribution for arches without a matching override
+- Arches without an ID are treated as arch 0. Without an override or distribution, the displayed default is random Feather/Van/Aero, with no assumed probabilities. This describes award selection, not which arches award powerups
+- Event and pen powerup tags remain separate rather than guessing precedence between conflicting sources. Disabled powerup settings and malformed overrides remain visible for inspection
+- When event and pen tags are identical, the route preview notes this once at the top instead of repeating source labels at every arch
+- The Powerups section also shows matching event/pen settings once with a shared-source note; differing settings keep separate source headings
+- Powerup merging compares only `starting_powerup`, `arch_powerup`, and `powerup_percent`, ignoring tag order and unrelated tags such as timestamps. Full source tags remain separate when they differ
+- Pens use accessible tabs (click or Arrow Left/Right, Home, and End) rather than stacked cards
+- Each pen includes a route map, elevation profile, timing segments, and numbered arches with configured powerups or fallback pools. Hover an arch for its award or select it to jump to the details table
+- New York escalators use the same cached race-route zones as Route Explorer, with gold map highlights and elevation bands; hover or expand the escalator list for distances and trainer-slope percentages
+- Previews show the cached race lead-in plus one route lap, not a reconstruction of event laps, distance/time limits, or individual pen approaches. Native disabled-award flags, overlapping arch entities, and arches at the preview start are explicitly marked as uncertain; configured awards remain visible
+- Arch crossings are shipped in `zwift_routes/arches.json`, so hosting does not require game assets. After updating local route profiles, refresh the arch cache with `python -m tools.extract_zwift_routes --refresh-arches` (optionally `--world world1`); unavailable geometry or arch metadata is reported on the page
+
 ### Bike Comparison
 
 - Load any Zwift activity by URL/ID or upload a .fit file
 - Compare your actual bike against any frame/wheel/upgrade-level combination
+- Bike selectors in Bike Comparison and both pacing planners offer **Top performers only** (off by default), limiting choices to the combined road and TT Top Performers lists while retaining required fixed wheels. Explicitly restoring or copying equipment outside those lists turns the filter off.
 - Physics model using Zwift's CdA, Crr, weight, and gradient data
 - Estimates drafting savings from your recorded telemetry
 - Time range slider to focus analysis on specific sections
@@ -39,6 +144,7 @@ unchanged.
   - *Riders mode* — individual rider dots on the elevation profile
   - *Peloton mode* — automatic group detection with colored bars, group stats
 - **Interactive map** — overhead view of the Zwift world with route line and rider dots, zoom/pan/follow
+- Bottom-left metric distance scale follows map zoom and pan; segment boundary markers show starts as green circles and finishes as red squares, with names on hover and an independent visibility toggle. Only boundaries within the raced distance are shown; repeated laps share map markers. Ride Compare uses the same map controls
 - **Rider table** — live position, gap, power, 1-min avg, NP, weight, HR, speed, distance; sortable columns, W/kg toggle
 - **YouTube stream links** — auto-detects known streamers, links to VOD at the current playback timestamp, handles trimmed VODs
 - **Rider analysis** — pick any rider to see where they lost contact (drops and near misses), what it would have taken to stay on, where they spent more than the riders around them, and moves that worked; thresholds are explained in the in-app FAQ
@@ -49,6 +155,8 @@ unchanged.
 ### Surface Map / Route Explorer
 
 - Browse worlds and routes at `/surface-map`, with surface-colored elevation profiles
+- Virtual-world GPS transforms fit an affine mapping from game x/z coordinates to cached ZwiftMap GPS routes. Watopia uses the wider-coverage Peak Performance reference rather than Jungle Circuit Reverse, improving alignment across both northern and southern roads. Previously cleaned replays are rebuilt from saved telemetry on their next load; segment PR caches also invalidate when the calibration changes
+- A bottom-left metric distance scale updates with zoom and resizing. Canvas maps derive horizontal distances from the inverse world projection in game metres; video satellite maps use their geographic zoom scale
 - Road overlays use thin, zoom-aware strokes (1.5 CSS pixels at world fit, growing gently up to 3 pixels); selected routes remain more prominent, including on high-DPI screens and after resizing
 - New York subway escalators are highlighted in gold, including repeated passages and lead-ins
 - Hover an escalator marker for its distance interval and trainer-slope scale
@@ -88,6 +196,24 @@ python tools\extract_zwift_routes.py --world world4
 - SSE progress streaming while fetching activities
 - Shareable URLs via `?activity_ids=` parameter
 
+### Segment PRs
+
+- Choose an active rider and open `/segment-prs` to progressively analyze accessible activities from the past 90 days
+- Detect complete, forward traversals against the calibrated segment paths and timing boundaries used by Surface Map; repeated passes in a ride are separate attempts
+- A nearby road can cross a segment's finish-line plane before the true finish (for example Dos d'Âne Sprint Reverse on Croissant); later crossings are checked until one satisfies the recorded-distance and ordered-path checks, without relaxing those checks
+- Directional crossing lines accept interpolated crossings up to 20 m from their reference points, including at interior route-validation gates; recorded-distance and ordered-path checks still reject incomplete or wrong-route traversals
+- Richmond's GPS calibration uses the first lap of activity `2260150967800512560` on the 2015 Worlds Course, validated against its second lap and a separate Cobbled Climbs ride; the 20 m corridor is unchanged, and the calibration update automatically invalidates cached segment results
+- Search segment names and paginate the fastest attempt per segment, or select a segment to see all attempts, including repeated passes within a ride, ranked by duration by default; all traversals remain recorded in the activity cache
+- Filter by world to narrow both the results and segment choices; All worlds restores the complete list without reloading activities
+- Forward and reverse segments retain their distinct IDs; when both directions share a catalog name, their dashboard labels explicitly distinguish Forward and Reverse
+- Click any data-column heading to sort all results before pagination, then click again to reverse the order; missing metrics stay last in either direction
+- Record interpolated entry/finish time, recorded distance, net elevation change, time-weighted average power, normalized power, estimated draft watts, and entry speed
+- Draft uses the current user's height and weight with a level 5 Tarmac SL9 / Princeton Wake 6560 setup; missing measurements leave draft unavailable, and estimates are never clipped
+- Browser caching is scoped to the current user and activity; changes to rider measurements, activity summary, or segment geometry invalidate cached results
+- Analyze any attempt via Bike Comparison or Race Replay (for races); the Analyze column uses the same bike, flag, and Zwift-logo icon links as My Activities, with tooltips and accessible labels
+- Missing GPS, unavailable telemetry, and failed requests are explicitly reported and can be retried; incomplete segments and wrong-direction passes are excluded
+- Video-route activity world IDs are resolved to the separate Video Routes catalog. These routes currently have no cataloged timed segments, so their activities report segment data as unavailable rather than failing or inventing segment PRs; video catalog updates invalidate cached results
+
 ### Workout Analysis
 
 - Open `/workout-analysis`, or use an activity's Workout Analysis link in My Activities
@@ -109,9 +235,34 @@ does not require Zwift to be installed. Refresh it after a client update with:
 python tools\extract_zwift_workouts.py --zwift-dir "C:\Program Files (x86)\Zwift"
 ```
 
+### TT Pacing Planner
+
+- Choose **Free Ride** or **Race** starts at `/tt-pacing` (Race is the default); route totals, calculations, and maps use the same selected geometry
+- Start mode is remembered in browser settings and shared through the route link's `mode` parameter
+- Unavailable start modes are disabled. Missing lead-in geometry shows the declared lead-in distance and metadata totals with an explanation, rather than hiding known distances; exclude the lead-in to plan the main route only
+- Timing segments do not use route start modes
+
+### Workout Route Check
+
+- Open `/workout-route` to estimate whether a workout reaches a route finish; rider selection is optional for manual inputs
+- Load weight, height, and FTP from your Zwift profile; all remain editable, and missing values can be entered manually
+- Profile requests explicitly ask Zwift for JSON rather than its default binary format
+- Remember rider values, bike setup, route/lead-in choices, workout search and built-in selection, and untargeted-block power in browser local storage; saved rider values take precedence over profile values on reload. Custom workouts must be uploaded again
+- Choose a frame, wheels, upgrade level, route, and built-in workout, or upload a custom time-based cycling `.zwo`
+- Always use the **Free Ride** start, never the race paddock; routes without a free-ride version are excluded
+- Include the free-ride lead-in by default; unavailable lead-in geometry produces an explicit error rather than silently excluding it (the main route can still be selected without a lead-in)
+- Simulate a standing start, solo riding without drafting, surface-aware rolling resistance, and momentum over the existing route geometry
+- Scale prescribed targets by rider FTP, except fixed-reference tests; target ranges use midpoints, then all segment targets round to the nearest 5 W (halfway values round up). Ramps step between rounded targets in both simulation and chart
+- Set an explicit FTP percentage (default 75%) for free-ride, max-effort, and other blocks without power targets
+- See estimated finish time and workout time remaining, or distance still to go at workout end, with a power/distance chart
+- Stop the simulation at the first route finish or workout end; no terrain beyond the finish is invented
+- Custom uploads reuse the existing 1 MiB / 10,000-block limits and are not saved; estimates support workouts up to 24 hours and 10,000 simulation steps including rounded ramp plateaus
+- Variable-duration tests use their nominal schedule and retain interpretation warnings. Results are estimates, not route-badge guarantees
+
 ### TTT Analysis
 
 - Analyze team time trial races by event subgroup ID
+- Sauce telemetry CSV uploads still work when optional event or profile lookups fail; warnings identify estimated route/distance and default rider measurements
 - Auto-detects teams from rider name tags (e.g. `[V]`, `(RtB)`) or accepts manual team tags
 - **Lead Rider Speed** chart — who is on the front at each point on the course, with elevation overlay
 - **Lead Rider Power** chart — watts or W/kg, plus pull statistics per rider (pull count, avg duration, total front time)
@@ -155,9 +306,21 @@ Standalone browser overlays for [Sauce4Zwift](https://www.sauce.llc/), installed
 | **Surface Telemetry** | `sauce_mod_surface_telemetry/` | Records your telemetry with manual surface type tagging (Tarmac, Cobbles, Brick, Wood, Dirt, Gravel) for CRR mapping. Exports CSV. |
 | **Team Race Score** | `sauce_mod_team_race/` | Live team race scoreboard — tracks two teams across categories with 3/2/1 point scoring, gap-to-rival, and power stats. |
 | **Race Telemetry** | `sauce_mod_telemetry/` | Records per-second telemetry for all nearby riders (power, HR, speed, cadence, location, draft). Exports rider telemetry + profiles as separate CSVs. |
+| **Power Breakdown** | `sauce_mod_power_breakdown/` | Live aero, rolling, gravity, acceleration, and draft power estimates using bike upgrade stats and road surfaces. |
 | **Nearby Draft** | `sauce_mod_nearby_draft/` | Live road map with initials-centered draft donuts at actual rider positions: green effective draft, blue wasted watts, gray remaining maximum draft. Configurable radius (default 50 m) and closest-rider limit (0 = unlimited), with displayed/actual rider counts including you. Zoomable; negative segments are dashed and flagged rather than clipped. Uses each rider's Zwift weight/height, automatic road surfaces, and a configurable shared bike assumption. |
 
 Nearby Draft interpolates all rider positions, displayed distances, and camera motion at approximately 30 Hz using one shared delayed game timestamp. Playback has a one-second buffer anchored to your position history. New or stale riders wait individually until their history covers the displayed timestamp, without hiding the rest of the group or extrapolating positions. Draft values and radius filtering continue to use the actual telemetry.
+
+Refresh the bundled bike stats, physics constants, rolling resistance, and road
+surface data for **both Power Breakdown and Nearby Draft** from the repository root:
+
+```powershell
+python tools/build_power_breakdown_data.py
+```
+
+The builder uses the current bike database and local Zwift world WADs. If no WADs
+are available, existing road-surface bundles are preserved. Other map-based mods
+load road geometry directly from Sauce rather than bundling repository route data.
 
 ## Data Sources
 
@@ -171,7 +334,7 @@ Nearby Draft interpolates all rider positions, displayed distances, and camera m
 - **Backend**: Flask + Gunicorn
 - **Frontend**: Vanilla JS, Plotly.js (charts), Canvas (map), Chart.js (bike comparison)
 - **Data processing**: NumPy, Pandas, SciPy (KD-tree route alignment)
-- **Auth**: Zwift OAuth 2.0
+- **API access**: Server-side Zwift account; no visitor login or passwords
 - **Hosting**: Azure App Service (Linux, Python 3.12, Gunicorn)
 - **Analytics pipeline**: Azure Function + Azure Data Explorer (see [ZWIFTGAMES.md](azure_function/ZWIFTGAMES.md))
 
@@ -188,12 +351,22 @@ Nearby Draft interpolates all rider positions, displayed distances, and camera m
    `requirements-dev.txt` pulls in `requirements.txt` plus the test tools (pytest). Use plain
    `requirements.txt` if you only want to run the app.
 
-2. Set environment variables (all optional for local dev):
+2. Set environment variables (API credentials are required only for live Zwift data):
    - `YOUTUBE_API_KEY` — YouTube stream matching for Race Replay
    - `SECRET_KEY` — Flask session secret (auto-generated if unset)
    - `AZURE_STORAGE_CONNECTION_STRING` — Azure Blob Storage for race data caching
    - `AZURE_STORAGE_CONTAINER` — blob container name (default: `race-cache`)
-   - `ZWIFT_USERNAME` / `ZWIFT_PASSWORD` — headless Zwift auth for the Azure Function and CLI data downloads
+   - `ZWIFT_USERNAME` / `ZWIFT_PASSWORD` — dedicated server account for the website's live Zwift API access (also used by headless collectors when configured). Keep these in Azure application settings/secret storage, never source code or browser storage. Use an account without privileged access to riders' private data.
+
+   Without account configuration, live lookups report service unavailability;
+   manual calculations, FIT uploads, static tools, and saved public replays remain
+   usable. Coordinate traffic from collectors sharing the account; the website's
+   in-process token cache and pacing are not a distributed account-wide quota.
+
+   On migration from visitor authentication, quarantine or remove legacy
+   local/blob race caches whose public provenance cannot be established before
+   making them available. Do not copy caches of private activities into the new
+   public deployment. Legacy visitor tokens are cleared on subsequent requests.
 
 3. Run:
    ```bash

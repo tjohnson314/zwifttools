@@ -14,6 +14,7 @@ import logging
 import re
 import unicodedata
 from collections import Counter
+from decimal import Decimal, InvalidOperation
 import numpy as np
 import pandas as pd
 from datetime import datetime, timezone
@@ -28,7 +29,21 @@ logger = logging.getLogger(__name__)
 
 # Bump this version when data cleaning logic changes in a way that invalidates
 # previously cached results.  The cache loader will discard stale caches.
-CLEANING_VERSION = 39
+CLEANING_VERSION = 41
+
+
+def _summary_player_id(raw_player_id, rank):
+    try:
+        if raw_player_id.isascii() and raw_player_id.isdigit():
+            return int(raw_player_id)
+        value = Decimal(raw_player_id)
+        if value.is_finite() and value == value.to_integral_value() and 0 < value <= 2**53 - 1:
+            return int(value)
+    except (ValueError, InvalidOperation):
+        pass
+    logger.warning("Ignoring invalid or ambiguous player ID in race summary for rank %s", rank)
+    return None
+
 
 # Grace period after the official race start before a rider is treated as a
 # "late joiner".  Riders routinely begin recording / cross the start banner a
@@ -2371,7 +2386,7 @@ def clean_race_data(
     # Load summary
     summary_file = data_path / 'complete_race_summary.csv'
     if summary_file.exists():
-        summary = pd.read_csv(summary_file, dtype={'activity_id': str})
+        summary = pd.read_csv(summary_file, dtype={'activity_id': str, 'player_id': str})
     else:
         summary = None
     
@@ -2423,7 +2438,7 @@ def clean_race_data(
                 if 'height_cm' in match.columns and pd.notna(match['height_cm'].values[0]):
                     height_cm = float(match['height_cm'].values[0])
                 if 'player_id' in match.columns and pd.notna(match['player_id'].values[0]):
-                    player_id = int(match['player_id'].values[0])
+                    player_id = _summary_player_id(match['player_id'].values[0], rank)
                 if 'activity_start_time' in match.columns and pd.notna(match['activity_start_time'].values[0]):
                     activity_start_time = str(match['activity_start_time'].values[0])
                 if 'elapsed_ms' in match.columns and pd.notna(match['elapsed_ms'].values[0]):

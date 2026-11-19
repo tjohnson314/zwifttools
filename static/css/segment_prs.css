@@ -1,0 +1,24 @@
+[hidden] { display: none !important; }
+.segment-controls, .segment-pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 18px; }
+.segment-controls label { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.segment-controls input, .segment-controls select { background: #16213e; color: var(--text); border: 1px solid var(--panel-border); border-radius: 6px; padding: 8px; max-width: 100%; }
+.segment-controls select { max-width: 360px; }
+.segment-pagination { justify-content: center; margin-top: 18px; }
+.activity-table { min-width: 1180px; }
+.activity-table a, .segment-name { color: #4fc3f7; }
+.segment-name { background: none; border: none; cursor: pointer; text-align: left; font: inherit; }
+.segment-name:hover { text-decoration: underline; }
+.ride-date { display: block; color: var(--muted); font-size: 0.85rem; }
+.segment-actions { white-space: nowrap; }
+.segment-actions .action-link + .action-link { margin-left: 8px; }
+.sort-button { background: none; border: none; color: inherit; cursor: pointer; font: inherit; text-align: inherit; }
+.sort-button:hover { color: var(--accent); }
+.sort-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.sort-indicator { margin-left: 4px; }
+#dashboard > .subtitle { margin-bottom: 18px; }
+#failureList { margin: 12px 24px; color: #ffb0b0; }
+button:disabled { opacity: 0.5; cursor: default; }
+@media (max-width: 600px) {
+    .segment-controls label { width: 100%; flex-wrap: wrap; }
+    .segment-controls select, .segment-controls input { width: 100%; }
+}

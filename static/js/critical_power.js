@@ -1,10 +1,22 @@
 let regressionChart = null;
 let expectedPowerChart = null;
-const STORAGE_KEY = "criticalPowerCalculatorInputsV1";
+const INPUT_KEY_PREFIX = "criticalPowerCalculatorInputsV2:";
+const MODEL_KEY_PREFIX = "criticalPowerModelV2:";
+const LEGACY_INPUT_KEY = "criticalPowerCalculatorInputsV1";
+
+function activeRiderId() {
+    return window.ZwiftRider.get()?.id || null;
+}
+
+function storageStatus(message) {
+    document.getElementById("cpStorageStatus").textContent = message;
+}
 
 function loadStoredInputs() {
+    const id = activeRiderId();
+    if (!id) return null;
     try {
-        const raw = localStorage.getItem(STORAGE_KEY);
+        const raw = localStorage.getItem(INPUT_KEY_PREFIX + id);
         if (!raw) {
             return null;
         }
@@ -13,12 +25,19 @@ function loadStoredInputs() {
             return null;
         }
         return parsed;
-    } catch {
+    } catch (error) {
+        console.warn("Could not load critical power inputs:", error);
+        storageStatus("Browser storage unavailable. Critical Power values cannot be saved.");
         return null;
     }
 }
 
 function saveInputs() {
+    const id = activeRiderId();
+    if (!id) {
+        storageStatus("Select an active rider to save inputs and CP for Race Replay.");
+        return;
+    }
     const rows = [];
     for (let i = 0; i < 4; i += 1) {
         const durationEl = document.getElementById(`duration-${i}`);
@@ -36,9 +55,11 @@ function saveInputs() {
     };
 
     try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-    } catch {
-        // Ignore storage failures (private mode or blocked storage).
+        localStorage.setItem(INPUT_KEY_PREFIX + id, JSON.stringify(payload));
+        storageStatus(`Inputs are saved for Zwift ID ${id}. Calculate to save CP and reserve.`);
+    } catch (error) {
+        console.warn("Could not save critical power inputs:", error);
+        storageStatus("Browser storage unavailable. Critical Power values cannot be saved.");
     }
 }
 
@@ -107,13 +128,15 @@ function createRows(storedRows = null) {
         const rowValues = (storedRows && storedRows[i]) || defaults[i];
         row.innerHTML = `
             <div class="index-pill">${i + 1}</div>
-            <input id="duration-${i}" type="text" inputmode="numeric" placeholder="e.g. 300 or 5:00" value="${rowValues.duration || ""}">
-            <input id="power-${i}" type="number" min="1" step="1" placeholder="Watts" value="${rowValues.power || ""}">
+            <input id="duration-${i}" type="text" inputmode="numeric" placeholder="e.g. 300 or 5:00">
+            <input id="power-${i}" type="number" min="1" step="1" placeholder="Watts">
         `;
         dataRows.appendChild(row);
 
         const durationEl = row.querySelector(`#duration-${i}`);
         const powerEl = row.querySelector(`#power-${i}`);
+        durationEl.value = rowValues.duration || "";
+        powerEl.value = rowValues.power || "";
         bindRecalcOnCommit(durationEl);
         bindRecalcOnCommit(powerEl);
     }
@@ -550,8 +573,8 @@ function setMessage(text, type = "") {
     el.className = `message ${type}`.trim();
 }
 
-function calculate() {
-    saveInputs();
+function calculate(persist = true) {
+    if (persist) saveInputs();
     const { points, error } = collectDataPoints();
     if (error) {
         setMessage(error, "error");
@@ -566,15 +589,19 @@ function calculate() {
         return;
     }
 
-    // Shared with the Race Replay analysis panel ("Use my CP").
-    try {
-        localStorage.setItem("criticalPowerModelV1", JSON.stringify({
-            cp: regression.cp,
-            wPrime: regression.wPrime,
-            savedAt: new Date().toISOString()
-        }));
-    } catch {
-        // Ignore storage failures (private mode or blocked storage).
+    const id = activeRiderId();
+    if (persist && id) {
+        try {
+            localStorage.setItem(MODEL_KEY_PREFIX + id, JSON.stringify({
+                cp: regression.cp,
+                wPrime: regression.wPrime,
+                savedAt: new Date().toISOString()
+            }));
+            storageStatus(`CP and reserve saved for Zwift ID ${id}.`);
+        } catch (error) {
+            console.warn("Could not save critical power model:", error);
+            storageStatus("Browser storage unavailable. Critical Power values cannot be saved.");
+        }
     }
 
     document.getElementById("cpValue").textContent = `${regression.cp.toFixed(1)} W`;
@@ -646,7 +673,19 @@ function resetForm() {
     createRows();
     document.getElementById("whatIfDuration").value = "";
     document.getElementById("whatIfPower").value = "";
-    saveInputs();
+    const id = activeRiderId();
+    if (id) {
+        try {
+            localStorage.removeItem(INPUT_KEY_PREFIX + id);
+            localStorage.removeItem(MODEL_KEY_PREFIX + id);
+            storageStatus(`Saved inputs and CP cleared for Zwift ID ${id}.`);
+        } catch (error) {
+            console.warn("Could not clear critical power settings:", error);
+            storageStatus("Could not clear saved Critical Power values.");
+        }
+    } else {
+        storageStatus("Select an active rider to save inputs and CP for Race Replay.");
+    }
     setMessage("");
     document.getElementById("results").classList.add("hidden");
     document.getElementById("whatIfSummary").textContent = "";
@@ -663,7 +702,12 @@ function resetForm() {
     }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
+    await window.ZwiftRider.ready;
+    const id = activeRiderId();
+    storageStatus(id
+        ? `Inputs and CP are associated with Zwift ID ${id}.`
+        : "Select an active rider to save inputs and CP for Race Replay.");
     const stored = loadStoredInputs();
     createRows(stored && Array.isArray(stored.rows) ? stored.rows : null);
     document.getElementById("calculateBtn").addEventListener("click", calculate);
@@ -677,5 +721,25 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById("whatIfPower").value = stored.whatIfPower || "";
     }
 
-    calculate();
+    calculate(!!stored);
+
+    if (id) {
+        try {
+            const legacy = JSON.parse(localStorage.getItem(LEGACY_INPUT_KEY) || "null");
+            if (legacy && Array.isArray(legacy.rows) && legacy.rows.length <= 4 &&
+                legacy.rows.every(row => row && typeof row.duration === "string" && typeof row.power === "string")) {
+                const button = document.getElementById("importLegacyCp");
+                button.hidden = false;
+                button.addEventListener("click", () => {
+                    createRows(legacy.rows);
+                    document.getElementById("whatIfDuration").value = legacy.whatIfDuration || "";
+                    document.getElementById("whatIfPower").value = legacy.whatIfPower || "";
+                    calculate();
+                });
+            }
+        } catch (error) {
+            console.warn("Could not load previous critical power inputs:", error);
+            storageStatus("Could not load previous Critical Power inputs from browser storage.");
+        }
+    }
 });

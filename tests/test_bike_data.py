@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import pytest
 
 from bike_comparison.bike_data import BikeDatabase, _WHEEL_FRAME_TYPES, _slug
@@ -79,3 +82,39 @@ def test_planner_apis_reject_incompatible_wheels(monkeypatch, db, endpoint, fram
 
     assert response.status_code == 400
     assert "frame/wheel" in response.get_json()["error"]
+
+
+@pytest.mark.parametrize("road_styles", [None, {6: {42: {"d": "DIRT", "s": []}}}])
+def test_sauce_data_builder_refreshes_both_mods(monkeypatch, tmp_path, db, road_styles):
+    from tools import build_power_breakdown_data as builder
+
+    assert {Path(mod_dir).name for mod_dir in builder.MOD_DIRS} == {
+        "sauce_mod_power_breakdown", "sauce_mod_nearby_draft",
+    }
+    mod_dirs = [tmp_path / Path(mod_dir).name for mod_dir in builder.MOD_DIRS]
+    for mod_dir in mod_dirs:
+        mod_dir.mkdir()
+        (mod_dir / "road-styles.mjs").write_text("existing road data\n", encoding="utf-8")
+    monkeypatch.setattr(builder, "MOD_DIRS", mod_dirs)
+    monkeypatch.setattr(builder, "get_bike_database", lambda: db)
+    monkeypatch.setattr(builder, "build_road_styles", lambda style_map: road_styles)
+
+    builder.main()
+
+    models = [(mod_dir / "bike-model.mjs").read_text(encoding="utf-8") for mod_dir in mod_dirs]
+    assert models[0] == models[1]
+    model = json.loads(models[0].split("export const MODEL = ", 1)[1].removesuffix(";\n"))
+    assert model["frames"] == builder.build_frames(db)
+    assert model["wheels"] == builder.build_wheels(db)
+    assert model["constants"]["AIR_DENSITY"] == builder.AIR_DENSITY
+    assert model["constants"]["DRIVETRAIN_LOSS"] == builder.DRIVETRAIN_LOSS
+    assert model["crr"] == builder.build_crr_table()
+    assert model["styleMap"] == builder.build_style_map()
+
+    roads = [(mod_dir / "road-styles.mjs").read_text(encoding="utf-8") for mod_dir in mod_dirs]
+    assert roads[0] == roads[1]
+    if road_styles is None:
+        assert roads[0] == "existing road data\n"
+    else:
+        actual = json.loads(roads[0].split("export const ROAD_STYLES = ", 1)[1].removesuffix(";\n"))
+        assert actual == json.loads(json.dumps(road_styles))

@@ -25,8 +25,8 @@
             rather than rider GPS data, so it's always accurate regardless of individual telemetry quality.
         </p>
         <p style="margin-top: 8px; color: #aaa; line-height: 1.6;">
-            Because it uses the Zwift API, you need to be logged in with your Zwift account. The tool only reads data — it doesn't
-            modify anything on your account.
+            No Zwift login is needed. The server reads publicly available data using a dedicated account;
+            private or unavailable rider data is omitted. Choosing an active rider is optional for replays.
         </p>
     </details>
 
@@ -155,8 +155,8 @@
             lower than your best.
         </p>
         <p style="{{ p_style }}">
-            You can type in your own values, or click <strong style="{{ b_style }}">Use my CP</strong> to pull them
-            from the Critical Power page. As a rough guide, CP moves a few percent from day to day, and reserve moves
+            You can type in your own values, or click <strong style="{{ b_style }}">Use saved CP</strong> to pull
+            values saved on the Critical Power page for the selected rider's Zwift ID. As a rough guide, CP moves a few percent from day to day, and reserve moves
             much more (often 10–20%). Use the race estimate to judge a race, and your usual FTP/CP to set workouts.
         </p>
     </details>
@@ -389,7 +389,7 @@
         <summary style="cursor: pointer; font-weight: 600; font-size: 1rem; color: #e0e0e0; padding: 4px 0;">How can I share a race replay with someone?</summary>
         <p style="margin-top: 10px; color: #aaa; line-height: 1.6;">
             After loading a race, the URL updates to include an <code style="color: #f7931e; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">?activity_id=</code>
-            parameter. Copy that URL and share it — anyone who opens it (and is logged in) will automatically load the same race.
+            parameter. Copy that URL and share it — anyone who opens it will automatically load the same race.
         </p>
     </details>
 

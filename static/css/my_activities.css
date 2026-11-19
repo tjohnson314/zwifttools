@@ -216,6 +216,11 @@ td.num, th.num {
     color: #ef5350;
 }
 
+.cache-warning {
+    color: #f0bf68;
+    margin-bottom: 12px;
+}
+
 .spinner {
     display: inline-block;
     width: 28px;

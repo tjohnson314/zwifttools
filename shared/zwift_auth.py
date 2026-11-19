@@ -1,13 +1,15 @@
 """
 Zwift OAuth Authentication Module.
 
-Provides OAuth 2.0 Authorization Code Flow for Zwift API authentication.
-Users are redirected to Zwift's login page and back to your app with tokens.
+Token primitives and process-local authentication for the dedicated server account.
 """
 
 import requests
 import time
+import os
+import threading
 from dataclasses import dataclass
+from .http_pacing import retry_after_seconds
 
 
 # Zwift OAuth endpoints
@@ -17,6 +19,91 @@ ZWIFT_TOKEN_URL = "https://secure.zwift.com/auth/realms/zwift/protocol/openid-co
 # Public client ID used by Zwift Companion app
 # This is not a secret - it's embedded in the app
 CLIENT_ID = "Zwift_Mobile_Link"
+
+
+class ZwiftAPIError(RuntimeError):
+    """A safe, public-facing service or upstream data error."""
+
+    def __init__(self, message, status_code=503, retry_after=None):
+        super().__init__(message)
+        self.status_code = status_code
+        self.retry_after = retry_after
+
+
+class ServiceHeaders(dict):
+    """Mark headers whose bearer token must be resolved again before each fetch."""
+
+    def __init__(self, manager):
+        self.manager = manager
+        super().__init__(Authorization=f'Bearer {manager.access_token()}')
+
+
+class ServerTokenManager:
+    """Serialize token renewal across the server's request and fetch threads."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._tokens = None
+        self._retry_at = 0.0
+        self._error = None
+        self._pace_lock = threading.Lock()
+        self._next_request_at = 0.0
+
+    @property
+    def configured(self):
+        return bool(os.environ.get('ZWIFT_USERNAME') and os.environ.get('ZWIFT_PASSWORD'))
+
+    def access_token(self, rejected_token=None):
+        with self._lock:
+            if not self.configured:
+                raise ZwiftAPIError('Zwift service account is not configured.')
+            if time.monotonic() < self._retry_at:
+                raise self._error
+            tokens = self._tokens
+            rejected = tokens is not None and tokens.access_token == rejected_token
+            if tokens is not None and not tokens.is_expired and not rejected:
+                return tokens.access_token
+            try:
+                if tokens is not None:
+                    try:
+                        tokens = refresh_access_token(tokens.refresh_token)
+                    except requests.HTTPError as error:
+                        if error.response is None or error.response.status_code not in (400, 401):
+                            raise
+                        tokens = get_token_with_password(
+                            os.environ['ZWIFT_USERNAME'], os.environ['ZWIFT_PASSWORD'])
+                else:
+                    tokens = get_token_with_password(
+                        os.environ['ZWIFT_USERNAME'], os.environ['ZWIFT_PASSWORD'])
+            except (requests.RequestException, ValueError, KeyError) as error:
+                self._tokens = None
+                response = getattr(error, 'response', None)
+                limited = response is not None and response.status_code == 429
+                retry_after = response.headers.get('Retry-After') if limited else None
+                self._error = ZwiftAPIError(
+                    'Zwift service authentication failed.', 429 if limited else 503, retry_after)
+                self._retry_at = time.monotonic() + max(30, retry_after_seconds(retry_after))
+                raise self._error from None
+            self._tokens = tokens
+            return tokens.access_token
+
+    def headers(self):
+        return ServiceHeaders(self)
+
+    def wait(self):
+        # A single shared-account budget, including concurrent telemetry workers.
+        with self._pace_lock:
+            delay = self._next_request_at - time.monotonic()
+            if delay > 0:
+                time.sleep(delay)
+            self._next_request_at = time.monotonic() + 0.25
+
+    def defer(self, seconds):
+        with self._pace_lock:
+            self._next_request_at = max(self._next_request_at, time.monotonic() + seconds)
+
+
+server_token_manager = ServerTokenManager()
 
 
 @dataclass

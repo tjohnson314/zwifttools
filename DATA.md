@@ -12,6 +12,7 @@ This document describes the complete data pipeline for every page and API endpoi
 - [Surface Map](#surface-map)
 - [My Activities](#my-activities)
 - [Workout Analysis](#workout-analysis)
+- [Workout Route Check](#workout-route-check)
 - [Bike Comparison](#bike-comparison)
 - [Race Replay](#race-replay)
 - [Ride Compare](#ride-compare)
@@ -44,27 +45,34 @@ All data originates from the **Zwift REST API** (`https://us-or-rly101.zwift.com
 
 ## Authentication
 
-### `GET /auth/login`
+Visitors do not authenticate with Zwift. The server uses `ZWIFT_USERNAME` and
+`ZWIFT_PASSWORD` for a dedicated account, with synchronized server-only token
+refresh and bounded retries. Tokens and passwords never enter browser storage or
+Flask session cookies. The old login form and password-submission flow are retired;
+legacy visitor token/state cookies are cleared on subsequent requests.
 
-Renders the login form (`login.html`).
+`templates/_rider_header.html` and `static/js/active_rider.js` provide a shared
+header selector on every tool and the homepage. Browser local storage contains
+only the confirmed active rider's ID/name under `zwifttools.activeRider`.
+`GET /api/profiles/<zwift_id>` resolves public profile data. An explicit
+`?zwift_id=` supplies rider context to the activity-list, power-dashboard,
+segment-PR, and `/api/my_profile` endpoints; `/profiles/me` is never a fallback
+for an absent selection. An ID is a lookup, not authenticated ownership.
 
-### `POST /auth/login`
+Changing or clearing a rider reloads the page, invalidating outstanding work and
+in-memory uploads; other tabs observe selection changes through storage events.
+Shared `?zwift_id=<id>` links take precedence over a previously saved selection.
+Manual tools and activity-ID/race-ID tools do not require rider selection.
+Critical Power calculator inputs and models use rider-ID-scoped browser keys.
+Unassigned legacy inputs remain available for explicit import; legacy models are
+never automatically attributed to a rider. Race Replay matches saved models
+against the analyzed rider's string-valued Zwift ID.
 
-**Flow:** Email + password → `get_token_with_password()` → Zwift OAuth token pair → stored in Flask `session['tokens']` as a `ZwiftTokens` dict (access_token, refresh_token, expires_at).
-
-### `GET /auth/callback`
-
-OAuth code exchange flow (CSRF state check → `exchange_code_for_tokens()`). Stores tokens in session.
-
-### `GET /auth/logout`
-
-Clears `session['tokens']`.
-
-### `GET /auth/status`
-
-Returns `{ authenticated: bool, method: 'oauth', expires_at: int }`.
-
-**Token refresh:** `get_session_tokens()` checks `expires_at` on every authenticated request and calls `refresh_access_token()` if expired. All Zwift API calls use `get_headers()` which returns `{ Authorization: 'Bearer <access_token>' }`.
+Only public data is supported. Inaccessible data and service failures are
+reported explicitly, and partial analyses remain identifiable. Server pacing
+and token synchronization are process-local: deployments or collectors sharing
+an account must coordinate their combined load. Legacy local/blob replay caches
+must be quarantined or cleared at cutover unless their public provenance is known.
 
 ---
 
@@ -72,11 +80,498 @@ Returns `{ authenticated: bool, method: 'oauth', expires_at: int }`.
 
 ### `GET /`
 
-Renders `landing.html`. Passes `logged_in = 'tokens' in session` to the template so it can show login/logout links. No data pipeline — purely static.
+Renders `landing.html` with the shared active-rider selector. No visitor login.
 
 ---
 
 ## Surface Map
+
+### Road Splines
+
+The main map's surface road layer and the local-only road inspector sample
+cubic Bezier road geometry. When a `ROADNODE` omits its tangent handles, both
+derive uniform Catmull-Rom
+handles from neighboring nodes instead of drawing straight chords. Looped
+roads use wrapped neighbors; open roads keep their endpoint positions.
+Explicit handles (including zero) and `m_bStraight` segments are preserved.
+The dev overview, selected road, node segments, and spawn road anchors share
+this geometry. The main map's generated surface exports use the same handles,
+resampled at the existing 8 m spacing. Raw XML, route exports, and GPS calibration
+are unchanged. Regenerate the surface exports with
+`python -m tools.extract_zwift_surfaces`.
+
+### Road-to-Route Selection
+
+The main map snaps the click to a native road and matches routes at that position,
+not elsewhere on the same road. Per-road checkpoint paths use a small fixed
+geometry tolerance that does not grow when zooming out. A point with no known
+traversing routes leaves the view unchanged; one match loads that route; multiple
+matches open a searchable route
+picker. The picker includes all matching routes independently of sidebar filters,
+supports keyboard dismissal, and keeps loading/error feedback beside the choice.
+Dragging still pans rather than selecting.
+
+Surface segments retain `road_id`. Route versions retain `road_ids` for the course
+and that version's native approach, plus per-road `road_paths` derived from native
+checkpoint geometry. World API summaries project these paths by `race` / `free_ride`
+mode and expose `road_match_tolerance`. Free-ride paths preserve the interpolated
+spawn-range midpoint. Inferred paddock fallback roads are not treated as observed
+traversals. Legacy video routes use their existing road membership and route paths.
+
+### Dev Timing-Arch Inspector
+
+The local-only `/surface-map-dev` page has a **Timing Arches** tab and a
+toggleable start/finish overlay. Search by name, exact hash, or road ID;
+select a list entry or marker to inspect its directional definition, raw
+road-time values, declared length, coordinates, and serialized source entity
+XML. A direct link can specify `?world=9&arch=44010445334`.
+
+Definitions come from `ENTITY_TYPE_TIMINGARCH` entries in installed world
+`entities.xml`. Positions interpolate the narrowest bracketing native route
+checkpoint interval on the same road, with the source route exposed for each
+boundary. They are not independent in-game observations. Missing coverage
+remains explicitly unlocated rather than clamped or guessed; hashes remain
+strings to preserve 64-bit precision, and declared lengths are not corrected.
+Shared F/R finishes are drawn once without a direction suffix; start markers
+remain directional. The inspector itself remains read-only.
+
+### Dev Spawn Markers
+
+The local-only map also has a **Spawn Markers** tab, searchable by source name,
+label, or road ID, and a toggleable blue marker/name overlay. Selecting a
+marker shows its raw road time, position source, and entity XML, with a link
+to inspect its associated road. A direct link can specify
+`?world=1&spawn=AdZ_Paddock`.
+
+Spawn entities come from `ENTITY_TYPE_SPAWNMARKER` in installed `entities.xml`.
+Where native checkpoints bracket their road time, the same interpolation as
+the timing inspector supplies their position. Otherwise a hollow marker and
+name label use the road geometry midpoint, explicitly identified as a **road
+anchor**, not an exact spawn position. Missing roads stay unlocated. Raw names
+and road times are preserved; no paddock IDs or race start lines are inferred.
+`AdZ_Paddock` belongs to road 130 near the Alpe summit, not Road to Sky's start.
+
+### Route Start Versions
+
+The route browser offers **Free Ride** and **Race**, preserved in shared links
+with `mode=free_ride` or `mode=race`. The route API accepts the same parameter;
+omitting it preserves the previous display behavior for other consumers.
+
+Race mode restores the raw native lead-in, including recorded paddock sections
+that the legacy display can omit. Free Ride uses the midpoint of the source
+`spawn_area` road-time range, followed along native checkpoints to the main
+route start. A same-world reference path supplies missing approach coverage
+only if it reaches the same road/time start within 2 m. These representative
+spawn positions are not observations of an individual rider's actual spawn.
+Declared mode distances stay separate from measured geometry; no rescaling
+or plausible-range clipping is applied. Course segment distances are rebased
+to the selected measured start offset; race-only approach segments are omitted
+from free-ride views. Missing start geometry is explicitly indicated, and
+routes without a free-ride definition disable that option.
+
+All 389 numeric-world definitions retain their existing course and raw lead-in
+data. There are 307 available free-ride definitions, with native approach
+coverage for 300; seven have unlocated approach geometry. Race metadata also
+records the longest sampled road in the associated paddock group as an
+inferred fallback, breaking exact length ties by lower road ID. It does not
+replace a native reference approach or invent unverified paddock connections.
+
+Refresh only start metadata and profiles without regenerating existing routes:
+
+```powershell
+python -m tools.extract_zwift_routes --refresh-route-versions
+```
+
+An optional `--source-cache-dir` accepts trusted local per-world WAD pickle
+snapshots. Normal extraction also produces the mode metadata and profiles.
+
+### Route Sampling
+
+Regenerated virtual-route profiles use `--max-points` (default 600) as an
+initial sampling target, not a hard cap. Additional samples preserve segment
+boundaries, surface transitions, and bends or elevation changes until the
+three-dimensional interpolation error against original checkpoints is at most
+1 m before coordinate rounding. Published distances and full-resolution
+cumulative distances are not rescaled or recomputed from simplified chords.
+
+Segment boundaries are inserted into both physical-distance profiles and
+`segment_path`. The latter's `d` array stores original checkpoint-index
+positions, which are nonuniform after refinement; consumers must interpolate
+through these values rather than treating array indices as route percentages.
+All 389 cached virtual routes across 13 worlds have been refreshed with this
+sampling. Video routes already retain every original checkpoint and are unchanged.
+
+The route profile's main leg uses the measured `route_offset_m`, including
+the native lead-in/main connector and subtracting any omitted paddock prefix.
+Elevation traces, hover/click positions, and the lead-in marker share this
+axis with timing-derived segment distances. Published `leadin_distance_m`
+remains metadata, not a profile offset; absent lead-in geometry adds no offset.
+
+Segment names retain the source label for direction `F`. Direction `R` appends
+`Reverse` unless the source label already contains that word. Direction comes
+from the timing entity's explicit F/R hash fields, not the hash sign; hashes,
+segment boundaries, and geometry are unchanged by this naming rule.
+These are XML road directions, not guaranteed public forward/reverse names:
+Alley Sprint's XML `F` traversal corresponds to the publicly named reverse
+segment. Its raw timing-to-timing lengths are about 386.5 m (`F`) and 414.6 m
+(`R`), consistent with the user-checked Strava figures of 0.38 km reverse and
+0.41 km forward. The entity's declared 482.8020036 m for both directions is
+retained separately rather than used to stretch the geometry.
+
+### Sprint List Accuracy
+
+[Zwift Insider's sprint list](https://zwiftinsider.com/sprints/) mostly uses
+in-game values and explicitly warns that some are incorrect. Its public
+forward/reverse labels must be matched to route associations, not assumed
+to follow XML `F`/`R`. A length discrepancy is a review finding, not permission
+to rescale geometry or overwrite source declarations.
+
+Alley Sprint's listed 480 m disagrees with the approximately 414.6 m raw
+passage and the user-checked 0.41 km Strava segment. Alley Sprint Reverse's
+listed 380 m is consistent with the approximately 386.5 m raw passage and
+0.38 km Strava display. The source entity declares 482.8020036 m for both.
+
+The complete 71-entry audit is recorded in
+[`race_data/zwift_sprint_accuracy_audit.csv`](race_data/zwift_sprint_accuracy_audit.csv).
+It compares the public list and all 71 linked detail pages with complete
+timing-to-timing passages in the cached native route data. World, source names,
+and route associations determine identity, never distance agreement. All 71
+entries have distinct directional hashes. Bell Lap's Prime is distinguished
+from the Crit City lap entity by its friendly name; Manhattan Reverse and
+Monument Ave Reverse are paired with the same-road entity of their uniquely
+matched opposite public direction, using different hashes.
+
+A review flag requires a median difference greater than both 10 m and 5% of
+the listed length. Eleven entries meet that heuristic; the remaining 60 are
+within it, not certified accurate. The CSV retains the full observed minimum,
+maximum, median, uncorrected declared distance, signed difference, public
+gradient, matching evidence, and correction notes for every entry. Hashes
+must be imported as text in spreadsheet software to retain 64-bit precision.
+
+| Public Sprint | Listed Length (m) | Native Passage Median (m) | Assessment |
+| --- | ---: | ---: | --- |
+| Alley Sprint | 480 | 414.56 | Discrepancy corroborated by user-checked Strava 0.41 km |
+| Castle Park Sprint | 220 | 207.09 | Approximate published estimate; review, not a proven error |
+| Innsbruck Sprint | 300 | 275.12 | Geometry-based review candidate |
+| Innsbruck Sprint Reverse | 200 | 154.06 | Geometry-based review candidate |
+| Lutece Reverse Sprint | 220 | 231.51 | Geometry-based review candidate |
+| Railway Sprint | 640 | 491.20 | Geometry-based review candidate |
+| Shisa Sprint Reverse | 280 | 265.02 | Geometry-based review candidate |
+| Sprinteur Sprint Reverse | 250 | 234.72 | Geometry-based review candidate |
+| Sunset Sprint | 4000 | 257.73 | Strong discrepancy; source entity declares 250 m |
+| Sunset Sprint Reverse | 4000 | 257.57 | Strong discrepancy; source entity declares 250 m |
+| Tower Sprint Reverse | 320 | 287.36 | Geometry-based review candidate |
+
+Both Sunset detail pages also state 4 km, so this is not just a table-parsing
+error. Repeated route measurements are consistent, but they share native
+source geometry: they do not independently validate in-game line placement.
+Except for the user's Alley Strava check, these measurements are not a
+separate rider-odometer or Strava distance audit.
+
+The detail articles explicitly document these **in-game errors already
+corrected in the master list**:
+
+- Alley Sprint Reverse: 480 m in-game versus about 380 m actual.
+- Castle Park Sprint: 320 m in-game versus an estimated 220 m actual.
+- Castle Park Sprint Reverse: 320 m in-game versus an estimated 210 m actual.
+- Sprinteur Sprint Reverse: -1.8% in-game versus a flat 0% actual gradient.
+
+Castle Park's articles expressly say their lengths are approximate because
+Strava's minimum segment length prevents precise measurement. Other listed
+gradients were captured but not independently audited. No source declarations,
+raw lengths, or route geometry were changed by this audit.
+
+### KOM List Accuracy
+
+[Zwift Insider's KOM list](https://zwiftinsider.com/koms/) contains 49 entries.
+Its master table omits the metric length for Sgurr Summit South, showing only
+0.6 miles, and leaves length, elevation gain, and gradient blank for The Hill
+KOM Reverse. These are missing-data findings, not numerical comparisons;
+detail-page values and native measurements must remain separate sources.
+As with sprints, public direction names are not necessarily XML `F`/`R`.
+
+The full 49-entry audit, including published elevation and gradient fields,
+is in
+[`race_data/zwift_kom_accuracy_audit.csv`](race_data/zwift_kom_accuracy_audit.csv).
+World, public/in-game name families, and unique route-name overlap identify
+48 distinct native hashes without using distance to select a match. Mostly
+Ventoux remains unmatched. Of the 48 matched entries, 44 are within the sprint
+audit's review threshold, two have length discrepancies, and two lack a listed
+metric length. Within the threshold does not mean independently verified.
+
+| Public KOM | Listed Length (m) | Native Passage Median (m) | Native Range (m) | Declared Length (m) |
+| --- | ---: | ---: | --- | ---: |
+| Castle KOM | 2500 | 2688.04 | 2688.00-2688.05 | 2494.48 |
+| 23rd St. KOM | 260 | 282.64 | 282.60-282.65 | 275.00 |
+
+Both differences exceed 10 m and 5% of the listed length. Their detail pages
+repeat the master values, with no explicit correction note. These are
+**geometry-based review candidates**, not independently proven public-list
+errors; repeated native measurements share the same underlying source.
+Full-precision measurements and declarations remain in the CSV.
+
+The incomplete or unverified cases are kept separate:
+
+- **Sgurr Summit South:** the detail page supplies 1 km, consistent with the
+   993.20 m native median. The missing master metric value remains blank in
+   the CSV rather than being filled from the detail page or rounded miles.
+- **The Hill KOM Reverse:** both master and detail omit length, elevation,
+   and gradient; the detail still says more information is coming on
+   October 27, 2025. Its raw native passages measure 11.89-11.92 m, median
+   11.90 m, with a declared 9.9898148 m. These surprisingly short values are
+   preserved, not treated as independently verified replacement figures.
+- **Mostly Ventoux:** no matching complete cached native passage was found.
+   The article describes a hidden start at marker #2, distinct from the full
+   Ventoux KOM start, and the same summit finish. The live France timing-arch
+   lookup timed out; the listed 17.1 km remains unverified, not marked wrong
+   or compared to the full Ventoux measurement.
+
+Apart from Sgurr Summit South's missing metric length, the extracted numeric
+values agree between the master and detail pages, including missing fields.
+Published elevation gain and gradients were captured and cross-checked
+between pages, not independently measured. Article remarks about steeper
+uphill portions do not contradict averages over a full segment containing
+flat or downhill sections. No raw geometry or declared lengths were changed.
+Import the CSV's hashes as text to preserve exact 64-bit identifiers.
+
+### Master Route Accuracy
+
+The complete [Zwift Insider master route list](https://zwiftinsider.com/routes/)
+audit visits all 339 linked detail pages, including running and event-only
+routes. Both modern Leaderboard Segments and older Sprint & KQOM Segments
+tables are parsed. Six verified native name/identifier aliases produce 337
+cached route matches; the two older Gravel Mountain routes remain uncached
+and are not conflated with modern Red Rock Loop definitions.
+
+The full comparison is in
+[race_data/zwift_route_accuracy_audit.csv](race_data/zwift_route_accuracy_audit.csv),
+with every significant row tabulated in
+[race_data/zwift_route_accuracy_audit.md](race_data/zwift_route_accuracy_audit.md).
+The reproducible reader is
+[tools/audit_zwiftinsider_routes.py](tools/audit_zwiftinsider_routes.py).
+Run `python tools/audit_zwiftinsider_routes.py` to rebuild from its local
+snapshot, or add `--collect --limit 0` to fetch all remaining detail pages.
+Sources, exact segment identities, structured results and cache checksums
+are stored under `race_data/zwift_route_master_audit_sources/`.
+
+Review thresholds are greater than 100 m for route length and 50 m for
+lead-in length, also requiring a difference outside the published metric
+rounding interval; an explicit zero/no lead-in is exact. Header distances and
+measured planar geometry are separate;
+lead-in geometry includes its final connector and subtracts only an existing
+display paddock prefix. Missing geometry remains blank, never zero. On 53
+pages with no detail lead-in value, the master's explicit zero is retained
+as a separately identified reference rather than invented detail metadata.
+
+The snapshot has 276 rows with at least one review flag, **not 276 proven
+incorrect routes**: 63 have header-distance flags, 86 measured-distance flags,
+118 header lead-in flags, 165 measured lead-in flags, 90 direction-label flags,
+27 missing displayed-segment sets and 37 extra sets. Categories overlap.
+Event pens, free-ride starts and public main-route versus lead-in scope can
+explain some differences. Four public segment identities remain explicitly
+unresolved; missing native passages are not silently inferred or extended.
+Segment matching reuses verified sprint/KOM hashes and source-name/route
+associations, never distance. Existing partial-passage display filtering is
+distinguished from missing extraction, and lead-in-only extras are labeled.
+
+The largest numeric cases include Red Rock Loop variants (published 2.6 km,
+cached headers about 5.183 km and measured profiles about 5.171 km), That's
+Amore Reverse (7.4 km versus 5.829 km header / 5.554 km geometry), and Epic
+Run's lead-in (master zero versus 4.121 km header / 4.234 km geometry). These
+are comparison findings, not independent in-game accuracy certification.
+Jungle Loop's public labels remain inverted relative to the cache's XML-derived
+labels, while traversal and hash identity remain correct. No route geometry,
+metadata, names or app behavior are changed by this audit.
+
+### Segment Percentages
+
+Virtual-world segment boundaries now come from directional timing arches,
+not native route percentages. The extractor finds start and finish road-time
+crossings on original same-road, same-direction checkpoint edges and
+interpolates their exact checkpoint positions and physical distances. Ordinary
+passages require both crossings. Partial traversals, unmatched directions, and
+missing boundary coverage do not produce a complete passage. Road wraps and
+lead-in/main joins are not interpolated as ordinary edges, but exact native
+endpoints remain usable, including a finish at a road wrap. Exactly closed,
+lap-enabled main paths may establish cyclic completion as described below.
+
+Literal-crossing passages record `boundary_source: "timing_arch"`, `start_checkpoint`,
+`end_checkpoint`, direction, road ID, source road times, and the uncorrected
+`declared_distance_m`. Display geometry prefers explicit checkpoint positions;
+sampling preserves these interpolated boundaries. Declared length is not
+used to reject or resize an otherwise complete passage. Derived
+`percent_start` and `percent_end` remain as compatibility fields only.
+Original native entries are preserved separately in `native_segments`.
+The existing named leaderboard-definition filter is retained; the dev
+inspector still exposes unnamed or incomplete timing entities as raw data.
+
+#### Near-Coincident Lap Arches
+
+Near-coincident start/finish fields are treated as a lap only when the source
+marks the entity as a lap arch (`m_telemetryArchType: 4`, a LapArch model, or
+`m_bStopwatchRequiresAllCheckpoints: 1`). Proximity is a circular road-time
+difference of at most 0.0001, not a minimum physical segment length. Nearby
+non-lap fields retain ordinary segment matching.
+
+A lap starts at an observed arch crossing, must subsequently cross its
+directional `m_beginTimerSplineTime`, and finishes on a later return to the
+arch. Without a timer field, a direction-compatible road wrap arms the lap.
+Either near-coincident source boundary can identify the observed arch; raw
+`start_time`, `end_time`, and declared distance are retained alongside
+`effective_start_time`, `effective_end_time`, `is_loop`,
+`begin_timer_time`, and `lap_armed_checkpoint`. A different road or direction
+interrupts the matching sequence; it is not bridged into an inferred lap.
+
+If no literal return crossing exists, an exactly closed, lap-enabled main
+path can establish completion: its first and last checkpoints have identical
+coordinates, road, direction, and road time; every main edge matches the lap's
+road and direction; its first edge crosses the arch and a later edge arms the
+lap. These passages record `boundary_source: "closed_route_lap"` and use the
+full measured native main extent for their profile span. The interpolated
+arch is retained separately as `timing_arch_checkpoint` and
+`timing_arch_distance_m`; the map overlay is rotated around that checkpoint
+so both pins remain on the actual timing arch. No route coordinates are
+changed or extrapolated, and declared distance does not determine lap length.
+This handles cycling Volcano routes whose closed native lap starts just
+before the arch, whereas the running variants start exactly on it.
+
+The installed-source audit across all 13 cached worlds is recorded in
+[`race_data/zwift_loop_accuracy_audit.csv`](race_data/zwift_loop_accuracy_audit.csv).
+All 40 near-coincident named definitions were checked: 36 laps and four
+non-lap reverse markers (Itza KOM, Mayan Mountainside KOM, Rooftop KOM, and
+Railway Sprint). Of the laps, 27 have complete measured passages, totaling
+130 exported occurrences: 122 literal crossings and eight closed native
+laps. Nine lack a complete matching sequence; this
+does not certify that the corresponding leaderboard or course is invalid.
+London Loop and Central Park Loop have original native associations but
+unresolved timing coverage. Missing
+start/finish samples and interrupted road coverage are not repaired with
+percentage estimates, extrapolation, or geometry stretching.
+
+The initial refresh touched 120 routes in seven world caches. Hilly Loop Reverse's
+false 0.08-0.09 m passages, including Volcano Circuit Run, are removed;
+complete passages on Hilly Route Reverse and its running variant measure
+9165.79-9165.88 m. The closed-lap follow-up adds eight passages in five world
+caches, including Volcano Circuit (4095.31 m) and Volcano Circuit CCW
+(4095.29 m). These measured values are not forced to the source declarations. Non-lap
+segment entries, original native associations, route metadata, index, video,
+and altitude-scale files are unchanged by these refreshes. The follow-up also
+preserves every native profile and pre-existing measured passage, while
+refreshing per-hash maxima to include the new observations. Import audit hashes
+as text to preserve their exact 64-bit values; missing distances are blank.
+
+XML `percentStart` and `percentEnd` describe positions in the concatenated
+lead-in and main-route high-resolution checkpoint sequence. They are not
+fractions of physical distance or of an individual road's `time` parameter.
+Verified native examples encode checkpoint index divided by checkpoint count;
+compatibility percentages derived from timing crossings use checkpoint
+position divided by count minus one. Legacy sources without supplied timing
+definitions retain the previous percentage interpretation.
+
+For that legacy path, a lap-enabled route with an exactly closed main path and a positive segment
+start followed by `percent_end: 0` resolves to the final checkpoint. The raw
+percentage is retained, with additive `resolved_percent_end: 1`; calculated
+end distance and map geometry use the resolved endpoint. Other zero values
+are left unchanged. Timing-derived passages instead use their actual crossings.
+
+Each exported segment also records `distance_m` (end minus start distance,
+rounded to 0.01 m) and `max_distance_m` (the longest observed passage with that
+exact hash across the cached routes). Every extraction refreshes these maxima
+across the output directory, including after a single-world refresh. Forward
+and reverse hashes remain separate; names are not used to group passages.
+
+Surface Map and Race Replay omit segment overlays whose recorded distance is
+more than 25 m below that maximum. Shortfalls up to and including 25 m remain
+visible, compared at the recorded 0.01 m precision. This is a display heuristic,
+not proof of leaderboard eligibility. Raw segment entries, names, percentages,
+and route geometry remain available unchanged in the exports. Legacy entries
+without the distance metadata retain their previous display behavior.
+
+### Route Paddocks
+
+`tools/extract_zwift_routes.py` retains `event_paddocks` (the ordered numeric
+references from `eventPaddocks`) and `alternate_event_ramp` (the numeric
+`useAlternateEventRamp` value, or null when absent) in each virtual route and
+the route index. An empty paddock list means the route header declares none;
+it does not imply the route cannot be used for events.
+
+Each virtual-world route file also contains `paddock_roads`, extracted from
+roads explicitly marked `roadIsPaddock` in the client's road XML. Each record
+retains its `road_id`, name, optional `paddock_exit_road_time`, and ordered
+`nodes` with local-metre `x`, `alt`, `z`, `tangent_in`, and `tangent_out`.
+Missing spline handles remain null. These are source spline control nodes,
+not an interpolated elevation profile; altitude retains the raw game datum.
+Associated `spawn_markers` retain their source names and native `road_time`.
+A spawn marker is not assumed to be a race start line.
+
+Route paddock references and road IDs are separate namespaces. The extraction
+does not guess their mapping from proximity or ordering, and does not prepend
+pen roads to the existing lead-in checkpoints. For example, Elevation
+Evaluation references paddocks 21–25 and alternate-ramp mode 2, while its dense
+lead-in checkpoints still measure 2,599.65 m versus the 3,089.79 m header.
+
+Routes optionally contain `leadin_view` when removing a marked paddock prefix
+reduces the absolute lead-in discrepancy from strictly **over 50 m** to strictly
+**under 10 m**. The comparison uses the original high-resolution planar
+checkpoint intervals plus the final gap to the main-route start. The interval
+from a paddock checkpoint to the first ordinary-road checkpoint belongs to the
+paddock. No non-prefix sections are joined, and no distances are stretched.
+
+`leadin_view.profile` contains the remaining checkpoints, rebased to distance
+zero before the usual resampling. Its `full_distance_m`, `distance_m`,
+`paddock_distance_m`, `error_before_m`, and `error_after_m` retain the unrounded
+measurements; `paddock_road_ids` and `excluded_checkpoint_count` identify the
+omitted prefix. The raw `leadin`, published distances, main route, and index
+remain unchanged. The Surface Map uses this optional profile, preserves the
+original altitude anchor, and shifts checkpoint-based segment distances and
+lead-in escalators by the omitted distance. All other routes keep their view.
+
+Run `python -m tools.analyze_route_paddock_leadins` to regenerate the complete
+analysis and `race_data/paddock_leadin_adjustments.md`, which lists every
+qualifying route with its before/after distances and absolute discrepancies.
+
+#### All-World Paddock Groups
+
+[tools/analyze_paddock_groups.py](tools/analyze_paddock_groups.py) independently
+audits physical paddock-road groups without changing the extraction or app.
+Run `python -m tools.analyze_paddock_groups` against the installed world WADs;
+`--source-cache-dir` optionally reuses trusted per-world pickle snapshots from
+an earlier local WAD scan. The default spatial grouping threshold is 100 m.
+
+The current audit covers all 389 definitions across 13 worlds and all 170
+marked paddock roads, producing 33 groups. Every repeated or overlapping
+world-local paddock ID matches one nearest group: 383 routes declare IDs,
+197 have directly observed paddock-road starts with IDs, and none has an
+inconsistent ID/group assignment. The other matches remain spatial inference.
+
+Groups use connected components of nearby road control points. Route matching
+uses the first original lead-in checkpoint, falling back to coarse lead-in
+or main start only when necessary; distances are planar point-to-control-
+polyline distances, not travelled road-network lengths or sampled Bezier
+curves. Animated TT/BOOST gate models provide additional road evidence.
+Scotland's two previously verified complexes are reproduced. This associates
+IDs with groups, not individual IDs with specific roads or spawn lines.
+
+The full group and exception table is in
+[race_data/paddock_group_analysis.md](race_data/paddock_group_analysis.md).
+[race_data/paddock_groups.csv](race_data/paddock_groups.csv) retains every
+physical group; [race_data/paddock_group_routes.csv](race_data/paddock_group_routes.csv)
+retains all 389 route matches, exact distances, source restrictions and caveats.
+[race_data/paddock_group_analysis.json](race_data/paddock_group_analysis.json)
+also retains per-ID reference counts, gate models, source hashes, cache
+checksums and 50/100/150/200 m sensitivity partitions.
+
+Six route headers omit IDs: five Watopia Two Bridges/Beach Island/Ocean Lava
+variants and Yorkshire's Harrogate Circuit Reverse. Watopia road 107, Watopia
+roads 129/130/131 (AdZ_Paddock), and France roads 115/116/117 have no route-ID
+references; no missing IDs are guessed. Watopia road 101 is separate from
+roads 7-12 at 100 m but merges with them at 150 m, so those two memberships
+are threshold-sensitive. All other group memberships are stable across the
+tested thresholds. Richmond, Bologna, France and Watopia's special 19/20/116
+references have nearest-only ID evidence. Seventy-seven definitions lack
+lead-in checkpoints; Mayan 8, Mayan Mash, Tides and Temples, and Navig8 have
+main-start fallback anchors over 500 m from their nearest group. These are
+coverage caveats, not inconsistent mappings. No route cache fields change.
 
 ### Page: `GET /surface-map`
 
@@ -92,6 +587,15 @@ Refresh the published files on a machine with downloaded video-route data:
 ```powershell
 python tools/extract_zwift_routes.py --video-cache "$env:LOCALAPPDATA\Zwift\mochi"
 ```
+
+The main `tools/regenerate_zwift_data.py` pipeline also refreshes video routes
+and their road network from `%LOCALAPPDATA%\Zwift\mochi`, honoring both
+`--out-routes` and `--out-surfaces`. Use `--video-cache PATH` to select another
+cache. A missing default cache is reported and skipped, leaving existing video
+exports untouched; an explicitly supplied missing directory is an error.
+Video extraction shares the normal client-version check, so use `--force` when
+only the downloaded cache has changed. No video assets are downloaded by this
+pipeline; errors extracting an available cache stop regeneration.
 
 The extractor retains every high-resolution route checkpoint, converts game
 centimetres to metres, and joins named surface markers by road ID and road time.
@@ -111,15 +615,15 @@ Restart Flask after refreshing data to clear the cached world files.
 
 ### Page: `GET /my-activities`
 
-Renders `my_activities.html`. Redirects to login if not authenticated.
+Renders `my_activities.html`. Prompts for an active rider when none is selected.
 
 ### `GET /api/my_activities`
 
-**Purpose:** Fetch the logged-in user's recent Zwift activities.
+**Purpose:** Fetch the selected rider's accessible recent Zwift activities.
 
 **Pipeline:**
 
-1. **Get profile ID** — `GET /api/profiles/me` → extract `id`
+1. **Validate rider ID** — required `zwift_id` query parameter; no account-profile fallback
 2. **Fetch activities** — `GET /api/profiles/{id}/activities?start={start}&limit={limit}`
 3. **Transform each activity:**
    - `distanceInMeters` → `distance_km` (÷ 1000)
@@ -153,7 +657,7 @@ Renders `my_activities.html`. Redirects to login if not authenticated.
 
 ### Page: `GET /workout-analysis`
 
-Requires login and preserves `?activity_id=` across the login redirect. Linked
+Needs no visitor login and supports `?activity_id=` links. Linked
 from the homepage and each row in My Activities.
 
 ### Catalog: `GET /api/workouts` and `GET /api/workouts/<workout_id>`
@@ -178,7 +682,7 @@ Missing or invalid catalog data returns an explicit 503 error.
 
 ### Custom plans: `POST /api/workouts/upload`
 
-Requires a logged-in session. Accepts a multipart `file` containing a `.zwo`
+Needs no visitor login. Accepts a multipart `file` containing a `.zwo`
 workout, at most 1 MiB, and returns the same plan shape as catalog details.
 Uses the shared `parse_workout()` parser, so repeats, ramps, ranges, fixed FTP
 references, and unscored blocks behave identically. Missing sport type defaults
@@ -196,17 +700,20 @@ rounding, raw-power chart, and coverage statistics.
 
 ### Recorded power: `GET /api/workout_activity/<activity_id>`
 
-Requires authentication. Uses `fetch_rider_telemetry()` and returns raw
-`timeInSec` / `powerInWatts` as `time_sec` / `power_watts`, plus activity name/ID.
+Uses server API credentials and returns accessible raw
+`timeInSec` / `powerInWatts` as `time_sec` / `power_watts`, plus activity name/ID
+and the owning `profile_id`.
 No cooldown trimming, smoothing, or power clipping is applied. Null power and
 timestamp gaps are retained. Mismatched arrays, non-finite values, and
 non-increasing timestamps return 422; upstream failures return 502.
 
 ### FTP and comparison
 
-`GET /api/my_profile` exposes finite positive `ftp` as `ftp_w` (otherwise null),
+`GET /api/my_profile?zwift_id=<id>` exposes finite positive `ftp` as `ftp_w` (otherwise null),
 alongside the existing name/height/weight fields. The page prefills this current
-profile value without overwriting manual edits. This is not historical FTP.
+profile value without overwriting manual edits. Activity loading uses the
+activity owner's profile rather than assuming it belongs to the active rider.
+This is not historical FTP.
 Missing FTP or lookup failures prompt manual entry without blocking analysis.
 
 The browser scales targets by editable FTP and whole-workout intensity, then
@@ -224,6 +731,85 @@ There is no automatic workout matching, pause/skip reconstruction, or
 mid-workout intensity reconstruction.
 
 ---
+
+## Workout Route Check
+
+### Page: `GET /workout-route`
+
+Needs no login and is linked from the homepage. Rider weight, height, and FTP
+come from `GET /api/my_profile?zwift_id=<id>` when a rider is selected; every value remains editable. Profile errors
+are shown and allow manual entry. A profile response never overwrites a field
+edited while the request was pending.
+
+Routes reuse `GET /api/tt_pacing/routes?mode=free_ride`, excluding routes without
+a free-ride version; equipment uses the shared `BikeSelector`
+and frame/wheel/stats APIs. Built-in workout selection uses the existing catalog
+and detail APIs. Custom `.zwo` files reuse `POST /api/workouts/upload`; neither
+uploads nor estimates are persisted.
+
+Page settings are stored locally under `workoutRouteSettings`: rider inputs,
+frame/wheel/upgrade choices, world/route/lead-in selection, workout search and
+built-in workout ID, and untargeted-block power. Saved non-empty rider values
+take precedence over profile values on reload for the same `riderId`. Switching
+riders discards the previous rider's saved measurements/FTP, preserving route
+and equipment settings. Dropdowns are restored only
+after their catalogs load, and unavailable cached choices are not selected.
+Custom workout contents, files, and prediction results are never stored.
+Storage errors are reported without blocking manual use of the page.
+
+### Prediction: `POST /api/workout_route_plan`
+
+Needs no login. Accepts `route_id`, `include_leadin` (default true),
+`rider_weight_kg`, `rider_height_cm`, `ftp_w`, `frame_id`, `wheel_id`,
+`upgrade_level`, and either `workout_id` or the uploaded numeric
+`custom_workout` object. `untargeted_percent` (default 75) specifies power for
+blocks without targets, as a percentage of the rider's FTP. Numeric custom plans
+are validated again; malformed/non-finite values, negative power targets, and
+workouts longer than 24 hours are explicitly rejected, not clipped.
+
+`bike_comparison/workout_route.py` integrates power and kinetic energy over the
+existing `RouteProfile` using the shared air density, gravity, drivetrain loss,
+rider/bike CdA model, and bike-specific surface CRR tables. Zero-power blocks
+integrate velocity so a stopped rider can accelerate downhill without a
+numerical minimum speed. Zero-distance geometry joins have no traversal time;
+gradients are computed only over positive-distance edges without clipping.
+The profile always uses the explicit `free_ride` version, including native spawn
+geometry rather than a racing paddock. The response includes
+`route_mode: "free_ride"`; client-supplied modes cannot change this. Missing
+free-ride versions fail rather than falling back to race or ZwiftMap geometry.
+Missing positive-distance lead-in geometry fails explicitly when included;
+the user can exclude the lead-in to estimate an available main route.
+
+The regular TT planner at `/tt-pacing` offers Free Ride/Race starts, defaulting
+to Race and remembering the choice in `ttSettings`. Route deep links carry
+`mode=free_ride|race`. `POST /api/tt_pacing_plan` accepts `route_mode`, and
+`GET /api/tt_pacing/route_geometry` accepts the matching `mode`; both use the same
+explicit start geometry. Lead-ins are included once, even for multiple laps.
+Timing segments ignore route start modes. Catalog mode queries filter unavailable
+versions and expose matching lead-in totals; requests without a mode preserve
+legacy catalog fields. Other profile/map callers omitting the mode retain their
+existing display geometry.
+
+Assumptions: standing start, no drafting, uninterrupted workout, and midpoint power
+for target ranges. All segment targets round to the nearest 5 W after FTP
+scaling, with halfway values rounded up to match Workout Analysis. Ramps are
+split at exact rounding thresholds so simulation and chart use identical
+five-watt plateaus, including zero-power coasting steps. Estimates support up
+to 10,000 simulation steps including these plateaus; larger plans fail explicitly.
+Fixed
+`ftp_override` references replace rider FTP only for prescribed targets;
+untargeted blocks always use the rider's FTP. Parser warnings, including nominal
+variable-duration schedules and quantized-ramp approximations, remain visible.
+
+Returns `completed`, `finish_time_sec` (null when unfinished),
+`workout_duration_sec`, `workout_time_remaining_sec`, `route_distance_km`,
+`distance_covered_km`, `distance_remaining_km`, rider/reference FTP, and warnings.
+The profile contains time, distance, altitude, power, and speed at five-second
+intervals plus exact block/rounded-ramp boundaries and the finish event. Calculation stops at
+the route finish or workout end, whichever comes first. Distance uses loaded
+geometry, not rounded catalog labels. There is no extrapolation past the route
+finish or promise of badge eligibility. Input changes invalidate visible
+results and stale asynchronous responses.
 
 ## Bike Comparison
 
@@ -253,13 +839,17 @@ Renders `bike_comparison.html`.
 - `wheelaero`, `wheelweight`, `wheelfitsframe`, `wheellevel`
 - Prepends a synthetic `(Built-in wheels)` entry for fixed-wheel frames
 
-### `GET /api/my_profile`
+### `GET /api/my_profile?zwift_id=<id>` / `GET /api/profiles/<id>`
 
-**Source:** `GET /api/profiles/me`
+**Source:** `GET /api/profiles/{id}` using server credentials. Missing or invalid
+IDs are errors; the server account is never substituted. Includes `id` and `name`.
 
 **Transform:**
-- `height` (mm) → `height_cm` (÷ 10)
-- `weight` (g) → `weight_kg` (÷ 1000)
+- `height` or `heightInMillimeters` (mm) → `height_cm` (÷ 10), falling back
+  to `heightInCentimeters` as-is
+- `weight` or `weightInGrams` (g) → `weight_kg` (÷ 1000)
+- Numeric strings are accepted; missing measurements are null and malformed
+  or non-finite measurements produce an explicit 502 error.
 - `firstName + lastName` → `name`
 - Finite positive `ftp` → `ftp_w`; missing/invalid FTP → null (editable in Workout Analysis)
 
@@ -298,6 +888,12 @@ Renders `bike_comparison.html`.
 ### `POST /api/upload_fit`
 
 **Purpose:** Parse a `.fit file` upload as an alternative to fetching from Zwift API.
+
+Files and decoded telemetry are processed transiently, not written to the
+application's disk/blob caches or browser storage. Upload and upload-derived
+comparison responses use `Cache-Control: no-store`; derived analysis stays in
+page memory only and reloading requires re-uploading. Request payloads must not
+be logged. Generic equipment choices may still be remembered.
 
 **Pipeline:**
 
@@ -823,11 +1419,10 @@ Window adapts to actual sample rate when `time_sec` is provided.
 
 ### Zwift Auth (`shared/zwift_auth.py`)
 
-- Zwift OAuth 2.0 Authorization Code Flow
-- `get_token_with_password()` — email + password → access/refresh token pair (used by Azure Function for headless auth)
-- `exchange_code_for_tokens()` — OAuth callback code exchange (used by web app)
-- `refresh_access_token()` — automatic token refresh on expiry
-- Token storage via Flask session (`ZwiftTokens` dict: access_token, refresh_token, expires_at)
+- Dedicated server-account authentication; no visitor password flow
+- `get_token_with_password()` — configured account credentials to access/refresh tokens
+- `refresh_access_token()` — server-side token refresh on expiry
+- Tokens stay in a synchronized process-local cache, never Flask session cookies
 
 ### YouTube Streams (`shared/youtube_streams.py`)
 
