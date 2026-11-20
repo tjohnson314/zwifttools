@@ -141,12 +141,28 @@ def test_tt_missing_surfaces_preserves_custom_crr_fallback():
     assert result.crr == [0.011] * 6
 
 
+@pytest.mark.parametrize("surface,base_crr", [("Tarmac", .004), ("Dirt", .016), (None, .011)])
+def test_tt_drivetrain_upgrade_reduces_surface_or_fallback_resistance(surface, base_crr):
+    route = RouteProfile(name="Flat", distance_m=np.array([0., 300.]), altitude_m=np.zeros(2),
+                         surfaces=np.array([surface, surface]) if surface else None)
+    stock = plan_tt_pacing(route, 75., 1.8, 8., .3, 250.,
+                          crr=.011, max_chunk_m=50., bisection_iterations=12, num_buckets=1)
+    upgraded = plan_tt_pacing(route, 75., 1.8, 8., .3, 250.,
+                             crr=.011, max_chunk_m=50., bisection_iterations=12,
+                             crr_reduction=.0003, num_buckets=1)
+
+    assert upgraded.crr == pytest.approx([base_crr - .0003] * 6)
+    assert stock.normalized_power_w == pytest.approx(250., abs=.5)
+    assert upgraded.normalized_power_w == pytest.approx(250., abs=.5)
+    assert upgraded.total_time_seconds < stock.total_time_seconds
+
+
 @pytest.mark.parametrize("frame_type, bike_type", [("Standard", "road_bike"), ("Gravel", "gravel_bike"), ("MTB", "mtb")])
 def test_tt_api_passes_selected_bike_category_and_returns_crr(monkeypatch, frame_type, bike_type):
     from types import SimpleNamespace
     import app as app_module
 
-    setup = SimpleNamespace(weight_kg=8.0, cda_bias=0.0, frame_type=frame_type)
+    setup = SimpleNamespace(weight_kg=8.0, cda_bias=0.0, frame_type=frame_type, crr_reduction=.0003)
     monkeypatch.setattr(app_module, "get_db", lambda: SimpleNamespace(get_bike_stats=lambda *args: setup))
     monkeypatch.setattr(app_module, "load_route_profile", lambda *args, **kwargs: make_route_profile())
     result = PacingPlanResult(
@@ -157,6 +173,7 @@ def test_tt_api_passes_selected_bike_category_and_returns_crr(monkeypatch, frame
 
     def optimizer(**kwargs):
         assert kwargs["bike_type"] == bike_type
+        assert kwargs["crr_reduction"] == .0003
         return result
 
     monkeypatch.setattr(app_module, "plan_tt_pacing", optimizer)
@@ -180,7 +197,7 @@ def tt_api(monkeypatch):
     from types import SimpleNamespace
     import app as app_module
 
-    setup = SimpleNamespace(weight_kg=8.0, cda_bias=0.0, frame_type="Standard")
+    setup = SimpleNamespace(weight_kg=8.0, cda_bias=0.0, frame_type="Standard", crr_reduction=0)
     monkeypatch.setattr(app_module, "get_db", lambda: SimpleNamespace(get_bike_stats=lambda *args: setup))
     monkeypatch.setattr(app_module, "load_route_profile", lambda *args, **kwargs: make_route_profile())
     seen = []

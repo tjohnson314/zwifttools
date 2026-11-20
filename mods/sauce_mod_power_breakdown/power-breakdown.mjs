@@ -221,7 +221,8 @@ function getBikeSetup() {
     const wheelBias = wheel ? (isTT ? wheel.cdaTt : wheel.cda) : 0;
     const bikeWeightKg = (frame.wt[lvl] + (wheel ? wheel.wt : 0)) / 1000;
     const bikeType = MODEL.frameTypeToBikeType[frame.type] || 'road_bike';
-    return {frame, wheel, frameBias, wheelBias, bikeWeightKg, bikeType};
+    const crrReduction = frame.crrReduction[lvl];
+    return {frame, wheel, frameBias, wheelBias, bikeWeightKg, bikeType, crrReduction};
 }
 
 
@@ -294,7 +295,7 @@ function onSelfUpdate(data) {
         style = `(manual) ${surfaceType}`;
     }
     const crrTable = MODEL.crr[setup.bikeType] || MODEL.crr.road_bike;
-    const crr = crrTable[surfaceType] ?? crrTable.Tarmac;
+    const crr = (crrTable[surfaceType] ?? crrTable.Tarmac) - setup.crrReduction;
 
     // --- Time derivatives (smoothed) ------------------------------------
     let dt = 0;

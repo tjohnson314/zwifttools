@@ -110,6 +110,20 @@ def test_standing_start_and_flat_equilibrium_match_existing_physics():
     assert not result["completed"]
 
 
+@pytest.mark.parametrize("surface,base_crr", [("Tarmac", .004), ("Dirt", .016), (None, .004)])
+def test_workout_drivetrain_upgrade_reduces_surface_or_fallback_resistance(surface, base_crr):
+    course = route(surface=surface)
+    if surface is None:
+        course.surfaces = None
+    plan = workout('<SteadyState Duration="600" Power="1"/>')
+    stock = simulate(plan, course)
+    upgraded = simulate(plan, course, crr_reduction=.0003)
+
+    expected = speed_from_power(250., 0., 75., 8., .3, base_crr - .0003)
+    assert upgraded["profile"]["speed_kph"][-1] / 3.6 == pytest.approx(expected, rel=1e-4)
+    assert upgraded["distance_covered_km"] > stock["distance_covered_km"]
+
+
 def test_completion_is_at_finish_not_workout_end_and_has_remaining_time():
     result = simulate(course=route(200))
     assert result["completed"]

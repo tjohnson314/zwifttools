@@ -70,6 +70,20 @@ def test_surface_resistance_uses_the_selected_bike_category(bike_type):
     assert planner.crr.tolist() == surface_types_to_crr(np.array(["Dirt", "Dirt"]), bike_type).tolist()
 
 
+@pytest.mark.parametrize("surface,base_crr", [("Tarmac", .004), ("Dirt", .016), (None, .011)])
+def test_ttt_drivetrain_upgrade_reduces_surface_or_fallback_resistance(surface, base_crr):
+    route = flat_route(200.)
+    if surface:
+        route.surfaces = np.array([surface, surface])
+    riders = [rider(name, 300) for name in ("A", "B", "C", "D")]
+    result = plan_ttt_pacing(
+        route, riders, crr=.011, crr_reduction=.0003, allow_drops=False,
+        refine_pulls=False, min_pull_s=20., max_pull_s=20., speed_step_mps=1.,
+        search_iterations=2, final_iterations=2)
+
+    assert result.crr == pytest.approx([base_crr - .0003] * len(result.crr))
+
+
 def test_power_driven_traversal_preserves_coasting_momentum():
     riders = [TTTRider(name, 75.0, 1.8, 300.0, 20000.0, cda=0.3)
               for name in ("A", "B", "C", "D")]

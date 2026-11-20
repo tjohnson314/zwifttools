@@ -888,6 +888,7 @@ def plan_tt_pacing(
     bucket_edges_m: list | None = None,
     num_buckets: int | None = None,
     bike_type: str = "road_bike",
+    crr_reduction: float = 0.0,
 ) -> PacingPlanResult:
     """Compute the optimal pacing plan for a route.
 
@@ -902,6 +903,7 @@ def plan_tt_pacing(
             plan is optimised against (30 s rolling, 4th-power weighted).
         crr: Fallback rolling-resistance coefficient when surfaces are unavailable.
         bike_type: Surface rolling-resistance category for the selected bike.
+        crr_reduction: Frame upgrade reduction applied to every surface's base Crr.
         max_chunk_m: Maximum chunk length (m).
         max_power_mult: Cap on each chunk's power as a multiple of the target,
             so the rider pushes hard on climbs but not beyond a realistic
@@ -930,6 +932,7 @@ def plan_tt_pacing(
     else:
         surfaces = np.full(n, "Unknown", dtype=object)
         chunk_crr = np.full(n, crr)
+    chunk_crr = chunk_crr - crr_reduction
 
     total_mass = rider_weight_kg + bike_weight_kg
     inv_mass = 1.0 / total_mass

@@ -345,7 +345,7 @@ class _Plan:
 class _CoursePlanner:
     def __init__(self, route, team: _Team, *, crr, max_chunk_m, reserve_fraction,
                  reserve_release_m, max_power_cp_mult, min_pull_s, max_pull_s,
-                 pull_step_s, speed_step_mps, bike_type="road_bike"):
+                 pull_step_s, speed_step_mps, bike_type="road_bike", crr_reduction=0.0):
         self.team = team
         length, grad, mid, end = _build_chunks(route, max_chunk_m, crr)
         if len(length) < 2:
@@ -359,6 +359,7 @@ class _CoursePlanner:
         else:
             self.surfaces = np.full(self.C, "Unknown", dtype=object)
             self.crr = np.full(self.C, crr)
+        self.crr = self.crr - crr_reduction
         cos = np.cos(np.arctan(grad))
         self.f_static = GRAVITY * (grad[:, None] + self.crr[:, None] * cos[:, None]) * team.mass[None, :]
         self.effort_grid = np.unique(np.r_[np.arange(0.0, max_power_cp_mult, 0.025),
@@ -862,6 +863,7 @@ def plan_ttt_pacing(
     draft_second_pct: float = 25.0,
     draft_rest_pct: float = 40.0,
     bike_type: str = "road_bike",
+    crr_reduction: float = 0.0,
 ) -> TTTPlanResult:
     """Optimise a WTRL team time trial for riders listed in rotation order.
 
@@ -869,6 +871,7 @@ def plan_ttt_pacing(
         route: A ``RouteProfile``.
         riders: 4-8 riders in their fixed rotation order.
         bike_type: Surface rolling-resistance category for the team's bike.
+        crr_reduction: Frame upgrade reduction applied to every surface's base Crr.
         reserve_fraction: W' fraction each rider keeps in hand, as a margin for
             CP/W' estimation error, until ``reserve_release_m`` before they
             finish or are dropped.
@@ -898,12 +901,13 @@ def plan_ttt_pacing(
     if len(set(names)) != len(names):
         raise ValueError("Rider names must be unique.")
 
-    team = _Team(riders, crr, draft_second_pct=draft_second_pct, draft_rest_pct=draft_rest_pct)
+    team = _Team(riders, crr - crr_reduction,
+                 draft_second_pct=draft_second_pct, draft_rest_pct=draft_rest_pct)
     planner = _CoursePlanner(
         route, team, crr=crr, max_chunk_m=max_chunk_m, reserve_fraction=reserve_fraction,
         reserve_release_m=reserve_release_m, max_power_cp_mult=max_power_cp_mult,
         min_pull_s=min_pull_s, max_pull_s=max_pull_s, pull_step_s=pull_step_s,
-        speed_step_mps=speed_step_mps, bike_type=bike_type)
+        speed_step_mps=speed_step_mps, bike_type=bike_type, crr_reduction=crr_reduction)
     C, n = planner.C, team.n
     incumbent = None
     incumbent_result = None
@@ -939,7 +943,7 @@ def plan_ttt_pacing(
             raise ValueError(f"Unknown drop candidates: {sorted(unknown)}")
         ranking = [names.index(name) for name in drop_candidates]
     else:
-        ranking = _weakness_ranking(planner, crr)
+        ranking = _weakness_ranking(planner, crr - crr_reduction)
     max_drops = min(team_size - scoring, len(ranking)) if allow_drops else 0
 
     mult = np.ones(n)

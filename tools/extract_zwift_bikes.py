@@ -15,7 +15,7 @@ component values, and writes:
 
     zwiftdata/game_frames.json   full bike (frame+fork+handlebars+drivetrain)
                                  weight + CdA bias, whole-bike price/level, and
-                                 the reverse-engineered level 1-5 upgrade ladder
+                                 the assigned upgrade path (definitions exported separately)
     zwiftdata/game_wheels.json   front/rear wheel weight + CdA, price/level,
                                  TT-specific CdA, and per-surface Crr
 
@@ -191,145 +191,6 @@ def _upgrade_path(level_up: str | None) -> str | None:
     if not level_up:
         return None
     return _UPGRADE_PATHS.get(level_up.split("_", 1)[0].lower())
-
-
-# --- Frame upgrade ladder -------------------------------------------------
-#
-# Zwift bikes gain five upgrade levels, each granting one reward. The reward
-# categories (aero / weight / drivetrain / drops / xp) match the upgrade
-# banners compiled into ZwiftApp.exe, but the per-level *magnitudes* are
-# delivered by the server ("BikeLevels" config) and are absent from the game
-# WADs. They were recovered empirically by inverting the ZwiftInsider flat +
-# climb speed tests: at each level the two average speeds give a 2x2 linear
-# system in (CdA, mass) which is solved directly (see tools/zi_stage_solve.py).
-#
-# The solved per-level changes cluster tightly by (upgrade_path, class), so the
-# model below stores the mean incremental change for each such group as a tuple
-#   (reward, d_cda_bias_m2, d_weight_g)
-# applied cumulatively on top of the stock (level-0) frameset values. Levels 1-3
-# are aero / weight / drivetrain for every bike (drivetrain is ~universal). The
-# number of *performance* upgrades then scales with tier: entry bikes get only
-# 3 (levels 4-5 are non-performance drops/xp), mid-range bikes get 4 (level 5 is
-# drops), and high-end/concept bikes get all 5. n = full-data bikes behind each row.
-_AERO, _WEIGHT, _DRIVE, _DROPS, _XP = "aero", "weight", "drivetrain", "drops", "xp"
-
-UPGRADE_MODEL: dict[str, dict[str, list[tuple]]] = {
-    "road": {
-        "HIGH_END": [  # n=39
-            (_AERO, -0.002970, -4.9), (_WEIGHT, -0.000133, -405.0),
-            (_DRIVE, -0.002931, -239.0), (_AERO, -0.000950, -3.4),
-            (_WEIGHT, 0.000052, -188.9)],
-        "MID_RANGE": [  # n=45 (L5 = drops: no measured weight gain in 30/34 bikes)
-            (_AERO, -0.002889, -3.2), (_WEIGHT, -0.000178, -547.1),
-            (_DRIVE, -0.002968, -242.4), (_AERO, -0.000893, -7.1),
-            (_DROPS, -0.000310, -19.1)],
-        "ENTRY": [  # n=15 (levels 4-5 = drops/xp, no performance)
-            (_AERO, -0.003888, -7.1), (_WEIGHT, -0.000170, -594.3),
-            (_DRIVE, -0.003051, -239.7), (_DROPS, 0.000036, -1.2),
-            (_XP, 0.000081, -4.5)],
-        "CONCEPT": [  # n=3
-            (_AERO, -0.002983, -20.8), (_WEIGHT, -0.000081, -392.9),
-            (_DRIVE, -0.002751, -253.4), (_AERO, -0.000960, 8.3),
-            (_WEIGHT, 0.000103, -170.6)],
-    },
-    "tt": {
-        "HIGH_END": [  # n=11
-            (_AERO, -0.002105, -2.2), (_WEIGHT, -0.000086, -232.6),
-            (_DRIVE, -0.002776, -244.4), (_WEIGHT, -0.000047, -91.2),
-            (_AERO, -0.005249, -9.9)],
-        "MID_RANGE": [  # n=9 (L4 = big aero, L5 = drops: no measured gain in 4/5 bikes)
-            (_AERO, -0.002049, -5.5), (_WEIGHT, -0.000123, -273.0),
-            (_DRIVE, -0.002853, -254.8), (_AERO, -0.003310, -35.5),
-            (_DROPS, -0.001860, -32.2)],
-        "ENTRY": [  # n=1 (levels 4-5 = drops/xp)
-            (_AERO, -0.007890, 5.1), (_WEIGHT, -0.000080, -295.6),
-            (_DRIVE, -0.002762, -257.1), (_DROPS, -0.000007, -27.5),
-            (_XP, 0.000120, 16.9)],
-        "CONCEPT": [  # n=1
-            (_AERO, -0.002032, -39.8), (_WEIGHT, -0.000112, -184.5),
-            (_DRIVE, -0.002714, -257.9), (_WEIGHT, 0.000057, -89.7),
-            (_AERO, -0.005792, 12.2)],
-    },
-    "climbing": {
-        "HIGH_END": [  # n=4
-            (_AERO, -0.001618, -1.1), (_WEIGHT, -0.000565, -915.1),
-            (_DRIVE, -0.003395, -245.3), (_AERO, -0.000458, 1.8),
-            (_WEIGHT, -0.000065, -308.5)],
-        "MID_RANGE": [  # n=3 (L5 = drops, matching the other mid-range paths)
-            (_AERO, -0.001700, 2.0), (_WEIGHT, -0.001116, -1148.7),
-            (_DRIVE, -0.003958, -251.2), (_AERO, -0.000477, -8.6),
-            (_DROPS, -0.000003, -96.8)],
-        "ENTRY": [  # n=2 (levels 4-5 = drops/xp)
-            (_AERO, -0.002167, 14.1), (_WEIGHT, -0.000663, -1223.2),
-            (_DRIVE, -0.003476, -230.8), (_DROPS, 0.000007, -6.3),
-            (_XP, 0.000108, 5.9)],
-    },
-}
-
-# Each upgrade level grants exactly one reward, so any change on the *other*
-# axis (weight on an aero level, CdA on a weight level) is measurement noise
-# from the speed-test inversion. It is forced to 0 unless it clears these noise
-# floors -- chosen well below a genuine upgrade (real aero steps are
-# >=~0.0015 m^2, real weight steps >=~200 g) but above the solver scatter, so a
-# real off-axis effect such as the climbing weight upgrade's CdA trim survives.
-CDA_NOISE_FLOOR = 0.0005      # m^2
-WEIGHT_NOISE_FLOOR_G = 50.0   # g
-
-
-def _load_upgrade_measurements() -> dict[str, list[list[float]]]:
-    """Per-bike measured per-stage (dCdA, dWeight_g) deltas keyed by frame
-    folder, produced by tools/zi_stage_solve.py. Preferred over the group
-    averages for bikes that were individually speed-tested. Missing file ->
-    empty (every frame then falls back to the group model)."""
-    path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "zwiftdata", "frame_upgrade_measurements.json",
-    )
-    try:
-        with open(path, encoding="utf-8-sig") as f:
-            data = json.load(f)
-    except (OSError, ValueError):
-        return {}
-    return {folder: rec["deltas"] for folder, rec in data.get("bikes", {}).items()}
-
-
-def _frame_upgrades(path: str | None, cls: str | None,
-                    base_cda: float | None, base_wt: float | None,
-                    measured: list[list[float]] | None = None) -> list[dict] | None:
-    """Build the level 1-5 upgrade ladder for one frame.
-
-    Uses the frame's own measured per-stage deltas when ``measured`` is given,
-    otherwise the (upgrade_path, class) group averages. Returns per-level records
-    (reward category, incremental change, cumulative effective CdA bias / weight)
-    or ``None`` when no upgrade model applies to the frame's path.
-    """
-    table = UPGRADE_MODEL.get(path or "")
-    if not table:
-        return None
-    stages = table.get(cls or "") or table.get("HIGH_END")
-    if stages is None:
-        return None
-
-    cda, wt = base_cda, base_wt
-    out: list[dict] = []
-    for i, (reward, g_cda, g_wt) in enumerate(stages, start=1):
-        d_cda, d_wt = measured[i - 1] if measured else (g_cda, g_wt)
-        # Suppress the off-axis (non-reward) change when it is within noise.
-        if reward not in (_AERO, _DRIVE) and abs(d_cda) < CDA_NOISE_FLOOR:
-            d_cda = 0.0
-        if reward not in (_WEIGHT, _DRIVE) and abs(d_wt) < WEIGHT_NOISE_FLOOR_G:
-            d_wt = 0.0
-        cda = None if cda is None else cda + d_cda
-        wt = None if wt is None else wt + d_wt
-        out.append({
-            "level": i,
-            "reward": reward,
-            "d_cda_bias": round(d_cda, 6),
-            "d_weight_g": round(d_wt, 1),
-            "cda_bias_effective": None if cda is None else round(cda, 6),
-            "weight_g_effective": None if wt is None else round(wt, 1),
-        })
-    return out
 
 
 def build_bike_configs(base: str) -> dict[str, dict]:
@@ -539,7 +400,6 @@ def extract_frames(base: str, configs: dict[str, dict], index: dict[str, bytes])
     """Compose each bike's complete non-wheel component set (frame + fork +
     handlebars + full drivetrain) from its config and the component index."""
     hb_fallback = _handlebars_fallback_map(index)
-    measurements = _load_upgrade_measurements()
     default_cassette = next(
         (k for k in index if k.endswith("components/cassette/cassette.xml")), None
     )
@@ -592,15 +452,6 @@ def extract_frames(base: str, configs: dict[str, dict], index: dict[str, bytes])
             "frameset_weight_g_effective": _sum(_eff_weight(c) for c in components.values()),
             "frameset_cda_bias_effective": _sum(_eff_cda(c) for c in components.values()),
         }
-        measured = measurements.get(folder)
-        rec["upgrades"] = _frame_upgrades(
-            rec["upgrade_path"], rec["class"],
-            rec["frameset_cda_bias_effective"], rec["frameset_weight_g_effective"],
-            measured,
-        )
-        rec["upgrades_source"] = (
-            None if rec["upgrades"] is None else ("measured" if measured else "estimated")
-        )
         out.append(rec)
 
     if unresolved:

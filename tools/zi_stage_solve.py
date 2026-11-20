@@ -11,11 +11,18 @@ Solve the 2x2 directly (Cramer). The single shared unknown is the climb gradient
 calibrated once so the solver's stage-0 masses match the authoritative game frame weights.
 Climb test = Alpe du Zwift ~8.25% mean; the constant-gradient approximation is within ~1% of the
 real varying profile on total time (validated separately), which largely cancels in stage deltas.
+
+Each stage uses the packaged upgrade definition's cumulative Crr reduction.
+This is a standalone audit tool, not part of normal game-data regeneration.
 """
-import csv, json, os, math, importlib.util
+import csv, json, os, math, importlib.util, sys
 from statistics import mean, pstdev, median
+from pathlib import Path
 
 ROOT = r"C:\Users\timjo\Documents\Coding\Zwift\zwifttools"
+sys.path.insert(0, ROOT)
+from bike_comparison.upgrades import load_upgrade_definitions, upgrade_effects
+
 spec = importlib.util.spec_from_file_location("zc", os.path.join(ROOT, "tools", "zi_compare.py"))
 zc = importlib.util.module_from_spec(spec); spec.loader.exec_module(zc)
 
@@ -160,6 +167,7 @@ def load_our_frames():
     return [{"label": f"{f.get('make') or ''} {f.get('name') or ''}".strip(),
              "make": f.get("make"),
              "folder": f.get("folder"), "cls": f.get("class"), "path": f.get("upgrade_path"),
+             "level_up": f.get("level_up"),
              "type": f.get("type"), "year": f.get("year"),
              "weight_g": f.get("frameset_weight_g_effective")} for f in gf]
 
@@ -255,9 +263,12 @@ def _make_rec(z, o, sc, overrides, wprops, builtins):
 
 def _finalize(recs):
     theta = calibrate_theta(recs)
+    definitions = load_upgrade_definitions(Path(ROOT) / "zwiftdata" / "game_upgrades.json")
     for rc in recs:
         sol = [solve_stage(theta, rc["z"]["flat"][s], rc["z"]["climb"][s],
-                           rc["z"]["power"], rc["crr"]) for s in range(6)]
+                           rc["z"]["power"],
+                           rc["crr"] - upgrade_effects(definitions, rc["m"]["level_up"], s)[2])
+               for s in range(6)]
         rc["cda"] = [s[0] for s in sol]
         rc["mass"] = [s[1] for s in sol]
     return recs, theta

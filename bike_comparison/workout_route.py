@@ -111,6 +111,7 @@ def simulate_workout_route(
     route: RouteProfile, workout: dict, *, rider_weight_kg: float,
     bike_weight_kg: float, cda: float, ftp_w: float,
     untargeted_percent: float = 75.0, bike_type: str = "road_bike",
+    crr_reduction: float = 0.0,
 ) -> dict:
     validate_workout(workout)
     for value, label in ((rider_weight_kg, "Rider weight"), (bike_weight_kg, "Bike weight"),
@@ -135,6 +136,7 @@ def simulate_workout_route(
         crr = surface_types_to_crr(np.asarray(route.surfaces)[:-1][moving], bike_type)
     else:
         crr = np.full(len(grades), 0.004)
+    crr = crr - crr_reduction
     resistance = mass * GRAVITY * (grades + crr * np.cos(np.arctan(grades)))
     aero = 0.5 * AIR_DENSITY * cda
     reference = workout.get("ftp_override") or ftp_w

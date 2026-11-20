@@ -145,11 +145,11 @@ def compare_bike_setups(
         rider_weight_kg: Rider weight in kg (for actual bike)
         actual_setup: The bike actually used
         alternative_setup: The alternative bike to compare
-        crr: Rolling resistance coefficient for actual bike (can vary by surface)
+        crr: Base surface rolling resistance, before frame upgrade reductions
         frontal_area: Rider frontal area in m² (for actual bike)
         alt_rider_weight_kg: Rider weight for alternative (defaults to rider_weight_kg)
         alt_frontal_area: Frontal area for alternative (defaults to frontal_area)
-        alt_crr: Rolling resistance for alternative bike (defaults to crr if None)
+        alt_crr: Base surface rolling resistance for the alternative (defaults to crr)
         
     Returns:
         ComparisonResult with time series and summary stats
@@ -221,6 +221,8 @@ def compare_bike_setups(
         alt_crr_values = alt_crr
     else:
         alt_crr_values = np.full_like(speed_mps, alt_crr)
+    crr_values = crr_values - actual_setup.crr_reduction
+    alt_crr_values = alt_crr_values - alternative_setup.crr_reduction
     
     # Calculate solo power required with actual bike (no drafting)
     solo_power_actual = np.array([
@@ -282,7 +284,7 @@ def compare_bike_setups(
         f_rolling_actual = crr_values * total_mass * 9.8067
         f_aero_actual = 0.5 * 1.225 * actual_cda * speed_mps**2
         
-        f_rolling_alt = crr_values * alt_total_mass * 9.8067
+        f_rolling_alt = alt_crr_values * alt_total_mass * 9.8067
         f_aero_alt = 0.5 * 1.225 * alternative_cda * speed_mps**2
         
         # Rolling resistance difference (always applies fully - it's ground friction)
@@ -461,7 +463,7 @@ def estimate_draft_efficiency(
 
     safe_speed = np.maximum(speed_mps, 0.5)
 
-    f_rolling = crr * total_mass * GRAVITY
+    f_rolling = (crr - setup.crr_reduction) * total_mass * GRAVITY
     f_aero_solo = 0.5 * AIR_DENSITY * cda * speed_mps ** 2
 
     # Solo power to overcome all resistance, and the aero-only portion of it.

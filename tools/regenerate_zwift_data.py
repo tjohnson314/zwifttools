@@ -1,4 +1,4 @@
-"""Check the installed Zwift client version and regenerate routes/roads/entitlements/frames/wheels
+"""Check the installed Zwift client version and regenerate routes/roads/entitlements/upgrades/frames/wheels
 data if it's newer than the version last extracted.
 
 Compares the client's ``sversion`` (see ``extract_zwift_bikes.read_zwift_version``)
@@ -10,9 +10,8 @@ differ (or ``--force`` is passed), reruns the full pipeline in order:
     3. extract_zwift_routes.py   (video routes/roads, if the Mochi cache exists)
     4. extract_climb_portal_routes.py (catalogued portal ascents and roads)
     5. extract_zwift_entitlements.py (game_entitlements.json)
-    6. extract_zwift_bikes.py    (game_frames.json / game_wheels.json, pass 1)
-    7. zi_stage_solve.py         (frame_upgrade_measurements.json)
-    8. extract_zwift_bikes.py    (pass 2, bakes in the fresh measurements)
+    6. extract_zwift_upgrades.py (game_upgrades.json)
+    7. extract_zwift_bikes.py    (game_frames.json / game_wheels.json, stock stats)
 
 Usage:
     python tools/regenerate_zwift_data.py \
@@ -64,7 +63,7 @@ def main() -> int:
     ap.add_argument("--out-surfaces", default="zwift_surfaces",
                     help="Output directory for road-network geometry.")
     ap.add_argument("--out-data", default="zwiftdata",
-                    help="Output directory for frame/wheel/entitlement datasets.")
+                    help="Output directory for frame/wheel/upgrade/entitlement datasets.")
     ap.add_argument("--video-cache", default=None,
                     help="Mochi cache directory (default: %%LOCALAPPDATA%%/Zwift/mochi; "
                          "skip video routes if the default cache is unavailable).")
@@ -112,9 +111,8 @@ def main() -> int:
          "--out-surfaces", args.out_surfaces])
     run([py, os.path.join(tools_dir, "extract_zwift_entitlements.py"),
          "--zwift-dir", args.zwift_dir, "--out", args.out_data])
-    run([py, os.path.join(tools_dir, "extract_zwift_bikes.py"),
+    run([py, os.path.join(tools_dir, "extract_zwift_upgrades.py"),
          "--zwift-dir", args.zwift_dir, "--out", args.out_data])
-    run([py, os.path.join(tools_dir, "zi_stage_solve.py")])
     run([py, os.path.join(tools_dir, "extract_zwift_bikes.py"),
          "--zwift-dir", args.zwift_dir, "--out", args.out_data])
 

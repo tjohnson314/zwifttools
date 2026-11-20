@@ -54,6 +54,7 @@ def build_frames(db):
             # 6-stage (0..5) cumulative CdA bias and weight (grams).
             "cda": [round(float(c or 0.0), 5) for c in fr["framecda_bias_stages"]],
             "wt": [int(round(float(w or 0.0))) for w in fr["frameweight_g_stages"]],
+            "crrReduction": fr["framecrr_reduction_stages"],
         })
     frames.sort(key=lambda f: f["name"].lower())
     return frames
@@ -169,7 +170,7 @@ def build_road_styles(style_surface):
     return out
 
 
-def main():
+def main(update_road_styles: bool = True) -> None:
     db = get_bike_database()
 
     style_surface = build_style_map()
@@ -192,7 +193,7 @@ def main():
         "wheels": build_wheels(db),
     }
 
-    road_styles = build_road_styles(style_surface)
+    road_styles = build_road_styles(style_surface) if update_road_styles else None
 
     for mod_dir in MOD_DIRS:
         out_mjs = os.path.join(mod_dir, "bike-model.mjs")
@@ -204,6 +205,8 @@ def main():
         print(f"wrote {out_mjs} ({os.path.getsize(out_mjs) // 1024} KB, "
               f"{len(model['frames'])} frames, {len(model['wheels'])} wheels)")
 
+        if not update_road_styles:
+            continue
         out_roads = os.path.join(mod_dir, "road-styles.mjs")
         if road_styles is None:
             print(f"skipped {out_roads}: no local Zwift WADs found "

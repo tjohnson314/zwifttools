@@ -901,6 +901,7 @@ def api_workout_route_plan():
             cda=rider_cda(numbers['rider_height_cm'] / 100, numbers['rider_weight_kg']) + bike.cda_bias,
             ftp_w=numbers['ftp_w'], untargeted_percent=numbers['untargeted_percent'],
             bike_type=get_bike_type_for_frame(bike.frame_type),
+            crr_reduction=bike.crr_reduction,
         )
         result.update(route_name=route.name, workout_name=workout.get('name', 'Custom workout'),
                       include_leadin=include_leadin, route_mode='free_ride')
@@ -1866,9 +1867,11 @@ def get_frames():
         frame_name = f"{frame_make} {frame_model}".strip() or str(frame_id)
         cda_stages = frame.get('framecda_bias_stages') or []
         wt_stages = frame.get('frameweight_g_stages') or []
+        crr_stages = frame.get('framecrr_reduction_stages') or []
         upgrade_stages = [
             {'cdaBias': cda_stages[i] if i < len(cda_stages) else frame.get('framecda_bias'),
-             'weightG': wt_stages[i] if i < len(wt_stages) else frame.get('frameweight_g')}
+             'weightG': wt_stages[i] if i < len(wt_stages) else frame.get('frameweight_g'),
+             'crrReduction': crr_stages[i] if i < len(crr_stages) else 0.0}
             for i in range(6)
         ]
         frames.append({
@@ -2053,13 +2056,9 @@ def _frame_levels(frame):
     """(cda_bias, weight_g) at level 0 (un-upgraded) and level 5 (fully upgraded)."""
     c0 = frame.get('frameset_cda_bias_effective') or 0.0
     w0 = frame.get('frameset_weight_g_effective') or 0.0
-    c5, w5 = c0, w0
-    for u in (frame.get('upgrades') or []):
-        if u.get('level') == 5:
-            if u.get('cda_bias_effective') is not None:
-                c5 = u['cda_bias_effective']
-            if u.get('weight_g_effective') is not None:
-                w5 = u['weight_g_effective']
+    from bike_comparison.upgrades import upgrade_effects
+    aero, weight, _ = upgrade_effects(get_db().upgrade_definitions, frame.get('level_up'), 5)
+    c5, w5 = c0 - aero, w0 - weight
     return c0, w0, c5, w5
 
 
@@ -2178,6 +2177,7 @@ def api_top_performers_tt():
 _DOWNLOADABLE_DATA = {
     'game_frames.json',
     'game_wheels.json',
+    'game_upgrades.json',
     'frame_zi_match.json',
 }
 
@@ -2272,7 +2272,8 @@ def get_bike_stats_api():
         'frame_weight_g': round(setup.frame_weight_g),
         'frame_cda_bias': round(setup.frame_cda_bias, 4),
         'wheel_weight_g': round(setup.wheel_weight_g),
-        'wheel_cda_bias': round(setup.wheel_cda_bias, 4)
+        'wheel_cda_bias': round(setup.wheel_cda_bias, 4),
+        'crr_reduction': setup.crr_reduction,
     })
 
 
@@ -3258,6 +3259,7 @@ def api_tt_pacing_plan():
             bucket_edges_m=bucket_edges_m,
             num_buckets=num_buckets,
             bike_type=get_bike_type_for_frame(bike_setup.frame_type),
+            crr_reduction=bike_setup.crr_reduction,
         )
     except ValueError as exc:
         return jsonify({'error': str(exc)}), 400
@@ -3466,6 +3468,7 @@ def api_ttt_pacing_plan():
         from shared.surface_lookup import get_bike_type_for_frame
         options = {
             'bike_type': get_bike_type_for_frame(bike_setup.frame_type),
+            'crr_reduction': bike_setup.crr_reduction,
             'reserve_fraction': reserve_pct / 100.0,
             'max_power_cp_mult': max_power_pct / 100.0,
             'draft_second_pct': draft_second_pct,
@@ -3941,6 +3944,7 @@ def _compute_rider_efficiency(df, weight_kg, height_cm, route=None):
                     bike_weight_kg=setup.weight_kg,
                     cda=rider_cda(height_m, weight_kg) + setup.cda_bias,
                     power_target_w=stats['normalized_power'],
+                    crr_reduction=setup.crr_reduction,
                     max_chunk_m=_EFFICIENCY_PACING_CHUNK_M,
                     bisection_iterations=_EFFICIENCY_PACING_BISECTION_ITERATIONS,
                 )

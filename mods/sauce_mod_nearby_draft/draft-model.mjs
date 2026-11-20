@@ -272,7 +272,8 @@ export class DraftTracker {
         const mass = weight + (frame.wt[level] + (wheel?.wt || 0)) / 1000;
         const bikeType = MODEL.frameTypeToBikeType[frame.type] || 'road_bike';
         const crrTable = MODEL.crr[bikeType] || MODEL.crr.road_bike;
-        const crr = crrTable[MODEL.styleMap[style] || 'Tarmac'] ?? crrTable.Tarmac;
+        const crr = (crrTable[MODEL.styleMap[style] || 'Tarmac'] ?? crrTable.Tarmac) -
+            frame.crrReduction[level];
         const speed = smooth.speed;
         const gradient = speed !== 0 ? smooth.altitude / speed : 0;
         const aero = -(0.5 * constants.AIR_DENSITY * cda * speed ** 3);

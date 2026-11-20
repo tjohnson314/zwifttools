@@ -184,6 +184,21 @@ test('assigned frame and wheels affect the draft model equally for every rider',
     }
 });
 
+test('drivetrain upgrades change rolling power but not the aero draft ceiling', async () => {
+    const {DEFAULTS, DraftTracker} = await modelContext();
+    const {MODEL} = await import('../mods/sauce_mod_nearby_draft/bike-model.mjs');
+    const frame = MODEL.frames.find(candidate => candidate.id === DEFAULTS.frameId);
+    const wheel = MODEL.wheels.find(candidate => candidate.id === DEFAULTS.wheelId);
+    const entry = rider(1, 0, {power: 400});
+    const stock = new DraftTracker().update(entry, {...DEFAULTS, upgradeLevel: 2});
+    const upgraded = new DraftTracker().update(entry, {...DEFAULTS, upgradeLevel: 3});
+    const mass = entry.athlete.weight + (frame.wt[2] + (wheel?.wt || 0)) / 1000;
+    const rollingReduction = .0003 * mass * MODEL.constants.GRAVITY * 10;
+
+    assert.equal(upgraded.maxDraft, stock.maxDraft);
+    assert.ok(Math.abs(stock.effective - upgraded.effective - rollingReduction) < 1e-9);
+});
+
 test('position interpolation moves continuously between telemetry samples without extrapolating', async () => {
     const {PositionInterpolator} = await modelContext();
     const motion = new PositionInterpolator();

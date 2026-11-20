@@ -29,8 +29,7 @@ def test_regeneration_refreshes_road_network(monkeypatch, extra_args, previous, 
         "extract_zwift_surfaces.py",
         "extract_climb_portal_routes.py",
         "extract_zwift_entitlements.py",
-        "extract_zwift_bikes.py",
-        "zi_stage_solve.py",
+        "extract_zwift_upgrades.py",
         "extract_zwift_bikes.py",
     ]
     assert commands[1][2:] == ["--zwift-dir", "client", "--out", surface_dir]
@@ -38,6 +37,8 @@ def test_regeneration_refreshes_road_network(monkeypatch, extra_args, previous, 
         "--zwift-dir", "client", "--out-routes", "zwift_routes", "--out-surfaces", surface_dir,
     ]
     assert commands[3][2:] == ["--zwift-dir", "client", "--out", data_dir]
+    assert commands[4][2:] == ["--zwift-dir", "client", "--out", data_dir]
+    assert commands[5][2:] == ["--zwift-dir", "client", "--out", data_dir]
 
 
 @pytest.mark.parametrize("explicit_cache", [False, True])
@@ -70,7 +71,7 @@ def test_regeneration_refreshes_video_routes(monkeypatch, tmp_path, explicit_cac
         "extract_zwift_routes.py", "extract_zwift_surfaces.py", "extract_zwift_routes.py",
         "extract_climb_portal_routes.py",
         "extract_zwift_entitlements.py",
-        "extract_zwift_bikes.py", "zi_stage_solve.py", "extract_zwift_bikes.py",
+        "extract_zwift_upgrades.py", "extract_zwift_bikes.py",
     ]
     assert commands[0][2:] == ["--zwift-dir", "client", "--out", route_dir]
     assert commands[1][2:] == ["--zwift-dir", "client", "--out", surface_dir]
@@ -81,6 +82,7 @@ def test_regeneration_refreshes_video_routes(monkeypatch, tmp_path, explicit_cac
         "--zwift-dir", "client", "--out-routes", route_dir, "--out-surfaces", surface_dir,
     ]
     assert commands[4][2:] == ["--zwift-dir", "client", "--out", "zwiftdata"]
+    assert commands[5][2:] == ["--zwift-dir", "client", "--out", "zwiftdata"]
 
 
 @pytest.mark.parametrize("local_app_data", [None, "missing-local-data"])
@@ -96,7 +98,7 @@ def test_missing_default_video_cache_keeps_existing_exports(monkeypatch, tmp_pat
     monkeypatch.setattr(regenerate_zwift_data, "run", commands.append)
 
     assert regenerate_zwift_data.main() == 0
-    assert len(commands) == 7
+    assert len(commands) == 6
     assert all("--video-cache" not in command for command in commands)
     assert "existing video exports left unchanged" in capsys.readouterr().err
 

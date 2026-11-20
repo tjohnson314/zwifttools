@@ -18,10 +18,10 @@ best-bike search are differential (evaluated against recorded power), so
 BASE_CDA cancels there; it only anchors absolute solo / pacing-planner
 predictions.
 
-Note: frame upgrades ARE modelled.  game_frames.json carries a measured 5-stage
-upgrade ladder per frame (levels 1-5, each with cumulative ``cda_bias_effective``
-and ``weight_g_effective``); level 0 is the stock frameset.  Wheels have no
-upgrade ladder in the game data, so only the frame changes with upgrade level.
+Frame upgrades are computed from the packaged definitions in game_upgrades.json.
+game_frames.json stores stock components and the assigned upgrade path only.
+Aero and weight rewards reduce those frame stats; resistance rewards reduce Crr.
+Wheels have no upgrade ladder.
 """
 
 import json
@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 
+from .upgrades import load_upgrade_definitions, upgrade_effects
 
 # Baseline absolute CdA (m^2) for a rider on a zero-bias bike at the reference
 # rider.  Calibrated by tools/export_frame_stats.py from Zwift Insider flat and
@@ -114,6 +115,7 @@ class BikeSetup:
     frame_cda_bias: float = 0.0
     wheel_weight_g: float = 0.0
     wheel_cda_bias: float = 0.0
+    crr_reduction: float = 0.0  # Subtracted from the selected surface's base Crr
 
     def __str__(self):
         return f"{self.frame_name} + {self.wheel_name}"
@@ -125,6 +127,7 @@ class BikeDatabase:
     DATA_DIR = Path(__file__).parent.parent / 'zwiftdata'
     GAME_FRAMES = 'game_frames.json'
     GAME_WHEELS = 'game_wheels.json'
+    GAME_UPGRADES = 'game_upgrades.json'
 
     def __init__(self):
         self.frames: Dict[str, dict] = {}
@@ -137,6 +140,7 @@ class BikeDatabase:
             return json.load(f)
 
     def _load_data(self):
+        self.upgrade_definitions = load_upgrade_definitions(self.DATA_DIR / self.GAME_UPGRADES)
         self._load_frames()
         self._load_wheels()
         self._build_combos()
@@ -161,18 +165,10 @@ class BikeDatabase:
                 model = _humanize(folder)
             frame_type = _GAME_TYPE_TO_FRAME_TYPE.get(fr.get('type'), 'Standard')
             level = fr.get('level')
-            # Build the 6-stage (0..5) upgrade ladder. Stage 0 is the stock
-            # frameset; stages 1-5 use the game's cumulative "effective" values
-            # recorded per upgrade reward. Frames without upgrade data simply
-            # repeat the stock values so every level is well-defined.
-            cda_stages = [cda_bias]
-            wt_stages = [weight_g]
-            for up in (fr.get('upgrades') or []):
-                cda_stages.append(up.get('cda_bias_effective', cda_stages[-1]))
-                wt_stages.append(up.get('weight_g_effective', wt_stages[-1]))
-            while len(cda_stages) < 6:
-                cda_stages.append(cda_stages[-1])
-                wt_stages.append(wt_stages[-1])
+            effects = [upgrade_effects(self.upgrade_definitions, fr.get('level_up'), level)
+                       for level in range(6)]
+            cda_stages = [cda_bias - aero for aero, _, _ in effects]
+            wt_stages = [weight_g - weight for _, weight, _ in effects]
             self.frames[folder] = {
                 'frameid': folder,
                 'framemake': make,
@@ -186,6 +182,7 @@ class BikeDatabase:
                 'framecda_bias': cda_bias,
                 'framecda_bias_stages': cda_stages[:6],
                 'frameweight_g_stages': wt_stages[:6],
+                'framecrr_reduction_stages': [resistance for _, _, resistance in effects],
                 'frameyear': fr.get('year'),
                 'frameclass': fr.get('class'),
             }
@@ -304,8 +301,8 @@ class BikeDatabase:
         Args:
             frame_id: Frame folder id (e.g. 'CanyonAeroad2024').
             wheel_id: Wheel id, or None/'' for the frame's built-in wheels.
-            upgrade_level: Frame upgrade stage 0-5. Selects the frame's measured
-                upgrade values; wheels are unaffected (no wheel upgrade ladder).
+            upgrade_level: Frame upgrade stage 0-5. Applies packaged rewards;
+                wheels are unaffected (no wheel upgrade ladder).
         """
         frame = self.frames.get(frame_id)
         if not frame:
@@ -341,6 +338,7 @@ class BikeDatabase:
             frame_cda_bias=frame_bias,
             wheel_weight_g=(float(wheel.get('wheelweight_g') or 0.0) if wheel else 0.0),
             wheel_cda_bias=wheel_bias,
+            crr_reduction=frame['framecrr_reduction_stages'][level],
         )
 
     def list_frames(self, frame_type: Optional[str] = None) -> List[dict]:

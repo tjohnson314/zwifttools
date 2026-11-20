@@ -71,7 +71,8 @@ def plan_legs(route, legs):
     aero_k = 0.5 * AIR_DENSITY * cda
     inv_mass = 1.0 / mass
     f_grav = mass * GRAVITY * grad
-    f_roll = CRR * mass * GRAVITY * np.cos(np.arctan(grad))
+    leg_crr = np.array([CRR - b.crr_reduction for _, b in legs])
+    f_roll = leg_crr[leg_idx] * mass * GRAVITY * np.cos(np.arctan(grad))
     one_minus_eta = 1.0 - DRIVETRAIN_LOSS
     p_max = MAX_POWER_MULT * NP_TARGET_W
 
@@ -94,7 +95,7 @@ def plan_legs(route, legs):
     def forward_sim(pw):
         b0 = legs[leg_idx[0]][1]
         v = max(speed_from_power(float(pw[0]), float(grad[0]), RIDER_WEIGHT_KG,
-                                 b0.weight_kg, float(cda[0]), CRR), V_FLOOR)
+                                 b0.weight_kg, float(cda[0]), float(leg_crr[leg_idx[0]])), V_FLOOR)
         for c in range(n):
             v_enter[c] = v
             v, dt = _traverse(v, float(pw[c]) * one_minus_eta, float(f_grav[c]),
@@ -210,6 +211,7 @@ def main():
             route, RIDER_WEIGHT_KG, RIDER_HEIGHT_M, b.weight_kg,
             rider_cda(RIDER_HEIGHT_M, RIDER_WEIGHT_KG) + b.cda_bias, NP_TARGET_W,
             crr=CRR, max_chunk_m=MAX_CHUNK_M, max_power_mult=MAX_POWER_MULT,
+            crr_reduction=b.crr_reduction,
         )
         print(f"  {name:<48} script {fmt(res['ride_time'])}  "
               f"planner {fmt(ref.total_time_seconds)}")

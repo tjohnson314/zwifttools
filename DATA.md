@@ -8,6 +8,7 @@ This document describes the complete data pipeline for every page and API endpoi
 
 - [Architecture Overview](#architecture-overview)
 - [Game Entitlements](#game-entitlements)
+- [Game Bike Upgrades](#game-bike-upgrades)
 - [Authentication](#authentication)
 - [Landing Page](#landing-page)
 - [Surface Map](#surface-map)
@@ -79,6 +80,57 @@ references fail extraction before overwriting the existing export.
 using its existing client-version gate and `--out-data` directory. Use `--force`
 or the standalone extractor when first adding the catalogue at an already-extracted
 client version. The dataset has no web endpoint or account-ownership lookup.
+
+---
+
+## Game Bike Upgrades
+
+`zwiftdata/game_upgrades.json` preserves the installed client's packaged upgrade
+definitions independently of the stock frame data. Refresh it with:
+
+```powershell
+python tools\extract_zwift_upgrades.py --zwift-dir "C:\Program Files (x86)\Zwift" --out zwiftdata
+```
+
+The exporter reads `bikes/levels/config.json` and every definition it lists in
+`assets/global.wad`. `config` retains prices, filenames and manufacturer unlock
+rules; `levelup_configs` is keyed by each source definition's ID and retains all
+five stages, tasks and reward buffs unchanged. `zwift_version`, `generated` and
+`source` identify the client build, UTC extraction date and archive location.
+Missing sources/version, duplicate IDs and unsupported buffs fail before writing.
+
+`game_frames.json` contains stock component stats and `level_up` assignments,
+not baked `upgrades` or `upgrades_source` fields. `BikeDatabase` computes stage
+stats from these definitions: cumulative absolute `cdabias` and `weight` rewards
+are subtracted from frame CdA bias (m^2) and weight (grams). `resistance` rewards
+are subtracted from the selected surface's Crr, not converted to aero or weight
+improvements. Drops/XP percentage rewards do not affect performance; wheel stats
+stay unchanged. Raw stats are not clipped. The current level-3 reward reduces
+Crr by 0.0003: road tarmac changes from 0.004 to 0.0037 while CdA and mass stay
+at their level-2 values. Comparisons, draft estimates, planners, workout simulations
+and both Sauce models apply this reduction to the bike's surface coefficient.
+These are packaged definitions, not proof of server-side behavior.
+The Top Performers methodology links to `/data/game_upgrades.json` for downloading
+the source definitions; its two axes show only aero and weight, not Crr benefits.
+
+`tools/regenerate_zwift_data.py` exports upgrades before a single stock bike
+extraction, honoring `--out-data`. Zwift Insider fitting no longer runs in this
+pipeline or feeds generated frames. Use `--force` to add the dataset at an
+already-extracted client version.
+
+Manual comparisons remain available:
+
+```powershell
+python tools\zi_stage_solve.py
+python tools\export_frame_stats.py
+```
+
+The stage solver accounts for source-defined resistance reductions when fitting
+the saved test speeds; the audit compares fitted aero/weight against runtime
+source-derived stages. These commands explicitly regenerate their audit outputs,
+not the main game datasets. Historical measurement JSON remains available.
+After changing bike datasets, refresh Sauce bundles with
+`python tools\build_power_breakdown_data.py` (also refreshes road-style bundles).
 
 ---
 
@@ -939,9 +991,9 @@ IDs are errors; the server account is never substituted. Includes `id` and `name
 
 **Params:** `frame_id`, `wheel_id`, `upgrade_level`
 
-**Source:** `BikeDatabase.get_bike_stats()` → looks up `(frame_id, wheel_id)` in pre-computed combo table from `zwiftdata/bikes.json`. Each combo has arrays of 6 Cd and weight values (upgrade levels 0–5).
+**Source:** `BikeDatabase.get_bike_stats()` combines stock `game_frames.json` / `game_wheels.json` data with source-defined cumulative rewards from `game_upgrades.json` at the selected level (0–5).
 
-**Returns:** `{ frame_id, frame_name, wheel_id, wheel_name, upgrade_level, cd, weight_kg }`
+**Returns:** `{ frame_id, frame_name, wheel_id, wheel_name, upgrade_level, cda, weight_kg, crr_reduction, ... }`
 
 ### `POST /api/fetch_activity`
 
@@ -1474,8 +1526,8 @@ Azure Blob Storage wrapper — **no-op when `AZURE_STORAGE_CONNECTION_STRING` is
 
 - **Source:** `zwiftdata/frames.json`, `wheels.json`, `bikes.json` (from ZwifterBikes)
 - `BikeDatabase` — singleton, auto-downloads missing JSON files
-- `bikes.json` contains pre-computed combo table: `(frame_id, wheel_id)` → arrays of 6 Cd values and 6 weight values (upgrade levels 0–5)
-- `BikeSetup` dataclass: `frame_id`, `frame_name`, `wheel_id`, `wheel_name`, `upgrade_level`, `cd`, `weight_kg`, `frame_type`
+- Stock frames/wheels come from `game_frames.json` / `game_wheels.json`; `game_upgrades.json` supplies rewards used to compute runtime stage arrays (levels 0–5).
+- `BikeSetup` includes frame/wheel identifiers, upgrade level, `cda`, `weight_kg`, `frame_type`, component biases/weights and `crr_reduction`.
 
 ### Physics Engine (`bike_comparison/physics.py`)
 

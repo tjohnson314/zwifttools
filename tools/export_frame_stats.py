@@ -2,10 +2,14 @@
 game-extracted) to a CSV. One row per matched frame, with all six upgrade stages
 (0 = un-upgraded ... 5 = fully upgraded). Reuses the shared matcher (zi_compare)
 and the 2x2 stage-0 solver (zi_stage_solve)."""
-import os, json, csv, importlib.util, math
+import os, json, csv, importlib.util, math, sys
 from statistics import mean
+from pathlib import Path
 
 ROOT = r"C:\Users\timjo\Documents\Coding\Zwift\zwifttools"
+sys.path.insert(0, ROOT)
+from bike_comparison.upgrades import load_upgrade_definitions, upgrade_effects
+
 RIDER_KG = 75.0
 
 
@@ -22,21 +26,14 @@ frames = {f["folder"]: f for f in json.load(
     open(os.path.join(ROOT, "zwiftdata", "game_frames.json"), encoding="utf-8-sig"))
     if "folder" in f}
 recs, theta = zs.build()
+definitions = load_upgrade_definitions(Path(ROOT) / "zwiftdata" / "game_upgrades.json")
 
 
 def frame_stage_arrays(fr):
-    """Per-stage (cda_bias, weight_g) for stages 0..5 from the game frame's base
-    stats + upgrades ladder."""
-    cda = [fr.get("frameset_cda_bias_effective") or 0.0]
-    wt = [fr.get("frameset_weight_g_effective") or 0.0]
-    by_level = {u.get("level"): u for u in (fr.get("upgrades") or [])}
-    for lvl in range(1, 6):
-        u = by_level.get(lvl)
-        if u is not None:
-            cda.append(u.get("cda_bias_effective") if u.get("cda_bias_effective") is not None else cda[-1])
-            wt.append(u.get("weight_g_effective") if u.get("weight_g_effective") is not None else wt[-1])
-        else:
-            cda.append(cda[-1]); wt.append(wt[-1])
+    """Per-stage game stats computed from stock components and packaged rewards."""
+    effects = [upgrade_effects(definitions, fr.get("level_up"), level) for level in range(6)]
+    cda = [(fr.get("frameset_cda_bias_effective") or 0.0) - aero for aero, _, _ in effects]
+    wt = [(fr.get("frameset_weight_g_effective") or 0.0) - weight for _, weight, _ in effects]
     return cda, wt
 
 

@@ -11,6 +11,48 @@ def db():
     return BikeDatabase()
 
 
+@pytest.mark.parametrize("path", ["distance_highend", "elevation_highend", "time_highend"])
+def test_drivetrain_upgrade_only_changes_rolling_resistance(db, path):
+    raw = json.loads((db.DATA_DIR / db.GAME_FRAMES).read_text(encoding="utf-8-sig"))
+    frame_id = next(frame["folder"] for frame in raw if frame.get("level_up") == path
+                    and not any(w["wheelownerframeid"] == frame["folder"] for w in db.wheels.values()))
+    wheel_id = next(wheel_id for wheel_id, wheel in db.wheels.items()
+                    if db._wheel_fits_frame(db.frames[frame_id], wheel))
+    before = db.get_bike_stats(frame_id, wheel_id, 2)
+    after = db.get_bike_stats(frame_id, wheel_id, 3)
+    assert before is not None and after is not None
+
+    assert after.cda_bias == before.cda_bias
+    assert after.weight_kg == before.weight_kg
+    assert after.wheel_cda_bias == before.wheel_cda_bias
+    assert after.wheel_weight_g == before.wheel_weight_g
+    assert before.crr_reduction == 0
+    assert after.crr_reduction == pytest.approx(.0003)
+
+
+def test_packaged_rewards_replace_baked_frame_ladders_and_do_not_clip_stats(db, tmp_path, monkeypatch):
+    frame = {"folder": "Test", "make": "Test", "name": "Bike", "type": "STANDARD",
+             "level_up": "distance_entry", "frameset_weight_g_effective": 100,
+             "frameset_cda_bias_effective": 0,
+             "upgrades": [{"weight_g_effective": 9999, "cda_bias_effective": 9999}]}
+    (tmp_path / "game_frames.json").write_text(json.dumps([frame]))
+    (tmp_path / "game_wheels.json").write_text("[]")
+    (tmp_path / "game_upgrades.json").write_text(json.dumps({
+        "levelup_configs": {"distance_entry": db.upgrade_definitions["distance_entry"]},
+    }))
+    monkeypatch.setattr(BikeDatabase, "DATA_DIR", tmp_path)
+    database = BikeDatabase()
+
+    stage3 = database.get_bike_stats("Test", None, 3)
+    stage5 = database.get_bike_stats("Test", None, 5)
+    assert stage3 is not None and stage5 is not None
+    assert stage3.cda_bias == -.004
+    assert stage3.frame_weight_g == -500
+    assert stage5.cda_bias == stage3.cda_bias
+    assert stage5.weight_kg == stage3.weight_kg
+    assert stage5.crr_reduction == stage3.crr_reduction
+
+
 @pytest.mark.parametrize("frame_type,wheel_type", [
     ("Standard", "Standard,TT"), ("TT", "Standard,TT"),
     ("Gravel", "Gravel"), ("MTB", "MTB"),

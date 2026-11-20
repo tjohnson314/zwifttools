@@ -39,3 +39,15 @@ def test_top_performers_datasets_keep_distinct_types_and_shared_reference():
     assert road["referenceFrame"] == tt["referenceFrame"]
     assert road["referenceWheel"] == tt["referenceWheel"]
     assert any(wheel["cdaTT"] != wheel["cda"] for wheel in tt["wheels"])
+
+
+def test_source_upgrade_definitions_are_downloadable():
+    response = app.test_client().get("/data/game_upgrades.json")
+
+    assert response.status_code == 200
+    assert "attachment" in response.headers["Content-Disposition"]
+    data = response.get_json()
+    assert data["zwift_version"]
+    assert data["config"]["levelup_configs"]
+    assert data["levelup_configs"]
+    assert all(len(definition["levelups"]) == 5 for definition in data["levelup_configs"].values())
