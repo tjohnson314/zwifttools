@@ -1,9 +1,17 @@
 """
 Zwift Tools Web App.
 
-A unified web app providing:
-- Bike Comparison: compare race performance with hypothetical bike setups
-- Race Replay: visualize multi-rider race data with interactive playback
+A Flask web app serving pages and JSON/streaming APIs for:
+- Bike Comparison and Top Performers: compare equipment stats and performance
+- TT and TTT Pacing: plan individual and team time-trial efforts
+- Race Replay, Ride Compare and TTT Analysis: analyze multi-rider telemetry
+- My Activities, Power Dashboard and Segment PRs: explore rider performance
+- Critical Power, Workout Analysis and Workout Route: model and plan training
+- Surface Map: inspect route geometry, road surfaces and timing arches
+- Event Inspector, Power Play, DIRT and ZRL: inspect events and race results
+
+Shared services handle public Zwift data fetching, rider selection, caching,
+game-derived equipment data and downloadable datasets.
 
 Run with: python app.py
 Then open: http://localhost:5000
