@@ -7,6 +7,7 @@ This document describes the complete data pipeline for every page and API endpoi
 ## Table of Contents
 
 - [Architecture Overview](#architecture-overview)
+- [Game Entitlements](#game-entitlements)
 - [Authentication](#authentication)
 - [Landing Page](#landing-page)
 - [Surface Map](#surface-map)
@@ -40,6 +41,44 @@ This document describes the complete data pipeline for every page and API endpoi
 ```
 
 All data originates from the **Zwift REST API** (`https://us-or-rly101.zwift.com/api`). Route geometry comes from **ZwiftMap** (`zwiftmap.com`). Processed race data is cached to **local disk** (parquet + JSON) and optionally persisted to **Azure Blob Storage**.
+
+---
+
+## Game Entitlements
+
+`zwiftdata/game_entitlements.json` is an offline, versioned catalogue of verified
+entitlement ID mappings from the installed client. It is not an account's inventory
+and does not claim to cover every entitlement known to the running game.
+
+Refresh it with:
+
+```powershell
+python tools\extract_zwift_entitlements.py --zwift-dir "C:\Program Files (x86)\Zwift" --out zwiftdata
+```
+
+The extractor reads `Entitlements/entitlements.json` inside `assets/globalproj.wad`.
+The output's `entitlements` object is keyed by the decimal entitlement ID, with each
+original record retained, including its internal name, category, asset paths, and
+unlock-display metadata. Paths, optional fields, and invalid values such as null
+asset paths are preserved rather than repaired. `invalid_associated_path_ids`
+identifies those records, and extraction emits a warning.
+
+`zwift_version` stamps the installed client's version/build; `generated` records
+the UTC extraction date. `registry_metadata` preserves the source registry's
+metadata, including its own schema version and `lastUpdated` timestamp.
+`coverage` is explicitly `packaged_registry_only`.
+
+Reward-spinner references from `RewardSpinners/RewardSpinners.xml` in
+`assets/global.wad` are compared with the verified mappings. Numeric IDs absent
+from the registry are reported separately in `unresolved_entitlement_ids`; they
+are not assigned guessed names or asset paths. The no-entitlement sentinel is
+excluded. Missing sources/version, duplicate IDs, and unsupported symbolic
+references fail extraction before overwriting the existing export.
+
+`tools/regenerate_zwift_data.py` refreshes this catalogue before extracting bikes,
+using its existing client-version gate and `--out-data` directory. Use `--force`
+or the standalone extractor when first adding the catalogue at an already-extracted
+client version. The dataset has no web endpoint or account-ownership lookup.
 
 ---
 
@@ -623,6 +662,34 @@ The existing `/api/surface_map/worlds`, `/api/surface_map/world/1000`, and
 detail includes native GPS/video data in `road_nodes`. The canvas uses the
 client's local route geometry without a virtual-world background image.
 Restart Flask after refreshing data to clear the cached world files.
+
+#### Climb Portal
+
+The selector also includes **Climb Portal**, a surface-map-only group with ID
+`1001`. Checked-in `zwift_routes/climb_portal.json` and
+`zwift_surfaces/climb_portal.json` let production serve the group without a
+local game install. Portal road hashes identify the climbs within this group;
+they are not ordinary world route IDs and are not added to the global route index.
+
+Refresh with `python tools\extract_climb_portal_routes.py`, or through
+`tools/regenerate_zwift_data.py`. Both honor `--zwift-dir`, `--out-routes`, and
+`--out-surfaces`. The extractor reads `assets/Worlds/roads.wad`, omits entries
+explicitly excluded from the client's dictionary, and publishes the ascent
+from the first portal partition to the native end-gate road time. World-specific
+approaches, summit turnaround geometry, descents, and elevation-scale variants
+are not included. Race and Free Ride modes show the same standalone ascent.
+
+Profiles sample native Bezier geometry with the shared tangent/straight rules,
+retaining raw altitude at 100% scale. Distances and ascent in the route list
+retain the client's declared centimetre-to-metre values; the profile distance
+axis is measured from the sampled horizontal geometry, not rescaled to match
+the declaration. The currently catalogued ascents use NORMAL/tarmac; an
+unresolved active surface style is an extraction error, not silently tarmac.
+
+Like Video Routes, only the selected climb's road network is drawn. Unlike
+Video Routes, portals have no native GPS nodes and use the local canvas without
+satellite imagery. The existing surface-map endpoints serve world `1001`.
+Restart Flask after refreshing exports to clear its cached files.
 
 ---
 

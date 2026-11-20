@@ -427,15 +427,17 @@ test('legacy profiles fall back to measured lead-in geometry, not published meta
     assert.equal(result.layout.shapes.find(shape => shape.type === 'line').x0, 0.04);
 });
 
-test('video routes only display their own independent road network', () => {
+test('video and portal groups only display the selected independent road network', () => {
     const context = vm.createContext({ document: { addEventListener() {} } });
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../static/js/surface_map.js'), 'utf8'), context);
-    const segments = [{ road_id: 27060 }, { road_id: 27061 }];
-    const world = { segments, disconnected_routes: true };
-    const route = { road_nodes: [{ road_id: 27060 }] };
-    assert.deepEqual(Array.from(context.networkSegments(world, route)), [segments[0]]);
-    assert.deepEqual(Array.from(context.networkSegments(world, null)), []);
-    assert.equal(context.networkSegments({ segments }, route), segments);
+    for (const roadId of [27060, 10009]) {
+        const segments = [{ road_id: roadId }, { road_id: roadId + 1 }];
+        const world = { segments, disconnected_routes: true };
+        const route = { road_nodes: [{ road_id: roadId }] };
+        assert.deepEqual(Array.from(context.networkSegments(world, route)), [segments[0]]);
+        assert.deepEqual(Array.from(context.networkSegments(world, null)), []);
+        assert.equal(context.networkSegments({ segments }, route), segments);
+    }
 });
 
 test('video GPS projection interpolates the nearest road without changing source coordinates', () => {
@@ -509,7 +511,7 @@ function satelliteContext(key = 'test-key') {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../static/js/surface_map.js'), 'utf8'), context);
     vm.runInContext(`
         canvas = { hidden: false };
-        state.world = { disconnected_routes: true, colors: { Tarmac: '#888' },
+        state.world = { disconnected_routes: true, satellite_routes: true, colors: { Tarmac: '#888' },
             segments: [{ road_id: 1, x: [0, 100], y: [0, 0], surface: 'Tarmac' }] };
         state.route = { road_nodes: [{ road_id: 1, nodes: [
             { x: 0, z: 0, lat: 56, lng: -4 },
@@ -520,6 +522,40 @@ function satelliteContext(key = 'test-key') {
     return { context, elements, scripts, maps,
         current: () => vm.runInContext('state', context) };
 }
+
+test('portal route loading stays on the canvas without attempting satellite imagery', async () => {
+    const { context, current, elements, scripts } = satelliteContext('');
+    const state = current();
+    state.world.mapID = 1001;
+    state.world.satellite_routes = false;
+    const route = { nameHash: 10009, available_modes: ['race', 'free_ride'],
+        route: { x: [0, 100], y: [0, 0] } };
+    context.fetch = async () => ({ ok: true, json: async () => route });
+    vm.runInContext(`
+        setRouteLoading = closeRoadPicker = updateRouteModeButtons = buildCombinedPath =
+            renderRouteDetail = renderRouteList = updateUrl = () => {};
+    `, context);
+    assert.equal(await context.loadRoute(10009), true);
+    assert.equal(state.activeHash, 10009);
+    assert.equal(state.satelliteActive, false);
+    assert.equal(elements.status.textContent, '');
+    assert.equal(scripts.length, 0);
+});
+
+test('portal detail identifies a native ascent rather than a world-specific approach', () => {
+    const elements = Object.fromEntries(['route-detail', 'rd-name', 'rd-start-status', 'rd-stats']
+        .map(id => [id, { style: {} }]));
+    const context = vm.createContext({ document: {
+        addEventListener() {}, getElementById: id => elements[id],
+    } });
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../static/js/surface_map.js'), 'utf8'), context);
+    vm.runInContext('renderBreakdown = renderElevation = () => {};', context);
+    for (const mode of ['race', 'free_ride']) {
+        context.renderRouteDetail({ name: 'Tourmalet', start_geometry_status: 'portal_spline',
+            route_mode: mode, distance_m: 17000, ascent_m: 1200, leadin_distance_m: 0 });
+        assert.equal(elements['rd-start-status'].textContent, 'Native portal ascent (100%)');
+    }
+});
 
 test('satellite mode uses GPS for native overlays, fit, markers and network toggle', async () => {
     const { context, elements, current } = satelliteContext();

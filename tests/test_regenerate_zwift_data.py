@@ -7,14 +7,15 @@ from tools import regenerate_zwift_data
 
 
 @pytest.mark.parametrize(
-    "extra_args,previous,surface_dir",
+    "extra_args,previous,surface_dir,data_dir",
     [
-        ([], "old", "zwift_surfaces"),
-        (["--out-surfaces", "custom-surfaces"], "old", "custom-surfaces"),
-        (["--force"], "new", "zwift_surfaces"),
+        ([], "old", "zwift_surfaces", "zwiftdata"),
+        (["--out-surfaces", "custom-surfaces"], "old", "custom-surfaces", "zwiftdata"),
+        (["--out-data", "custom-data"], "old", "zwift_surfaces", "custom-data"),
+        (["--force"], "new", "zwift_surfaces", "zwiftdata"),
     ],
 )
-def test_regeneration_refreshes_road_network(monkeypatch, extra_args, previous, surface_dir):
+def test_regeneration_refreshes_road_network(monkeypatch, extra_args, previous, surface_dir, data_dir):
     commands = []
     monkeypatch.delenv("LOCALAPPDATA", raising=False)
     monkeypatch.setattr(sys, "argv", ["regenerate_zwift_data.py", "--zwift-dir", "client", *extra_args])
@@ -26,11 +27,17 @@ def test_regeneration_refreshes_road_network(monkeypatch, extra_args, previous, 
     assert [os.path.basename(command[1]) for command in commands] == [
         "extract_zwift_routes.py",
         "extract_zwift_surfaces.py",
+        "extract_climb_portal_routes.py",
+        "extract_zwift_entitlements.py",
         "extract_zwift_bikes.py",
         "zi_stage_solve.py",
         "extract_zwift_bikes.py",
     ]
     assert commands[1][2:] == ["--zwift-dir", "client", "--out", surface_dir]
+    assert commands[2][2:] == [
+        "--zwift-dir", "client", "--out-routes", "zwift_routes", "--out-surfaces", surface_dir,
+    ]
+    assert commands[3][2:] == ["--zwift-dir", "client", "--out", data_dir]
 
 
 @pytest.mark.parametrize("explicit_cache", [False, True])
@@ -61,6 +68,8 @@ def test_regeneration_refreshes_video_routes(monkeypatch, tmp_path, explicit_cac
     assert regenerate_zwift_data.main() == 0
     assert [os.path.basename(command[1]) for command in commands] == [
         "extract_zwift_routes.py", "extract_zwift_surfaces.py", "extract_zwift_routes.py",
+        "extract_climb_portal_routes.py",
+        "extract_zwift_entitlements.py",
         "extract_zwift_bikes.py", "zi_stage_solve.py", "extract_zwift_bikes.py",
     ]
     assert commands[0][2:] == ["--zwift-dir", "client", "--out", route_dir]
@@ -68,6 +77,10 @@ def test_regeneration_refreshes_video_routes(monkeypatch, tmp_path, explicit_cac
     assert commands[2][2:] == [
         "--video-cache", str(cache), "--out", route_dir, "--out-surfaces", surface_dir,
     ]
+    assert commands[3][2:] == [
+        "--zwift-dir", "client", "--out-routes", route_dir, "--out-surfaces", surface_dir,
+    ]
+    assert commands[4][2:] == ["--zwift-dir", "client", "--out", "zwiftdata"]
 
 
 @pytest.mark.parametrize("local_app_data", [None, "missing-local-data"])
@@ -83,7 +96,7 @@ def test_missing_default_video_cache_keeps_existing_exports(monkeypatch, tmp_pat
     monkeypatch.setattr(regenerate_zwift_data, "run", commands.append)
 
     assert regenerate_zwift_data.main() == 0
-    assert len(commands) == 5
+    assert len(commands) == 7
     assert all("--video-cache" not in command for command in commands)
     assert "existing video exports left unchanged" in capsys.readouterr().err
 

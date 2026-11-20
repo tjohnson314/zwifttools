@@ -88,16 +88,17 @@ _SPLINE_STEP_M = 2.0  # dense sampling step (m) for Bezier road-spline evaluatio
 _NODE_RE = re.compile(r'<ent\b[^>]*type="ENTITY_TYPE_ROADNODE"[^>]*/?>')
 
 
-def _vec_xz(tag: str, attr: str) -> tuple[float, float] | None:
-    """``attr="{x,y,z}"`` -> local-metre ``(x, z)``; ``None`` if absent."""
+def _vec_pair(tag: str, attr: str, axes: tuple[int, int]) -> tuple[float, float] | None:
+    """Select two local-metre coordinates from ``attr="{x,y,z}"``."""
     m = re.search(attr + r'="\{([-\d.]+),([-\d.]+),([-\d.]+)\}"', tag)
     if not m:
         return None
-    return (float(m.group(1)) / UNITS_PER_METRE,
-            float(m.group(3)) / UNITS_PER_METRE)
+    return (float(m.group(axes[0] + 1)) / UNITS_PER_METRE,
+            float(m.group(axes[1] + 1)) / UNITS_PER_METRE)
 
 
-def _nodes_full(block: str, *, auto_tangents: bool = False):
+def _nodes_full(block: str, *, auto_tangents: bool = False,
+                axes: tuple[int, int] = (0, 2)):
     """ROADNODE ``(pos, tangentIn, tangentOut)`` in local metres, spline order.
 
     ``m_tangentIn`` / ``m_tangentOut`` are cubic-Bezier control-point offsets
@@ -105,17 +106,18 @@ def _nodes_full(block: str, *, auto_tangents: bool = False):
     absent handles default to zero unless ``auto_tangents`` requests uniform
     Catmull-Rom handles. Explicit handles, including zero, are preserved.
     ``m_bStraight`` overrides both handles of the node's outgoing segment,
-    including a loop's closing segment."""
+    including a loop's closing segment. ``axes`` also permits sampling the
+    vertical plane with the same handle rules."""
     out = []
     straight = []
     missing = []
     for m in _NODE_RE.finditer(block):
         tag = m.group(0)
-        pos = _vec_xz(tag, "m_pos")
+        pos = _vec_pair(tag, "m_pos", axes)
         if pos is None:
             continue
-        ti = _vec_xz(tag, "m_tangentIn")
-        to = _vec_xz(tag, "m_tangentOut")
+        ti = _vec_pair(tag, "m_tangentIn", axes)
+        to = _vec_pair(tag, "m_tangentOut", axes)
         out.append((pos, ti or (0.0, 0.0), to or (0.0, 0.0)))
         missing.append((ti is None, to is None))
         straight.append(re.search(r'\bm_bStraight="(?:1|true)"', tag, re.I) is not None)

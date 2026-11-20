@@ -42,7 +42,9 @@ WAD_SEGMENTS_FILE = _BASE / "zwift_route_segments_wad.json"
 ZRL_SEGMENTS_FILE = _BASE / "zrl_route_segments.json"
 
 VIDEO_ROUTES_MAP_ID = 1000
-_WORLD_NAMES = {**WORLD_NAMES, VIDEO_ROUTES_MAP_ID: "Video Routes"}
+CLIMB_PORTAL_MAP_ID = 1001
+_GROUP_FILES = {VIDEO_ROUTES_MAP_ID: "video_routes.json", CLIMB_PORTAL_MAP_ID: "climb_portal.json"}
+_WORLD_NAMES = {**WORLD_NAMES, VIDEO_ROUTES_MAP_ID: "Video Routes", CLIMB_PORTAL_MAP_ID: "Climb Portal"}
 
 # mapID -> human readable world name (WORLD_NAMES) and mapID -> WORLD_CONFIG key
 # (MAPID_TO_CONFIG) are imported from shared.world_config.
@@ -78,14 +80,14 @@ def _seg_surface(seg: dict) -> str:
 
 
 def _surface_path(map_id: int) -> Path:
-    if map_id == VIDEO_ROUTES_MAP_ID:
-        return SURFACE_DIR / "video_routes.json"
+    if map_id in _GROUP_FILES:
+        return SURFACE_DIR / _GROUP_FILES[map_id]
     return SURFACE_DIR / f"world_{map_id}.json"
 
 
 def _route_path(map_id: int) -> Path:
-    if map_id == VIDEO_ROUTES_MAP_ID:
-        return ROUTE_DIR / "video_routes.json"
+    if map_id in _GROUP_FILES:
+        return ROUTE_DIR / _GROUP_FILES[map_id]
     return ROUTE_DIR / f"world_{map_id}.json"
 
 
@@ -451,7 +453,8 @@ def get_world_surfaces(map_id: int) -> dict:
         "mapID": map_id,
         "name": _WORLD_NAMES.get(map_id, f"World {map_id}"),
         "projection": proj["mode"],
-        "disconnected_routes": map_id == VIDEO_ROUTES_MAP_ID,
+        "disconnected_routes": map_id in _GROUP_FILES,
+        "satellite_routes": map_id == VIDEO_ROUTES_MAP_ID,
         "background": proj["background"],
         "bounds": proj["bounds"],
         "meters_per_plot_x": meters_per_plot_x,

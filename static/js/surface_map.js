@@ -164,7 +164,7 @@ async function loadRoute(hash, fromPicker = false) {
         else renderBase();
         setStatus('');
         updateUrl();
-        if (world.disconnected_routes) await showSatellite(data);
+        if (world.satellite_routes) await showSatellite(data);
         return true;
     } catch (e) {
         if (request === state.routeRequest) setStatus(e.message, true);
@@ -277,7 +277,7 @@ async function showSatellite(route) {
     try {
         const maps = await loadGoogleMaps(key);
         if (state.route !== route || request !== state.routeRequest ||
-            !state.world?.disconnected_routes) return;
+            !state.world?.satellite_routes) return;
         if (googleMapsAuthFailed) throw new Error('Google Maps authorization failed.');
         const element = document.getElementById('satellite-map');
         element.hidden = false;
@@ -577,7 +577,8 @@ function renderRouteDetail(d) {
     document.getElementById('rd-name').textContent = d.name;
     const startStatus = document.getElementById('rd-start-status');
     startStatus.hidden = !d.start_geometry_status;
-    startStatus.textContent = d.start_geometry_status === 'missing_leadin'
+    startStatus.textContent = d.start_geometry_status === 'portal_spline'
+        ? 'Native portal ascent (100%)' : d.start_geometry_status === 'missing_leadin'
         ? 'Start geometry unavailable' : d.route_mode === 'free_ride' ? 'Spawn-range midpoint' : 'Native race approach';
     startStatus.title = d.start_position_source || '';
 
