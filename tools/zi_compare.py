@@ -76,6 +76,8 @@ def load_wheels_csv():
                 return float(r[i])
             except (ValueError, IndexError):
                 return None
+        if num(6) != 300:
+            continue
         out.append({"wheel": r[1].strip(), "flat_gap": num(8), "climb_gap": num(10)})
     return out
 

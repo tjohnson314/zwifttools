@@ -132,6 +132,27 @@ not the main game datasets. Historical measurement JSON remains available.
 After changing bike datasets, refresh Sauce bundles with
 `python tools\build_power_breakdown_data.py` (also refreshes road-style bundles).
 
+### Zwift Insider test CSVs
+
+`zwiftdata/zi_sheet.csv` and `zwiftdata/zi_wheels.csv` were refreshed on
+2026-11-20 from the Frames and Wheels tabs of the
+[public Zwift Insider speed-test spreadsheet](https://docs.google.com/spreadsheets/d/1S0pTN_hBMddX0GhCqSOd6fPlIJeWtw0xr6Y1M6PzNJY/edit).
+They retain the full exports, including all test powers, frame types, missing
+values and duplicate source rows. Only the existing make-name normalization
+in `tools/cache_zi_sheet.py` is applied. The wheel comparison selects Zwift
+Carbon tests at 300W; the CSV also contains 150W, TT and gravel tests.
+
+To refresh these snapshots:
+
+```powershell
+$sheet = "https://docs.google.com/spreadsheets/d/1S0pTN_hBMddX0GhCqSOd6fPlIJeWtw0xr6Y1M6PzNJY"
+Invoke-WebRequest "$sheet/export?format=csv&gid=173681512" -OutFile "$env:TEMP\zi_sheet.csv"
+Invoke-WebRequest "$sheet/export?format=csv&gid=1966597556" -OutFile "$env:TEMP\zi_Wheels.csv"
+python tools\cache_zi_sheet.py
+```
+
+Refreshing these CSVs does not regenerate fitted statistics or audit outputs.
+
 ---
 
 ## Authentication
