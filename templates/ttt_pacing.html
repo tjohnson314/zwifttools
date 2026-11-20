@@ -1,3 +1,4 @@
+{% from '_bike_stats.html' import bike_stats %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -9,7 +10,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="/static/css/tt_pacing.css">
     <link rel="stylesheet" href="/static/css/ttt_pacing.css">
-    <link rel="stylesheet" href="/static/css/bike_selector.css">
+    <link rel="stylesheet" href="/static/css/bike_selector.css?v=4">
 </head>
 <body>
 <div class="container">
@@ -116,16 +117,7 @@
                 <label for="upgradeLevel">Upgrade Level</label>
                 <select id="upgradeLevel"><option value="0">Level 0 (Stock)</option></select>
             </div>
-            <div class="bike-summary" id="bikeStats">
-                <div class="bike-summary-row">
-                    <span class="bike-summary-label">Total weight</span>
-                    <span class="bike-summary-value weight" id="bikeWeightStat">—</span>
-                </div>
-                <div class="bike-summary-row">
-                    <span class="bike-summary-label">Total CdA bias</span>
-                    <span class="bike-summary-value cda" id="bikeCda">—</span>
-                </div>
-            </div>
+            {{ bike_stats('bike') }}
         </div>
     </div>
 
@@ -281,7 +273,7 @@
     <div class="error-toast" id="errorToast" style="display:none;"></div>
 </div>
 
-<script src="/static/js/bike_selector.js?v=2"></script>
-<script src="/static/js/ttt_pacing.js"></script>
+<script src="/static/js/bike_selector.js?v=4"></script>
+<script src="/static/js/ttt_pacing.js?v=4"></script>
 </body>
 </html>

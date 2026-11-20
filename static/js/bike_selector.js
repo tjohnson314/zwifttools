@@ -40,9 +40,8 @@ function _loadBikeData() {
  * Reusable single-bike configuration selector.
  *
  * Manages a frame / wheels / upgrade-level trio of <select> elements plus a
- * "Total weight" + "Total CdA bias" summary, backed by the same /api/frames,
- * /api/wheels and /api/bike_stats endpoints the bike-comparison page uses — so
- * both pages present bike choices identically.
+ * shared bike_stats template summary (weight, CdA bias and Crr change), backed
+ * by /api/frames, /api/wheels and /api/bike_stats.
  *
  * The class owns no persistence; callers restore state via setConfig() and read
  * it via getConfig(), and are notified of any change through the onChange hook.
@@ -53,8 +52,7 @@ class BikeSelector {
      * @param {string}   opts.frameSelect  id of the frame <select>
      * @param {string}   opts.wheelSelect  id of the wheels <select>
      * @param {string}   opts.levelSelect  id of the upgrade-level <select>
-     * @param {string}   opts.weightOut    id of the Total-weight value element
-     * @param {string}   opts.cdaOut       id of the Total-CdA-bias value element
+     * @param {string}   opts.statsPrefix  prefix passed to the bike_stats template macro
      * @param {Function} [opts.onChange]   called (with this) after every change
      * @param {Function} [opts.formatWeight] kg -> display string
      * @param {Function} [opts.formatCda]  m² -> display string
@@ -64,8 +62,9 @@ class BikeSelector {
         this.frameSel  = document.getElementById(opts.frameSelect);
         this.wheelSel  = document.getElementById(opts.wheelSelect);
         this.levelSel  = document.getElementById(opts.levelSelect);
-        this.weightOut = document.getElementById(opts.weightOut);
-        this.cdaOut    = document.getElementById(opts.cdaOut);
+        this.weightOut = document.getElementById(`${opts.statsPrefix}Weight`);
+        this.cdaOut    = document.getElementById(`${opts.statsPrefix}Cda`);
+        this.crrOut    = document.getElementById(`${opts.statsPrefix}Crr`);
         this.onChange  = opts.onChange || (() => {});
         this.formatWeight = opts.formatWeight || ((kg) => `${kg.toFixed(2)} kg`);
         this.formatCda = opts.formatCda ||
@@ -74,7 +73,7 @@ class BikeSelector {
 
         this.frames = [];
         this.wheels = [];
-        this._stats = null;    // { weightKg, cdaBias } once loaded
+        this._stats = null;    // { weightKg, cdaBias, crrReduction } once loaded
         this._ready = false;
         this._topPerformers = null;
         this._onlyTopPerformers = false;
@@ -146,6 +145,12 @@ class BikeSelector {
 
     isReady() { return this._ready; }
 
+    static formatCrrChange(reduction) {
+        if (reduction == null) return 'N/A';
+        const change = -reduction;
+        return `${change > 0 ? '+' : ''}${change.toFixed(4)}`;
+    }
+
     // Re-render the cached stats (e.g. after a unit toggle) without refetching.
     renderStats() {
         if (!this._stats) { this._renderBlank(); return; }
@@ -156,6 +161,9 @@ class BikeSelector {
         if (this.cdaOut) {
             this.cdaOut.textContent = this._stats.cdaBias != null
                 ? this.formatCda(this._stats.cdaBias) : 'N/A';
+        }
+        if (this.crrOut) {
+            this.crrOut.textContent = BikeSelector.formatCrrChange(this._stats.crrReduction);
         }
     }
 
@@ -296,7 +304,7 @@ class BikeSelector {
                 const s = await resp.json();
                 // Tolerate a lagging backend that still sends weight_g (a kg value).
                 const weightKg = s.weight_kg != null ? s.weight_kg : s.weight_g;
-                this._stats = { weightKg, cdaBias: s.cda_bias };
+                this._stats = { weightKg, cdaBias: s.cda_bias, crrReduction: s.crr_reduction };
                 this._ready = true;
                 this.renderStats();
             } else {
@@ -316,5 +324,6 @@ class BikeSelector {
     _renderBlank() {
         if (this.weightOut) this.weightOut.textContent = '—';
         if (this.cdaOut) this.cdaOut.textContent = '—';
+        if (this.crrOut) this.crrOut.textContent = '—';
     }
 }

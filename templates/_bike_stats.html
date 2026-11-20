@@ -1,0 +1,16 @@
+{% macro bike_stats(prefix) -%}
+<div class="bike-summary" id="{{ prefix }}Stats">
+    <div class="bike-summary-row">
+        <span class="bike-summary-label">Total weight</span>
+        <span class="bike-summary-value weight" id="{{ prefix }}Weight">&mdash;</span>
+    </div>
+    <div class="bike-summary-row">
+        <span class="bike-summary-label">Total CdA bias</span>
+        <span class="bike-summary-value cda" id="{{ prefix }}Cda">&mdash;</span>
+    </div>
+    <div class="bike-summary-row">
+        <span class="bike-summary-label" title="Change in Crr from stock, applied to every surface. Negative means less rolling resistance.">Rolling resistance change (Crr)</span>
+        <span class="bike-summary-value" id="{{ prefix }}Crr">&mdash;</span>
+    </div>
+</div>
+{%- endmacro %}

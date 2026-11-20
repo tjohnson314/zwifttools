@@ -1,3 +1,4 @@
+{% from '_bike_stats.html' import bike_stats %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,7 +7,7 @@
     <link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
     <title>Workout Route Check - Zwift Tools</title>
     <link rel="stylesheet" href="/static/css/tt_pacing.css">
-    <link rel="stylesheet" href="/static/css/bike_selector.css">
+    <link rel="stylesheet" href="/static/css/bike_selector.css?v=4">
     <link rel="stylesheet" href="/static/css/workout_route.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -69,16 +70,7 @@
                     <label for="upgradeLevel">Upgrade level</label>
                     <select id="upgradeLevel"><option value="0">Stock</option></select>
                 </div>
-                <div class="bike-summary">
-                    <div class="bike-summary-row">
-                        <span class="bike-summary-label">Total weight</span>
-                        <span id="bikeWeight" class="bike-summary-value weight">-</span>
-                    </div>
-                    <div class="bike-summary-row">
-                        <span class="bike-summary-label">Total CdA bias</span>
-                        <span id="bikeCda" class="bike-summary-value cda">-</span>
-                    </div>
-                </div>
+                {{ bike_stats('bike') }}
             </section>
         </div>
         <section class="panel workout-panel">
@@ -125,7 +117,7 @@
         <div class="chart"><canvas id="progressChart" role="img" aria-label="Workout power and predicted distance over time"></canvas></div>
     </section>
 </main>
-<script src="/static/js/bike_selector.js?v=2"></script>
-<script src="/static/js/workout_route.js"></script>
+<script src="/static/js/bike_selector.js?v=4"></script>
+<script src="/static/js/workout_route.js?v=4"></script>
 </body>
 </html>

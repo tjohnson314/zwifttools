@@ -75,8 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
         frameSelect: 'frameSelect',
         wheelSelect: 'wheelSelect',
         levelSelect: 'upgradeLevel',
-        weightOut: 'bikeWeightStat',
-        cdaOut: 'bikeCda',
+        statsPrefix: 'bike',
         framePlaceholder: 'Select a frame…',
         onChange: () => { updatePlanButton(); saveSettings(); },
     });

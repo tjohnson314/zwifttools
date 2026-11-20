@@ -19,7 +19,7 @@ function selectElement() {
     };
 }
 
-function selectorContext({ failTopPerformers = false, framePlaceholder } = {}) {
+function selectorContext({ failTopPerformers = false, framePlaceholder, crrReduction = .0003 } = {}) {
     const frames = [
         { id: 'road', name: 'Road', frameType: 'Standard' },
         { id: 'tt', name: 'TT', frameType: 'TT' },
@@ -35,7 +35,8 @@ function selectorContext({ failTopPerformers = false, framePlaceholder } = {}) {
         { id: 'mtb1', name: 'MTB 1', fitsFrame: 'MTB' },
         { id: 'halo1', name: 'Halo 1', fitsFrame: 'Standard', exclusiveFrameId: 'halo' },
     ];
-    const elements = { frame: selectElement(), wheels: selectElement(), level: selectElement(), weight: {}, cda: {} };
+    const elements = { frame: selectElement(), wheels: selectElement(), level: selectElement(),
+        bikeWeight: {}, bikeCda: {}, bikeCrr: {} };
     const requests = [];
     const topData = {
         '/api/top_performers': {
@@ -64,13 +65,16 @@ function selectorContext({ failTopPerformers = false, framePlaceholder } = {}) {
             }
             if (url === '/api/frames') return { ok: true, json: async () => frames };
             if (url === '/api/wheels') return { ok: true, json: async () => wheels };
-            return { ok: true, json: async () => ({ weight_kg: 8, cda_bias: -0.01 }) };
+            const level = Number(new URL(url, 'http://localhost').searchParams.get('upgrade_level'));
+            return { ok: true, json: async () => ({
+                weight_kg: 8, cda_bias: -0.01, crr_reduction: level >= 3 ? crrReduction : 0,
+            }) };
         },
     });
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../static/js/bike_selector.js'), 'utf8'), context);
     const BikeSelector = vm.runInContext('BikeSelector', context);
     const selector = new BikeSelector({ frameSelect: 'frame', wheelSelect: 'wheels',
-        levelSelect: 'level', weightOut: 'weight', cdaOut: 'cda', framePlaceholder });
+        levelSelect: 'level', statsPrefix: 'bike', framePlaceholder });
     selector.frames = frames;
     selector.wheels = wheels;
     selector._populateFrames();
@@ -110,6 +114,39 @@ test('shared selector keeps owner-only fixed wheels out of other frames', async 
     assert.equal(selector.getConfig().wheelId, 'halo1');
     await selector.setConfig({ frameId: 'road', wheelId: 'halo1' });
     assert.equal(selector.getConfig().wheelId, 'road1');
+});
+
+test('rolling-resistance change follows upgrade levels and clears with an empty selection', async () => {
+    const { selector, elements } = selectorContext();
+    for (const [level, expected] of [[2, '0.0000'], [3, '-0.0003'], [5, '-0.0003'], [0, '0.0000']]) {
+        await selector.setConfig({ frameId: 'road', level });
+        assert.equal(elements.bikeCrr.textContent, expected);
+        selector.renderStats();
+        assert.equal(elements.bikeCrr.textContent, expected);
+    }
+    elements.frame.value = '';
+    await selector._updateStats();
+    assert.equal(elements.bikeCrr.textContent, '—');
+});
+
+test('rolling-resistance change preserves signed raw values and missing data', async () => {
+    for (const [crrReduction, expected] of [[-.0003, '+0.0003'], [.04, '-0.0400'], [null, 'N/A']]) {
+        const { selector, elements } = selectorContext({ crrReduction });
+        await selector.setConfig({ frameId: 'road', level: 3 });
+        assert.equal(elements.bikeCrr.textContent, expected);
+    }
+});
+
+test('changing summary weight units retains the Crr change without refetching', async () => {
+    const { selector, elements, requests } = selectorContext();
+    await selector.setConfig({ frameId: 'road', level: 3 });
+    const requestCount = requests.length;
+    selector.formatWeight = kg => `${(kg * 2.20462).toFixed(2)} lb`;
+    selector.renderStats();
+
+    assert.equal(elements.bikeWeight.textContent, '17.64 lb');
+    assert.equal(elements.bikeCrr.textContent, '-0.0003');
+    assert.equal(requests.length, requestCount);
 });
 
 test('filter uses the union of both full lists and restores the catalogue when unchecked', async () => {
@@ -188,15 +225,21 @@ test('filter reports loading errors without changing the selected bike, and perm
     assert.equal(requests.filter(url => url === '/api/top_performers').length, 2);
 });
 
-test('instances share top-performer requests but keep independent filters', async () => {
+test('instances share top-performer requests but keep independent filters and summaries', async () => {
     const { selector, elements, requests, toggleFilter, BikeSelector } = selectorContext();
     await toggleFilter(true);
     elements.frame2 = selectElement();
     elements.wheels2 = selectElement();
     elements.level2 = selectElement();
+    elements.otherWeight = {};
+    elements.otherCda = {};
+    elements.otherCrr = {};
     const second = new BikeSelector({ frameSelect: 'frame2', wheelSelect: 'wheels2',
-        levelSelect: 'level2', weightOut: 'weight', cdaOut: 'cda' });
+        levelSelect: 'level2', statsPrefix: 'other' });
     await second.load();
+    await selector.setConfig({ frameId: 'road', level: 3 });
+    assert.equal(elements.bikeCrr.textContent, '-0.0003');
+    assert.equal(elements.otherCrr.textContent, '0.0000');
     assert.equal(second.topPerformersCheckbox.checked, false);
     assert.ok(elements.frame2.options.some(o => o.value === 'gravel'));
     assert.ok(!elements.frame.options.some(o => o.value === 'gravel'));

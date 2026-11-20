@@ -344,7 +344,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     element('uploadBtn').addEventListener('click', uploadWorkout);
     bikeSelector = new BikeSelector({
         frameSelect: 'frameSelect', wheelSelect: 'wheelSelect', levelSelect: 'upgradeLevel',
-        weightOut: 'bikeWeight', cdaOut: 'bikeCda', framePlaceholder: 'Choose a frame',
+        statsPrefix: 'bike', framePlaceholder: 'Choose a frame',
         onChange: () => { invalidateEstimate(); saveSettings(); },
     });
     const outcomes = await Promise.allSettled([

@@ -106,6 +106,48 @@ def test_wheel_api_exposes_category_filters_and_stats_reject_invalid_pairs(monke
     assert client.get(f'/api/bike_stats?frame_id={gravel_frame}&wheel_id={gravel["id"]}').status_code == 200
 
 
+@pytest.mark.parametrize("route,prefixes", [
+    ("/bike-comparison", ["actual", "alt"]),
+    ("/tt-pacing", ["bike"]),
+    ("/ttt-pacing", ["bike"]),
+    ("/workout-route", ["bike"]),
+])
+def test_bike_pages_render_all_shared_summary_fields(route, prefixes):
+    import app as app_module
+
+    response = app_module.app.test_client().get(route)
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert html.count('class="bike-summary"') == len(prefixes)
+    for prefix in prefixes:
+        fields = [f'id="{prefix}{suffix}"' for suffix in ("Weight", "Cda", "Crr")]
+        assert all(html.count(field) == 1 for field in fields)
+        assert [html.index(field) for field in fields] == sorted(html.index(field) for field in fields)
+
+
+@pytest.mark.parametrize("level,expected", [(2, 0), (3, .0003)])
+def test_best_bike_results_include_source_resistance_reduction(monkeypatch, db, level, expected):
+    import app as app_module
+
+    key = ("Zwift_Carbon", "")
+    monkeypatch.setattr(app_module, "get_db", lambda: db)
+    monkeypatch.setattr(app_module, "get_bike_stats", db.get_bike_stats)
+    monkeypatch.setattr(app_module, "_filter_bike_combos", lambda *args: [(key, db.bikes[key])])
+    response = app_module.app.test_client().post("/api/best_bikes", json={
+        "upgrade_level": level,
+        "actual_bike": {"frame_id": key[0], "wheel_id": key[1], "upgrade_level": level},
+        "telemetry": {
+            "time_sec": list(range(32)), "power_watts": [250.] * 32,
+            "speed_mps": [10.] * 32, "distance_km": [index * .01 for index in range(32)],
+        },
+    })
+
+    assert response.status_code == 200
+    results = response.get_json()["best_bikes"]
+    assert len(results) == 1
+    assert results[0]["crr_reduction"] == expected
+
+
 @pytest.mark.parametrize("endpoint", ["/api/tt_pacing_plan", "/api/ttt_pacing_plan"])
 @pytest.mark.parametrize("frame_type,wheel_type", [("Standard", "Gravel"), ("Gravel", "Standard,TT")])
 def test_planner_apis_reject_incompatible_wheels(monkeypatch, db, endpoint, frame_type, wheel_type):

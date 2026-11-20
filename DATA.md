@@ -995,6 +995,14 @@ IDs are errors; the server account is never substituted. Includes `id` and `name
 
 **Returns:** `{ frame_id, frame_name, wheel_id, wheel_name, upgrade_level, cda, weight_kg, crr_reduction, ... }`
 
+Bike Comparison, TT Pacing, TTT Pacing and Workout Route use the shared
+`templates/_bike_stats.html` macro, `BikeSelector` rendering and
+`static/css/bike_selector.css` styling. Callers pass the same `statsPrefix` to the
+macro and selector, so every summary shows weight, CdA bias and rolling-resistance
+change. The best-bike results table uses the same Crr formatter.
+This is `-crr_reduction`, a dimensionless Crr change from stock
+(for example, `-0.0003` at level 3), not a surface-specific coefficient or percentage.
+
 ### `POST /api/fetch_activity`
 
 **Purpose:** Fetch full telemetry for an activity to use in bike comparison.

@@ -374,52 +374,6 @@ h1 {
     border-color: #f7931e;
 }
 
-.stats-box {
-    background: rgba(0,0,0,0.3);
-    border-radius: 8px;
-    padding: 16px;
-    margin-top: 16px;
-}
-
-.stats-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 8px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
-}
-
-.stats-row:last-child {
-    border-bottom: none;
-}
-
-.stats-row.stats-total {
-    border-top: 2px solid rgba(255,255,255,0.25);
-    margin-top: 4px;
-    padding-top: 12px;
-}
-
-.stats-row.stats-total .stats-label {
-    color: #ccc;
-}
-
-.stats-label {
-    color: #888;
-}
-
-.stats-value {
-    font-weight: 600;
-    font-family: monospace;
-    font-size: 1.1rem;
-}
-
-.stats-value.cd {
-    color: #4fc3f7;
-}
-
-.stats-value.weight {
-    color: #81c784;
-}
-
 /* Comparison Arrows */
 .comparison-arrows {
     display: flex;

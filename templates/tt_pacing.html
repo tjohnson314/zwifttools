@@ -1,3 +1,4 @@
+{% from '_bike_stats.html' import bike_stats %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,7 +9,7 @@
     <title>TT Pacing Planner - Zwift Tools</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="/static/css/tt_pacing.css">
-    <link rel="stylesheet" href="/static/css/bike_selector.css">
+    <link rel="stylesheet" href="/static/css/bike_selector.css?v=4">
 </head>
 <body>
 <div class="container">
@@ -160,16 +161,7 @@
                 <p class="field-hint">Constant aero-drag reduction from sitting in a draft (max −40%).</p>
             </div>
 
-            <div class="bike-summary" id="bikeStats">
-                <div class="bike-summary-row">
-                    <span class="bike-summary-label">Total weight</span>
-                    <span class="bike-summary-value weight" id="bikeWeightStat">—</span>
-                </div>
-                <div class="bike-summary-row">
-                    <span class="bike-summary-label">Total CdA bias</span>
-                    <span class="bike-summary-value cda" id="bikeCda">—</span>
-                </div>
-            </div>
+            {{ bike_stats('bike') }}
         </div>
     </div>
 
@@ -282,7 +274,7 @@
 
 </div>
 
-<script src="/static/js/bike_selector.js?v=2"></script>
-<script src="/static/js/tt_pacing.js"></script>
+<script src="/static/js/bike_selector.js?v=4"></script>
+<script src="/static/js/tt_pacing.js?v=4"></script>
 </body>
 </html>

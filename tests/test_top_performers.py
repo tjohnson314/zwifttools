@@ -14,6 +14,9 @@ def test_combined_top_performers_page(query):
     assert 'role="group" aria-labelledby="bikeTypeLabel"' in html
     assert 'src="/static/js/top_performers.js"' in html
     assert "TT-specific" in html
+    assert "frame_zi_match" not in html
+    assert "speed tests" not in html
+    assert "field-test" not in html
 
 
 def test_legacy_tt_page_redirects_to_combined_tt_mode():
@@ -51,3 +54,9 @@ def test_source_upgrade_definitions_are_downloadable():
     assert data["config"]["levelup_configs"]
     assert data["levelup_configs"]
     assert all(len(definition["levelups"]) == 5 for definition in data["levelup_configs"].values())
+
+
+def test_internal_zi_mapping_is_not_downloadable():
+    response = app.test_client().get("/data/frame_zi_match.json")
+
+    assert response.status_code == 404

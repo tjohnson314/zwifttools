@@ -189,8 +189,7 @@
         <p>
             Each frame and wheel in Zwift carries an intrinsic <em>CdA bias</em> (an aerodynamic drag
             offset applied to the rider's frontal-area model) and a mass. Those values are extracted
-            directly from the game's own data files, so the chart uses packaged component stats
-            rather than field-test estimates.
+            directly from the game's own data files, so the chart uses packaged component stats.
         </p>
         <ul>
             <li>
@@ -233,15 +232,11 @@
             equipment differences.
         </p>
 
-        <h3>Upgrade deltas &amp; validation</h3>
+        <h3>Upgrade effects</h3>
         <p>
-            The plotted upgrades use packaged definitions, not fitted estimates. Rolling-resistance
+            The plotted upgrades use packaged definitions. Rolling-resistance
             rewards change Crr rather than CdA or mass, so they do not move points on these two axes.
             Packaged definitions are not proof of server-side behavior.
-            ZwiftInsider's published speed tests remain available for manual validation: a
-            2-equation solver back-solves CdA and mass from flat and climb speeds while accounting
-            for source-defined resistance reductions. The frame-to-test mapping lives in
-            <code>frame_zi_match.json</code>.
         </p>
 
         <h3>Frame &amp; wheel selection</h3>
@@ -260,10 +255,6 @@
             <a class="dl-card" href="/data/game_wheels.json" download>
                 <div class="fname">game_wheels.json</div>
                 <div class="fdesc">Per-wheelset road &amp; TT CdA bias and mass.</div>
-            </a>
-            <a class="dl-card" href="/data/frame_zi_match.json" download>
-                <div class="fname">frame_zi_match.json</div>
-                <div class="fdesc">Mapping from game frames to ZwiftInsider speed-test rows.</div>
             </a>
             <a class="dl-card" href="/data/game_upgrades.json" download>
                 <div class="fname">game_upgrades.json</div>

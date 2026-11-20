@@ -2178,7 +2178,6 @@ _DOWNLOADABLE_DATA = {
     'game_frames.json',
     'game_wheels.json',
     'game_upgrades.json',
-    'frame_zi_match.json',
 }
 
 
@@ -3050,6 +3049,7 @@ def find_best_bikes():
                 'frame_cda_bias': round(setup.frame_cda_bias, 4),
                 'wheel_weight_g': round(setup.wheel_weight_g),
                 'wheel_cda_bias': round(setup.wheel_cda_bias, 4),
+                'crr_reduction': setup.crr_reduction,
                 'np': round(np_value, 1),
                 'avg_power': round(avg_power, 1),
                 'total_kj': round(total_kj, 1),

@@ -90,8 +90,7 @@ test('workout route reuses TT planner styles and control structure', () => {
     const html = fs.readFileSync(path.join(__dirname, '../templates/workout_route.html'), 'utf8');
     assert.ok(html.includes('href="/static/css/tt_pacing.css"'));
     assert.ok(!html.includes('href="/static/css/workout_analysis.css"'));
-    for (const className of ['panels', 'form-group form-check', 'bike-summary', 'bike-summary-row',
-        'bike-summary-value weight', 'bike-summary-value cda', 'btn-simulate']) {
+    for (const className of ['panels', 'form-group form-check', 'btn-simulate']) {
         assert.ok(html.includes(`class="${className}"`), `Missing TT planner style: ${className}`);
     }
 });

@@ -1,3 +1,4 @@
+{% from '_bike_stats.html' import bike_stats %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,7 +9,7 @@
     <title>Bike Comparison - Zwift Activity Analysis</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="/static/css/bike_comparison.css">
-    <link rel="stylesheet" href="/static/css/bike_selector.css">
+    <link rel="stylesheet" href="/static/css/bike_selector.css?v=4">
 </head>
 <body>
     <div class="container">
@@ -108,16 +109,7 @@
                     </select>
                 </div>
                 
-                <div class="stats-box" id="actualStats">
-                    <div class="stats-row stats-total">
-                        <span class="stats-label"><strong>Total weight</strong></span>
-                        <span class="stats-value weight" id="actualWeight">-</span>
-                    </div>
-                    <div class="stats-row stats-total">
-                        <span class="stats-label"><strong>Total CdA bias</strong></span>
-                        <span class="stats-value cd" id="actualCda">-</span>
-                    </div>
-                </div>
+                {{ bike_stats('actual') }}
             </div>
             
             <!-- Comparison Arrows -->
@@ -156,16 +148,7 @@
                     </select>
                 </div>
                 
-                <div class="stats-box" id="altStats">
-                    <div class="stats-row stats-total">
-                        <span class="stats-label"><strong>Total weight</strong></span>
-                        <span class="stats-value weight" id="altWeight">-</span>
-                    </div>
-                    <div class="stats-row stats-total">
-                        <span class="stats-label"><strong>Total CdA bias</strong></span>
-                        <span class="stats-value cd" id="altCda">-</span>
-                    </div>
-                </div>
+                {{ bike_stats('alt') }}
             </div>
         </div>
         
@@ -341,6 +324,7 @@
                             <th>Bike Setup</th>
                             <th title="Total CdA bias (frame + wheels), m². Lower is more aero.">CdA bias</th>
                             <th>Weight</th>
+                            <th title="Change in rolling resistance coefficient from stock. Negative means less rolling resistance.">Crr change</th>
                             <th title="Total Drops to buy this frame plus wheelset. * marks special/event unlocks.">Total Drops</th>
                             <th>NP</th>
                             <th>vs Actual</th>
@@ -359,7 +343,7 @@
 
     {% include 'bike_comparison_faq.html' %}
     
-    <script src="/static/js/bike_selector.js?v=2"></script>
+    <script src="/static/js/bike_selector.js?v=4"></script>
     <script>
         // Global state
         let frames = [];
@@ -407,12 +391,12 @@
 
             actualBike = new BikeSelector({
                 frameSelect: 'actualFrame', wheelSelect: 'actualWheels', levelSelect: 'actualLevel',
-                weightOut: 'actualWeight', cdaOut: 'actualCda',
+                statsPrefix: 'actual',
                 onChange: () => onBikeChanged('actual'),
             });
             altBike = new BikeSelector({
                 frameSelect: 'altFrame', wheelSelect: 'altWheels', levelSelect: 'altLevel',
-                weightOut: 'altWeight', cdaOut: 'altCda',
+                statsPrefix: 'alt',
                 onChange: () => onBikeChanged('alt'),
             });
             await actualBike.load();
@@ -1168,6 +1152,7 @@
                             <td style="text-align: left;">${bike.name}${actualTag}</td>
                             <td>${bike.cda_bias >= 0 ? '+' : ''}${bike.cda_bias.toFixed(4)}</td>
                             <td>${bike.weight_kg.toFixed(2)} kg</td>
+                            <td>${BikeSelector.formatCrrChange(bike.crr_reduction)}</td>
                             <td title="${bike.non_shop ? 'Special/event unlock' : ''}">${dropsStr}</td>
                             <td style="font-weight: bold;">${bike.np} W</td>
                             <td style="color: ${diffColor}; font-weight: bold;">${diffStr} W</td>
