@@ -1,11 +1,21 @@
-.bike-selector-filter label {
+.bike-selector-filter label,
+.bike-selector-accessories label {
     display: flex;
     align-items: center;
     gap: 8px;
     cursor: pointer;
 }
 
-.bike-selector-filter input[type="checkbox"] {
+.bike-selector-accessories label {
+    flex-wrap: wrap;
+}
+
+.bike-selector-accessories a {
+    color: #4fc3f7;
+}
+
+.bike-selector-filter input[type="checkbox"],
+.bike-selector-accessories input[type="checkbox"] {
     appearance: auto;
     accent-color: #f7931e;
     flex: none;

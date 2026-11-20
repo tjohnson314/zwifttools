@@ -299,12 +299,13 @@ test('input and bike changes are saved automatically and survive another page lo
     await first.initialize();
     first.element('ftp').value = '9999';
     for (const callback of first.element('estimateForm').listeners.input) callback();
-    await vm.runInContext("bikeSelector.setConfig({ frameId: 'changed-bike', level: 5 });", first.context);
+    await vm.runInContext("bikeSelector.setConfig({ frameId: 'changed-bike', level: 5, lightningAeroSocks: true });", first.context);
     const next = pageContext(catalogResponse, storage);
     await next.initialize();
     assert.equal(next.element('ftp').value, '9999');
     assert.equal(next.context.buildRequest().frame_id, 'changed-bike');
     assert.equal(next.context.buildRequest().upgrade_level, 5);
+    assert.equal(next.context.buildRequest().lightning_aero_socks, true);
 });
 
 test('custom workout contents and results are never cached and require re-upload after reload', async () => {

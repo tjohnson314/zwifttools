@@ -265,7 +265,7 @@ for (const mode of ['route', 'segment']) {
             planMode = '${mode}';
             selectedRoute = { id: '1:123', name: 'Course', world: 'WATOPIA', is_loop: true };
             laps = 3;
-            bikeSelector = { getConfig: () => ({frameId: 'bike', level: 0}), isReady: () => true };
+            bikeSelector = { getConfig: () => ({frameId: 'bike', level: 0, lightningAeroSocks: true}), isReady: () => true };
             document.getElementById('riderWeight').value = '75';
             document.getElementById('riderHeight').value = '180';
             document.getElementById('avgPower').value = '250';
@@ -274,6 +274,7 @@ for (const mode of ['route', 'segment']) {
             displayResults = () => {};
         `, context);
         await context.requestPlan();
+        assert.equal(body.lightning_aero_socks, true);
         if (mode === 'route') {
             assert.equal(body.segment_id, undefined);
             assert.equal(body.start_distance_km, 2);

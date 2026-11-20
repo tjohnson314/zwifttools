@@ -9,7 +9,7 @@ function selectElement() {
     return {
         options: [], disabled: false,
         addEventListener() {},
-        closest() { return { before() {} }; },
+        closest() { return { before() {}, after() {} }; },
         set innerHTML(html) {
             this.options = [...html.matchAll(/<option value="([^"]*)">/g)].map(match => ({ value: match[1] }));
             value = this.options[0]?.value || '';
@@ -65,9 +65,11 @@ function selectorContext({ failTopPerformers = false, framePlaceholder, crrReduc
             }
             if (url === '/api/frames') return { ok: true, json: async () => frames };
             if (url === '/api/wheels') return { ok: true, json: async () => wheels };
-            const level = Number(new URL(url, 'http://localhost').searchParams.get('upgrade_level'));
+            const params = new URL(url, 'http://localhost').searchParams;
+            const level = Number(params.get('upgrade_level'));
             return { ok: true, json: async () => ({
-                weight_kg: 8, cda_bias: -0.01, crr_reduction: level >= 3 ? crrReduction : 0,
+                weight_kg: 8, cda_bias: params.get('lightning_aero_socks') === 'true' ? -0.013 : -0.01,
+                crr_reduction: level >= 3 ? crrReduction : 0,
             }) };
         },
     });
@@ -94,6 +96,34 @@ test('shared selector limits wheels to the selected road, TT, gravel or MTB cate
         assert.ok(expected.includes(selector.getConfig().wheelId));
         assert.equal(selector.isReady(), true);
     }
+});
+
+test('aero socks default off, update stats on toggle, and survive equipment changes and copying', async () => {
+    const { selector, elements, requests, BikeSelector } = selectorContext();
+    assert.equal(selector.getConfig().lightningAeroSocks, false);
+    await selector.setConfig({ frameId: 'road', level: 3 });
+    assert.equal(elements.bikeCda.textContent, '-0.0100 m²');
+    selector.lightningAeroSocksCheckbox.checked = true;
+    await selector.lightningAeroSocksCheckbox.listeners.change();
+    assert.ok(requests.at(-1).endsWith('&lightning_aero_socks=true'));
+    assert.equal(elements.bikeCda.textContent, '-0.0130 m²');
+    assert.equal(elements.bikeWeight.textContent, '8.00 kg');
+    assert.equal(elements.bikeCrr.textContent, '-0.0003');
+    await selector.setConfig({ frameId: 'tt', level: 5 });
+    assert.equal(selector.getConfig().lightningAeroSocks, true);
+
+    elements.frame2 = selectElement();
+    elements.wheels2 = selectElement();
+    elements.level2 = selectElement();
+    const second = new BikeSelector({ frameSelect: 'frame2', wheelSelect: 'wheels2',
+        levelSelect: 'level2', statsPrefix: 'other' });
+    await second.load();
+    assert.equal(second.getConfig().lightningAeroSocks, false);
+    await second.setConfig(selector.getConfig());
+    assert.equal(second.getConfig().lightningAeroSocks, true);
+    await selector.setConfig({ lightningAeroSocks: false });
+    assert.equal(elements.bikeCda.textContent, '-0.0100 m²');
+    assert.equal(second.getConfig().lightningAeroSocks, true);
 });
 
 test('shared selector replaces incompatible saved wheels when switching frame categories', async () => {

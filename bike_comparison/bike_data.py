@@ -39,6 +39,9 @@ from .upgrades import load_upgrade_definitions, upgrade_effects
 # solo, pacing-planner, and draft-savings predictions.
 BASE_CDA = 0.3042
 
+# Humans/Accessories/Socks/Socks_LightningAero.xml in Accessories.wad.
+LIGHTNING_AERO_SOCKS_CDA_BIAS = -0.003
+
 # Map Zwift game frame "type" tokens to the frametype strings used by
 # shared.surface_lookup (which drives per-surface CRR selection).
 _GAME_TYPE_TO_FRAME_TYPE = {
@@ -110,12 +113,13 @@ class BikeSetup:
     weight_kg: float  # Total bike weight (frame + wheels) in kg
     frame_type: str  # 'Standard', 'TT', 'Gravel', 'MTB', 'Tron', 'Hand'
     # Authoritative game values (base / stage 0)
-    cda_bias: float = 0.0        # Total CdA bias (frame + wheels), m^2
+    cda_bias: float = 0.0        # Total CdA bias (frame + wheels + accessories), m^2
     frame_weight_g: float = 0.0
     frame_cda_bias: float = 0.0
     wheel_weight_g: float = 0.0
     wheel_cda_bias: float = 0.0
     crr_reduction: float = 0.0  # Subtracted from the selected surface's base Crr
+    lightning_aero_socks: bool = False
 
     def __str__(self):
         return f"{self.frame_name} + {self.wheel_name}"
@@ -295,7 +299,8 @@ class BikeDatabase:
                     'weight': [w for _, w in stages],
                 }
 
-    def get_bike_stats(self, frame_id: str, wheel_id: Optional[str] = None, upgrade_level: int = 0) -> Optional[BikeSetup]:
+    def get_bike_stats(self, frame_id: str, wheel_id: Optional[str] = None, upgrade_level: int = 0,
+                       lightning_aero_socks: bool = False) -> Optional[BikeSetup]:
         """Get complete bike stats for a frame/wheel combination (game data).
 
         Args:
@@ -303,6 +308,7 @@ class BikeDatabase:
             wheel_id: Wheel id, or None/'' for the frame's built-in wheels.
             upgrade_level: Frame upgrade stage 0-5. Applies packaged rewards;
                 wheels are unaffected (no wheel upgrade ladder).
+            lightning_aero_socks: Apply the accessory's -0.003 m^2 CdA bias.
         """
         frame = self.frames.get(frame_id)
         if not frame:
@@ -323,6 +329,7 @@ class BikeDatabase:
         cda, weight_kg = self._combo_cda_weight(frame, wheel, level)
         frame_bias, frame_wt = self._frame_stage(frame, level)
         wheel_bias = self._wheel_bias_for_frame(frame, wheel)
+        accessory_bias = LIGHTNING_AERO_SOCKS_CDA_BIAS if lightning_aero_socks else 0.0
 
         return BikeSetup(
             frame_id=frame_id,
@@ -330,15 +337,16 @@ class BikeDatabase:
             wheel_id=lookup_wheel_id,
             wheel_name=(f"{wheel['wheelmake']} {wheel['wheelmodel']}".strip() if wheel else '(Built-in wheels)'),
             upgrade_level=level,
-            cda=cda,
+            cda=cda + accessory_bias,
             weight_kg=weight_kg,
             frame_type=frame.get('frametype', 'Standard'),
-            cda_bias=frame_bias + wheel_bias,
+            cda_bias=frame_bias + wheel_bias + accessory_bias,
             frame_weight_g=frame_wt,
             frame_cda_bias=frame_bias,
             wheel_weight_g=(float(wheel.get('wheelweight_g') or 0.0) if wheel else 0.0),
             wheel_cda_bias=wheel_bias,
             crr_reduction=frame['framecrr_reduction_stages'][level],
+            lightning_aero_socks=lightning_aero_socks,
         )
 
     def list_frames(self, frame_type: Optional[str] = None) -> List[dict]:
@@ -369,9 +377,10 @@ def get_bike_database() -> BikeDatabase:
     return _db
 
 
-def get_bike_stats(frame_id: str, wheel_id: str, upgrade_level: int = 0) -> Optional[BikeSetup]:
+def get_bike_stats(frame_id: str, wheel_id: str, upgrade_level: int = 0,
+                   lightning_aero_socks: bool = False) -> Optional[BikeSetup]:
     """Convenience function to get bike stats."""
-    return get_bike_database().get_bike_stats(frame_id, wheel_id, upgrade_level)
+    return get_bike_database().get_bike_stats(frame_id, wheel_id, upgrade_level, lightning_aero_socks)
 
 
 if __name__ == "__main__":

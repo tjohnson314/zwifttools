@@ -9,7 +9,7 @@
     <title>Bike Comparison - Zwift Activity Analysis</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="/static/css/bike_comparison.css">
-    <link rel="stylesheet" href="/static/css/bike_selector.css?v=4">
+    <link rel="stylesheet" href="/static/css/bike_selector.css?v=5">
 </head>
 <body>
     <div class="container">
@@ -343,7 +343,7 @@
 
     {% include 'bike_comparison_faq.html' %}
     
-    <script src="/static/js/bike_selector.js?v=4"></script>
+    <script src="/static/js/bike_selector.js?v=5"></script>
     <script>
         // Global state
         let frames = [];
@@ -380,9 +380,11 @@
                 actualFrame: localStorage.getItem('zwift_actualFrame'),
                 actualWheels: localStorage.getItem('zwift_actualWheels'),
                 actualLevel: localStorage.getItem('zwift_actualLevel'),
+                actualLightningAeroSocks: localStorage.getItem('zwift_actualLightningAeroSocks'),
                 altFrame: localStorage.getItem('zwift_altFrame'),
                 altWheels: localStorage.getItem('zwift_altWheels'),
                 altLevel: localStorage.getItem('zwift_altLevel'),
+                altLightningAeroSocks: localStorage.getItem('zwift_altLightningAeroSocks'),
             };
 
             const data = await BikeSelector.loadData();
@@ -427,7 +429,7 @@
         function onBikeChanged(prefix) {
             persistBike(prefix);
             if (telemetryData) runComparison();
-            if (prefix === 'actual' && telemetryData &&
+            if (telemetryData &&
                 !document.getElementById('bestBikesContainer').classList.contains('hidden')) {
                 findBestBikes();
             }
@@ -438,6 +440,7 @@
             localStorage.setItem('zwift_' + prefix + 'Frame', cfg.frameId || '');
             localStorage.setItem('zwift_' + prefix + 'Wheels', cfg.wheelId || '');
             localStorage.setItem('zwift_' + prefix + 'Level', String(cfg.level));
+            localStorage.setItem('zwift_' + prefix + 'LightningAeroSocks', String(cfg.lightningAeroSocks));
         }
         
         function restoreBikeSelection(prefix, selector, savedBikes, defaultFrameId) {
@@ -451,6 +454,7 @@
                 frameId: frameId,
                 wheelId: savedWheels || undefined,
                 level: savedLevel != null ? parseInt(savedLevel, 10) : undefined,
+                lightningAeroSocks: savedBikes[prefix + 'LightningAeroSocks'] === 'true',
             });
         }
         
@@ -851,12 +855,14 @@
                 actual: {
                     frame_id: document.getElementById('actualFrame').value,
                     wheel_id: document.getElementById('actualWheels').value,
-                    upgrade_level: parseInt(document.getElementById('actualLevel').value)
+                    upgrade_level: parseInt(document.getElementById('actualLevel').value),
+                    lightning_aero_socks: actualBike.getConfig().lightningAeroSocks,
                 },
                 alternative: {
                     frame_id: document.getElementById('altFrame').value,
                     wheel_id: document.getElementById('altWheels').value,
-                    upgrade_level: parseInt(document.getElementById('altLevel').value)
+                    upgrade_level: parseInt(document.getElementById('altLevel').value),
+                    lightning_aero_socks: altBike.getConfig().lightningAeroSocks,
                 },
                 rider_weight: parseFloat(document.getElementById('actualRiderWeight').value),
                 rider_height: parseFloat(document.getElementById('actualRiderHeight').value),
@@ -1097,10 +1103,12 @@
                 use_pareto: document.getElementById('usePareto').checked,
                 max_rider_level: maxRiderLevelVal ? parseInt(maxRiderLevelVal) : null,
                 excluded_frames: [...excludedFrames],
+                lightning_aero_socks: altBike.getConfig().lightningAeroSocks,
                 actual_bike: {
                     frame_id: document.getElementById('actualFrame').value,
                     wheel_id: document.getElementById('actualWheels').value,
-                    upgrade_level: parseInt(document.getElementById('actualLevel').value)
+                    upgrade_level: parseInt(document.getElementById('actualLevel').value),
+                    lightning_aero_socks: actualBike.getConfig().lightningAeroSocks,
                 },
                 top_n: 10
             };

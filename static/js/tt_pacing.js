@@ -197,6 +197,7 @@ function saveSettings() {
         frameId: document.getElementById('frameSelect').value,
         wheelId: document.getElementById('wheelSelect').value,
         upgradeLevel: document.getElementById('upgradeLevel').value,
+        lightningAeroSocks: bikeSelector ? bikeSelector.getConfig().lightningAeroSocks : false,
         includeLeadin: document.getElementById('includeLeadin').checked,
         draftLevel: document.getElementById('draftLevel').value,
         laps: laps,
@@ -233,6 +234,7 @@ function restoreSelections(settings) {
         frameId: settings.frameId,
         wheelId: settings.wheelId,
         level: settings.upgradeLevel,
+        lightningAeroSocks: settings.lightningAeroSocks,
     });
     updatePlanButton();
 }
@@ -697,7 +699,7 @@ async function requestPlan({ numBuckets = null, isBuild = false } = {}) {
     const weightKg  = getWeightKg();
     const heightCm  = getHeightCm();
     const avgPowerW = parseFloat(document.getElementById('avgPower').value);
-    const { frameId, wheelId, level } = bikeSelector.getConfig();
+    const { frameId, wheelId, level, lightningAeroSocks } = bikeSelector.getConfig();
 
     if (!frameId || isNaN(weightKg) || isNaN(heightCm) || isNaN(avgPowerW) || avgPowerW <= 0) {
         showError('Please fill in all fields correctly.');
@@ -731,6 +733,7 @@ async function requestPlan({ numBuckets = null, isBuild = false } = {}) {
                 frame_id:        frameId,
                 wheel_id:        wheelId,
                 upgrade_level:   level,
+                lightning_aero_socks: lightningAeroSocks,
                 draft_fraction:  getDraftFraction(),
                 laps:            (!isSegment && selectedRoute.is_loop ? laps : 1),
                 start_distance_km: isSegment ? undefined : getStartDistanceKm(),

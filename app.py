@@ -893,7 +893,8 @@ def api_workout_route_plan():
                            if str(route['id']) == str(body.get('route_id'))), None)
         if route_info is None:
             raise ValueError("Choose a route with available geometry.")
-        bike = get_db().get_bike_stats(str(body.get('frame_id', '')), body.get('wheel_id') or None, level)
+        bike = get_db().get_bike_stats(str(body.get('frame_id', '')), body.get('wheel_id') or None, level,
+                                      body.get('lightning_aero_socks', False))
         if bike is None:
             raise ValueError("Unknown frame/wheel configuration.")
         route = load_route_profile(
@@ -2263,7 +2264,8 @@ def get_bike_stats_api():
     if not frame_id:
         return jsonify({'error': 'frame_id required'}), 400
     
-    setup = get_bike_stats(frame_id, wheel_id or None, upgrade_level)
+    setup = get_bike_stats(frame_id, wheel_id or None, upgrade_level,
+                           request.args.get('lightning_aero_socks', 'false') == 'true')
     if not setup:
         return jsonify({'error': 'Bike combo not found'}), 404
     
@@ -2659,13 +2661,15 @@ def compare_bikes():
     actual = get_bike_stats(
         data['actual']['frame_id'],
         data['actual'].get('wheel_id') or None,
-        data['actual'].get('upgrade_level', 0)
+        data['actual'].get('upgrade_level', 0),
+        data['actual'].get('lightning_aero_socks', False)
     )
     
     alternative = get_bike_stats(
         data['alternative']['frame_id'],
         data['alternative'].get('wheel_id') or None,
-        data['alternative'].get('upgrade_level', 0)
+        data['alternative'].get('upgrade_level', 0),
+        data['alternative'].get('lightning_aero_socks', False)
     )
     
     if not actual or not alternative:
@@ -2984,7 +2988,8 @@ def find_best_bikes():
     actual_bike = get_bike_stats(
         actual_bike_data['frame_id'],
         actual_bike_data.get('wheel_id') or None,
-        actual_bike_data.get('upgrade_level', 0)
+        actual_bike_data.get('upgrade_level', 0),
+        actual_bike_data.get('lightning_aero_socks', False)
     )
     
     if not actual_bike:
@@ -2999,14 +3004,16 @@ def find_best_bikes():
     
     for (frame_id, wheel_id), combo in bike_combos:
         try:
-            setup = db.get_bike_stats(frame_id, wheel_id, upgrade_level)
+            setup = db.get_bike_stats(frame_id, wheel_id, upgrade_level,
+                                       data.get('lightning_aero_socks', False))
             if not setup:
                 continue
             
             # Check if this is the actual bike (same frame, wheel, AND upgrade level)
             is_actual = (frame_id == actual_bike.frame_id and 
                          (wheel_id or '') == (actual_bike.wheel_id or '') and
-                         upgrade_level == actual_upgrade_level)
+                         upgrade_level == actual_upgrade_level and
+                         setup.lightning_aero_socks == actual_bike.lightning_aero_socks)
             
             if is_actual:
                 # For the actual bike, use the recorded NP exactly
@@ -3219,7 +3226,7 @@ def api_tt_pacing_plan():
             return jsonify({'error': 'custom_distance_km must be positive'}), 400
 
     db = get_db()
-    bike_setup = db.get_bike_stats(frame_id, wheel_id, level)
+    bike_setup = db.get_bike_stats(frame_id, wheel_id, level, body.get('lightning_aero_socks', False))
     if bike_setup is None:
         return jsonify({'error': f'Unknown frame/wheel combination: {frame_id}/{wheel_id}'}), 400
 
@@ -3441,7 +3448,7 @@ def api_ttt_pacing_plan():
         return jsonify({'error': 'custom_distance_km must be positive'}), 400
 
     db = get_db()
-    bike_setup = db.get_bike_stats(frame_id, wheel_id, level)
+    bike_setup = db.get_bike_stats(frame_id, wheel_id, level, body.get('lightning_aero_socks', False))
     if bike_setup is None:
         return jsonify({'error': f'Unknown frame/wheel combination: {frame_id}/{wheel_id}'}), 400
 

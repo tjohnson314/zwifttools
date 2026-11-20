@@ -258,6 +258,16 @@ def test_api_accepts_uploaded_and_catalog_workouts(client):
     assert client.post("/api/workout_route_plan", json=body).status_code == 200
 
 
+def test_socks_increase_workout_distance_at_the_same_power(client, monkeypatch):
+    monkeypatch.setattr(app_module, "load_route_profile", lambda *args, **kwargs: route())
+    body = request_body()
+    stock = client.post("/api/workout_route_plan", json=body)
+    body["lightning_aero_socks"] = True
+    socks = client.post("/api/workout_route_plan", json=body)
+    assert stock.status_code == socks.status_code == 200
+    assert socks.get_json()["distance_covered_km"] > stock.get_json()["distance_covered_km"]
+
+
 @pytest.mark.parametrize("change", [
     {"ftp_w": 0}, {"ftp_w": float("nan")}, {"rider_weight_kg": True},
     {"rider_height_cm": -1}, {"upgrade_level": 1.5}, {"route_id": "missing"},

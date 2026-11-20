@@ -39,7 +39,7 @@ function _loadBikeData() {
 /**
  * Reusable single-bike configuration selector.
  *
- * Manages a frame / wheels / upgrade-level trio of <select> elements plus a
+ * Manages frame / wheels / upgrade-level selects, an aero socks checkbox and a
  * shared bike_stats template summary (weight, CdA bias and Crr change), backed
  * by /api/frames, /api/wheels and /api/bike_stats.
  *
@@ -93,6 +93,23 @@ class BikeSelector {
         frameGroup.before(filter);
         this.topPerformersCheckbox.addEventListener('change', () => this._onFilterChange());
 
+        const accessories = document.createElement('div');
+        accessories.className = 'form-group bike-selector-accessories';
+        const socksLabel = document.createElement('label');
+        this.lightningAeroSocksCheckbox = document.createElement('input');
+        this.lightningAeroSocksCheckbox.type = 'checkbox';
+        this.lightningAeroSocksCheckbox.id = `${opts.frameSelect}LightningAeroSocks`;
+        socksLabel.htmlFor = this.lightningAeroSocksCheckbox.id;
+        const socksLink = document.createElement('a');
+        socksLink.href = 'https://zwiftinsider.com/lightning-socks/';
+        socksLink.target = '_blank';
+        socksLink.rel = 'noopener noreferrer';
+        socksLink.textContent = 'Lightning Aero Socks';
+        socksLabel.append(this.lightningAeroSocksCheckbox, socksLink, ' (-0.003 m² CdA)');
+        accessories.append(socksLabel);
+        this.levelSel.closest('.form-group').after(accessories);
+        this.lightningAeroSocksCheckbox.addEventListener('change', () => this._updateStats());
+
         this.frameSel.addEventListener('change', () => this._onFrameChange());
         this.wheelSel.addEventListener('change', () => this._updateStats());
         this.levelSel.addEventListener('change', () => this._updateStats());
@@ -116,10 +133,11 @@ class BikeSelector {
             frameId: this.frameSel.value,
             wheelId: this.wheelSel.value || null,
             level: parseInt(this.levelSel.value, 10) || 0,
+            lightningAeroSocks: this.lightningAeroSocksCheckbox.checked,
         };
     }
 
-    setConfig({ frameId, wheelId, level } = {}) {
+    setConfig({ frameId, wheelId, level, lightningAeroSocks } = {}) {
         // Explicit restores/copies must still select equipment outside the shortlist.
         if (this._onlyTopPerformers &&
             ((frameId != null && !this._topPerformers.frames.has(frameId)) ||
@@ -139,6 +157,9 @@ class BikeSelector {
         }
         if (level != null && [...this.levelSel.options].some(o => o.value === String(level))) {
             this.levelSel.value = String(level);
+        }
+        if (lightningAeroSocks != null) {
+            this.lightningAeroSocksCheckbox.checked = lightningAeroSocks;
         }
         return this._updateStats();
     }
@@ -299,7 +320,8 @@ class BikeSelector {
             const resp = await fetch(
                 `/api/bike_stats?frame_id=${encodeURIComponent(frameId)}` +
                 `&wheel_id=${encodeURIComponent(wheelId)}` +
-                `&upgrade_level=${encodeURIComponent(level)}`);
+                `&upgrade_level=${encodeURIComponent(level)}` +
+                `&lightning_aero_socks=${this.lightningAeroSocksCheckbox.checked}`);
             if (resp.ok) {
                 const s = await resp.json();
                 // Tolerate a lagging backend that still sends weight_g (a kg value).

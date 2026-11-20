@@ -293,3 +293,24 @@ test('TTT JSON completion renders a final heading', async () => {
     assert.deepEqual(headings, ['Flat']);
     assert.match(elements.get('planHint').textContent, /^Finished in /);
 });
+
+test('TTT sends and saves the shared aero socks setting', async () => {
+    const response = new Response(JSON.stringify(headingPlan),
+        { headers: { 'Content-Type': 'application/json' } });
+    const { context } = planningContext(response);
+    vm.runInContext(`bikeSelector = {
+        getConfig: () => ({ frameId: 'bike', level: 3, lightningAeroSocks: true }),
+        isReady: () => true,
+    };`, context);
+    let body;
+    context.fetch = async (_url, options) => {
+        body = JSON.parse(options.body);
+        return response;
+    };
+    const storage = {};
+    context.localStorage = { setItem(key, value) { storage[key] = value; } };
+    await context.runPlan();
+    assert.equal(body.lightning_aero_socks, true);
+    context.saveSettings();
+    assert.equal(JSON.parse(storage.tttSettings).lightningAeroSocks, true);
+});

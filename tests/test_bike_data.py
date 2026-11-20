@@ -11,6 +11,33 @@ def db():
     return BikeDatabase()
 
 
+@pytest.mark.parametrize("level", [0, 3, 5])
+def test_lightning_aero_socks_reduce_total_drag_without_changing_components(db, level):
+    stock = db.get_bike_stats("Zwift_Carbon", None, level)
+    socks = db.get_bike_stats("Zwift_Carbon", None, level, lightning_aero_socks=True)
+    restored = db.get_bike_stats("Zwift_Carbon", None, level, lightning_aero_socks=False)
+    assert stock is not None and socks is not None
+    assert socks.cda == pytest.approx(stock.cda - .003)
+    assert socks.cda_bias == pytest.approx(stock.cda_bias - .003)
+    for field in ("weight_kg", "frame_cda_bias", "wheel_cda_bias", "crr_reduction"):
+        assert getattr(socks, field) == getattr(stock, field)
+    assert restored == stock
+
+
+def test_bike_stats_api_applies_optional_socks_to_summary(db):
+    import app as app_module
+
+    client = app_module.app.test_client()
+    url = "/api/bike_stats?frame_id=Zwift_Carbon&upgrade_level=3"
+    stock = client.get(url).get_json()
+    socks = client.get(url + "&lightning_aero_socks=true").get_json()
+    unchecked = client.get(url + "&lightning_aero_socks=false").get_json()
+    assert socks["cda"] == pytest.approx(stock["cda"] - .003)
+    assert socks["cda_bias"] == pytest.approx(stock["cda_bias"] - .003)
+    assert socks["weight_kg"] == stock["weight_kg"]
+    assert unchecked == stock
+
+
 @pytest.mark.parametrize("path", ["distance_highend", "elevation_highend", "time_highend"])
 def test_drivetrain_upgrade_only_changes_rolling_resistance(db, path):
     raw = json.loads((db.DATA_DIR / db.GAME_FRAMES).read_text(encoding="utf-8-sig"))
@@ -126,7 +153,8 @@ def test_bike_pages_render_all_shared_summary_fields(route, prefixes):
 
 
 @pytest.mark.parametrize("level,expected", [(2, 0), (3, .0003)])
-def test_best_bike_results_include_source_resistance_reduction(monkeypatch, db, level, expected):
+@pytest.mark.parametrize("socks", [False, True])
+def test_best_bike_results_include_source_resistance_reduction(monkeypatch, db, level, expected, socks):
     import app as app_module
 
     key = ("Zwift_Carbon", "")
@@ -135,6 +163,7 @@ def test_best_bike_results_include_source_resistance_reduction(monkeypatch, db, 
     monkeypatch.setattr(app_module, "_filter_bike_combos", lambda *args: [(key, db.bikes[key])])
     response = app_module.app.test_client().post("/api/best_bikes", json={
         "upgrade_level": level,
+        "lightning_aero_socks": socks,
         "actual_bike": {"frame_id": key[0], "wheel_id": key[1], "upgrade_level": level},
         "telemetry": {
             "time_sec": list(range(32)), "power_watts": [250.] * 32,
@@ -146,6 +175,9 @@ def test_best_bike_results_include_source_resistance_reduction(monkeypatch, db, 
     results = response.get_json()["best_bikes"]
     assert len(results) == 1
     assert results[0]["crr_reduction"] == expected
+    assert results[0]["is_actual"] == (not socks)
+    stock = db.get_bike_stats(*key, level)
+    assert results[0]["cda_bias"] == pytest.approx(round(stock.cda_bias - (.003 if socks else 0), 4))
 
 
 @pytest.mark.parametrize("endpoint", ["/api/tt_pacing_plan", "/api/ttt_pacing_plan"])

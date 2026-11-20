@@ -1010,7 +1010,7 @@ IDs are errors; the server account is never substituted. Includes `id` and `name
 
 ### `GET /api/bike_stats`
 
-**Params:** `frame_id`, `wheel_id`, `upgrade_level`
+**Params:** `frame_id`, `wheel_id`, `upgrade_level`, `lightning_aero_socks` (optional, `true`/`false`; defaults to `false`)
 
 **Source:** `BikeDatabase.get_bike_stats()` combines stock `game_frames.json` / `game_wheels.json` data with source-defined cumulative rewards from `game_upgrades.json` at the selected level (0–5).
 
@@ -1023,6 +1023,16 @@ macro and selector, so every summary shows weight, CdA bias and rolling-resistan
 change. The best-bike results table uses the same Crr formatter.
 This is `-crr_reduction`, a dimensionless Crr change from stock
 (for example, `-0.0003` at level 3), not a surface-specific coefficient or percentage.
+
+The shared selector includes an unchecked-by-default Lightning Aero Socks option,
+linked to [Zwift Insider's effects and unlock guide](https://zwiftinsider.com/lightning-socks/).
+It is saved and copied with the bike configuration. When enabled, the total
+`cda` and `cda_bias` include an additional `-0.003 m²`, from `CdABias` in
+`Humans/Accessories/Socks/Socks_LightningAero.xml` in the game's `Accessories.wad`.
+Weight, frame/wheel component biases, and Crr are unchanged. Compare, best-bike,
+TT, TTT (for every rider), and workout-route requests accept the same optional
+`lightning_aero_socks` JSON boolean on each bike configuration. Best-bike candidates
+use the alternative selector's socks setting; the actual bike retains its own.
 
 ### `POST /api/fetch_activity`
 

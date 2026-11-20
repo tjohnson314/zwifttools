@@ -239,6 +239,7 @@ function buildRequest() {
         rider_height_cm: Number(element('riderHeight').value),
         ftp_w: Number(element('ftp').value),
         frame_id: config.frameId, wheel_id: config.wheelId, upgrade_level: config.level,
+        lightning_aero_socks: config.lightningAeroSocks,
     };
     if (!element('untargetedPercent').disabled) {
         body.untargeted_percent = Number(element('untargetedPercent').value);
@@ -347,6 +348,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         statsPrefix: 'bike', framePlaceholder: 'Choose a frame',
         onChange: () => { invalidateEstimate(); saveSettings(); },
     });
+    element('frameSelectLightningAeroSocks').addEventListener('change', () => editedBikeFields.add('lightningAeroSocks'));
     const outcomes = await Promise.allSettled([
         loadProfile(),
         bikeSelector.load().then(async () => {
@@ -355,6 +357,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     frameId: savedSettings.frameId,
                     wheelId: savedSettings.wheelId,
                     level: savedSettings.level,
+                    lightningAeroSocks: savedSettings.lightningAeroSocks,
                 });
             }
             bikesLoaded = true;

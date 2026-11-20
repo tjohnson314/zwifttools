@@ -45,6 +45,7 @@ function saveSettings() {
         frameId: bike.frameId,
         wheelId: bike.wheelId,
         upgradeLevel: bike.level,
+        lightningAeroSocks: bike.lightningAeroSocks,
         riders: riders.map(({ error, warning, ...r }) => r),
     };
     try { localStorage.setItem(TTT_SETTINGS_KEY, JSON.stringify(data)); } catch (e) { /* ignore */ }
@@ -115,6 +116,7 @@ function restoreSelections(settings) {
         frameId: settings.frameId,
         wheelId: settings.wheelId,
         level: settings.upgradeLevel,
+        lightningAeroSocks: settings.lightningAeroSocks,
     });
     updatePlanButton();
 }
@@ -411,6 +413,7 @@ async function runPlan() {
         frame_id: bike.frameId,
         wheel_id: bike.wheelId,
         upgrade_level: bike.level,
+        lightning_aero_socks: bike.lightningAeroSocks,
         reserve_pct: parseFloat(document.getElementById('reservePct').value) || 0,
         max_power_pct: parseFloat(document.getElementById('maxPowerPct').value) || 150,
         draft_second_pct: Number(document.getElementById('draftSecondPct').value),
