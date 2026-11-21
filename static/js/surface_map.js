@@ -14,7 +14,9 @@ const state = {
     routeFilter: '',
     sportFilter: 'all', // 'all' | 'cycling' | 'running'
     routeMode: 'race',
+    browseType: 'routes',
     activeHash: null,
+    activeSegment: null,
     loadingHash: null,
     roadPickerRequest: null,
     // Affine transform: screenX = X*scale + offsetX ; screenY = Y*scale + offsetY
@@ -75,22 +77,24 @@ async function loadWorlds() {
         });
         setStatus('');
         if (data.worlds.length) {
-            // Deep-link support: ?world=<world-slug>&route=<route-slug>.
+            // Deep links use route slugs or world-qualified directional segment IDs.
             const want = getUrlParams();
             if (want.mode === 'free_ride') state.routeMode = want.mode;
             updateRouteModeButtons();
-            const match = want.world &&
-                data.worlds.find(w => matchesSlug(want.world, w.name, w.mapID));
+            const match = want.segment
+                ? data.worlds.find(w => String(w.mapID) === want.segment.split(':')[0])
+                : want.world && data.worlds.find(w => matchesSlug(want.world, w.name, w.mapID));
+            if (want.segment && !match) throw new Error('Segment world not found.');
             const mapId = match ? match.mapID : data.worlds[0].mapID;
             sel.value = mapId;
-            await loadWorld(mapId, match ? want.route : null);
+            await loadWorld(mapId, match ? want.route : null, want.segment);
         }
     } catch (e) {
         setStatus(e.message, true);
     }
 }
 
-async function loadWorld(mapId, routeSlug = null) {
+async function loadWorld(mapId, routeSlug = null, segmentId = null) {
     closeRoadPicker();
     setStatus('Loading world…');
     state.routeRequest++;
@@ -98,6 +102,8 @@ async function loadWorld(mapId, routeSlug = null) {
     hideSatellite();
     state.route = null;
     state.activeHash = null;
+    state.activeSegment = null;
+    updateBrowseControls();
     state.hoverPoint = null;
     state.bgImage = null;
     document.getElementById('route-detail').style.display = 'none';
@@ -107,6 +113,8 @@ async function loadWorld(mapId, routeSlug = null) {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to load world');
         state.world = data;
+        if (segmentId) state.browseType = 'segments';
+        updateBrowseControls();
         buildLegend(data.colors);
         renderRouteList();
         fitToBounds(data.bounds);
@@ -114,10 +122,17 @@ async function loadWorld(mapId, routeSlug = null) {
         document.getElementById('map-hint').style.display = 'none';
         setStatus('');
         updateUrl();
+        if (segmentId) {
+            if (!(data.timing_segments || []).some(segment => segment.id === segmentId)) {
+                throw new Error('Segment not found or complete geometry unavailable.');
+            }
+            await loadSegment(segmentId);
+            return;
+        }
         const route = routeSlug &&
             data.routes.find(r => matchesSlug(routeSlug, r.name, r.nameHash));
         if (route) await loadRoute(route.nameHash);
-        else if (data.disconnected_routes && data.routes.length) {
+        else if (state.browseType === 'routes' && data.disconnected_routes && data.routes.length) {
             await loadRoute(data.routes[0].nameHash);
         }
     } catch (e) {
@@ -138,7 +153,15 @@ function loadBackground(bg) {
     img.src = bg.image;
 }
 
-async function loadRoute(hash, fromPicker = false) {
+function loadRoute(hash, fromPicker = false) {
+    return loadSelection(hash, 'routes', fromPicker);
+}
+
+function loadSegment(segmentId) {
+    return loadSelection(segmentId, 'segments');
+}
+
+async function loadSelection(hash, browseType, fromPicker = false) {
     if (!fromPicker) closeRoadPicker();
     setStatus('');
     const request = ++state.routeRequest;
@@ -147,14 +170,20 @@ async function loadRoute(hash, fromPicker = false) {
     setRouteLoading(hash);
     hideSatellite();
     try {
-        const res = await fetch(`/api/surface_map/route/${world.mapID}/${hash}?mode=${mode}`);
+        const endpoint = browseType === 'segments'
+            ? `/api/surface_map/segment/${encodeURIComponent(hash)}`
+            : `/api/surface_map/route/${world.mapID}/${hash}?mode=${mode}`;
+        const res = await fetch(endpoint);
         const data = await res.json();
         if (request !== state.routeRequest || state.world !== world) return;
-        if (!res.ok) throw new Error(data.error || 'Failed to load route');
+        if (!res.ok) throw new Error(data.error || (browseType === 'segments' ? 'Failed to load segment' : 'Failed to load route'));
         state.route = data;
+        state.browseType = browseType;
         state.routeMode = data.route_mode || mode;
+        state.activeHash = browseType === 'routes' ? hash : null;
+        state.activeSegment = browseType === 'segments' ? hash : null;
+        updateBrowseControls();
         updateRouteModeButtons(data.available_modes);
-        state.activeHash = hash;
         state.hoverPoint = null;
         state.pinnedPoint = null;
         buildCombinedPath(data);
@@ -164,7 +193,7 @@ async function loadRoute(hash, fromPicker = false) {
         else renderBase();
         setStatus('');
         updateUrl();
-        if (world.satellite_routes) await showSatellite(data);
+        if (world.satellite_routes && browseType === 'routes') await showSatellite(data);
         return true;
     } catch (e) {
         if (request === state.routeRequest) setStatus(e.message, true);
@@ -386,15 +415,16 @@ function matchesSlug(token, name, id) {
 function getUrlParams() {
     try {
         const p = new URL(window.location.href).searchParams;
-        return { world: p.get('world'), route: p.get('route'), mode: p.get('mode') };
+        return { world: p.get('world'), route: p.get('route'), mode: p.get('mode'), segment: p.get('segment') };
     } catch (e) {
-        return { world: null, route: null, mode: null };
+        return { world: null, route: null, mode: null, segment: null };
     }
 }
 
 function updateUrl() {
     const p = new URLSearchParams();
     if (state.world) p.set('world', slugify(state.world.name));
+    if (state.activeSegment != null) p.set('segment', state.activeSegment);
     if (state.activeHash != null && state.world) {
         const r = state.world.routes.find(r => r.nameHash === state.activeHash);
         if (r) p.set('route', slugify(r.name));
@@ -428,6 +458,29 @@ async function copyRouteLink() {
 function sportIsCycling(v) { return v !== 2; }
 function sportIsRunning(v) { return v === 2; }
 function sportLabel(v) { return v === 2 ? 'Running' : 'Cycling'; }
+
+function updateBrowseControls() {
+    const segments = state.browseType === 'segments';
+    document.querySelectorAll('#browse-type .sport-btn').forEach(button => {
+        const active = button.dataset.browse === state.browseType;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-pressed', String(active));
+    });
+    document.getElementById('browse-title').textContent = segments ? 'Segments' : 'Routes';
+    document.getElementById('route-search').placeholder = segments ? 'Search segments…' : 'Search routes…';
+    document.getElementById('route-mode').hidden = segments;
+    document.getElementById('sport-filter').hidden = segments;
+    document.getElementById('btn-matching-routes').hidden = state.activeSegment == null;
+}
+
+function setBrowseType(type) {
+    if (type === state.browseType) return;
+    state.browseType = type;
+    state.routeFilter = '';
+    document.getElementById('route-search').value = '';
+    updateBrowseControls();
+    clearRoute();
+}
 
 function updateRouteModeButtons(available = ['free_ride', 'race']) {
     document.querySelectorAll('#route-mode .sport-btn').forEach(button => {
@@ -478,10 +531,46 @@ async function showRoadRoutes(hit) {
     });
     if (!routes.length) return;
     if (routes.length === 1) return loadRoute(routes[0].nameHash);
+    showRoutePicker(routes, 'Routes at this point');
+}
+
+async function showMatchingRoutes() {
+    if (state.activeSegment == null) return;
+    const hashes = state.route?.matching_route_hashes;
+    if (!Array.isArray(hashes)) {
+        setStatus('Matching route information is unavailable for this segment. Reload the segment and try again.', true);
+        return;
+    }
+    const world = state.world;
+    const segment = state.activeSegment;
+    const request = state.routeRequest;
+    const button = document.getElementById('btn-matching-routes');
+    button.disabled = true;
+    setStatus('Loading matching route starts…');
+    try {
+        const response = await fetch(`/api/surface_map/segment/${encodeURIComponent(segment)}/routes`);
+        const data = await response.json();
+        if (state.world !== world || state.activeSegment !== segment || state.routeRequest !== request) return;
+        if (!response.ok) throw new Error(data.error || 'Could not load matching route starts.');
+        if (!Array.isArray(data.routes)) throw new Error('Invalid matching route start information.');
+        const starts = new Map(data.routes.map(route => [route.nameHash, route]));
+        const routes = world.routes.filter(route => hashes.includes(route.nameHash));
+        setStatus('');
+        showRoutePicker(routes, `Routes containing ${state.route.name}`, starts);
+    } catch (error) {
+        if (state.world === world && state.activeSegment === segment && state.routeRequest === request) {
+            setStatus(error.message, true);
+        }
+    } finally {
+        button.disabled = false;
+    }
+}
+
+function showRoutePicker(routes, title, segmentStarts = null) {
     closeRoadPicker();
     const picker = document.getElementById('road-route-picker');
     const list = document.getElementById('road-picker-list');
-    document.getElementById('road-picker-title').textContent = 'Routes at this point';
+    document.getElementById('road-picker-title').textContent = title;
     document.getElementById('road-picker-status').textContent = '';
     const search = document.getElementById('road-picker-search');
     search.value = '';
@@ -490,6 +579,11 @@ async function showRoadRoutes(hit) {
         for (const item of list.children) item.hidden = !item.dataset.name.includes(filter);
     };
     list.innerHTML = '';
+    if (!routes.length) {
+        const item = document.createElement('li');
+        item.textContent = 'No routes contain this segment.';
+        list.appendChild(item);
+    }
     for (const route of routes) {
         const item = document.createElement('li');
         item.dataset.hash = String(route.nameHash);
@@ -499,6 +593,21 @@ async function showRoadRoutes(hit) {
         const leadin = state.routeMode === 'free_ride' ? route.free_ride_leadin_distance_m : route.leadin_distance_m;
         button.innerHTML = `${escapeHtml(route.name)}<span class="r-meta">` +
             `${((route.distance_m + (leadin ?? 0)) / 1000).toFixed(1)} km &middot; ${sportLabel(route.sport_type)}</span>`;
+        if (segmentStarts) {
+            const start = segmentStarts.get(route.nameHash);
+            const details = document.createElement('span');
+            details.className = 'r-meta';
+            const unavailable = {
+                free_ride_unavailable: 'Free-ride version unavailable',
+                leadin_unavailable: 'Free-ride lead-in unavailable',
+                not_on_free_ride: 'Segment not on the free-ride course',
+                start_unavailable: 'Segment start unavailable',
+            };
+            details.textContent = start?.status === 'available' && Number.isFinite(start.start_distance_m)
+                ? `Segment starts at ${(start.start_distance_m / 1000).toFixed(2)} km (free ride, including lead-in)`
+                : unavailable[start?.status] || 'Segment start information unavailable';
+            button.appendChild(details);
+        }
         button.addEventListener('click', async () => {
             const loading = loadRoute(route.nameHash, true);
             const request = state.routeRequest;
@@ -520,6 +629,29 @@ function renderRouteList() {
     ul.innerHTML = '';
     if (!state.world) return;
     const filter = state.routeFilter.toLowerCase();
+    if (state.browseType === 'segments') {
+        const all = state.world.timing_segments || [];
+        const segments = all.filter(segment => !filter || segment.name.toLowerCase().includes(filter));
+        document.getElementById('route-count').textContent = `${segments.length}/${all.length}`;
+        for (const segment of segments) {
+            const li = document.createElement('li');
+            li.dataset.hash = segment.id;
+            li.classList.toggle('active', segment.id === state.activeSegment);
+            li.innerHTML = `${escapeHtml(segment.name)}<span class="r-meta">${segment.distance_km.toFixed(1)} km · ${Math.round(segment.ascent_m)} m ↑</span>`;
+            li.addEventListener('click', () => {
+                if (segment.id === state.activeSegment) clearRoute();
+                else loadSegment(segment.id);
+            });
+            ul.appendChild(li);
+        }
+        if (!segments.length) {
+            const empty = document.createElement('li');
+            empty.textContent = all.length ? 'No matching segments.' : 'No complete timed segments available in this world.';
+            ul.appendChild(empty);
+        }
+        setRouteLoading(state.loadingHash);
+        return;
+    }
     const sf = state.sportFilter;
     const routes = state.world.routes.filter(r => {
         if (filter && !r.name.toLowerCase().includes(filter)) return false;
@@ -561,6 +693,8 @@ function clearRoute() {
     hideSatellite();
     state.route = null;
     state.activeHash = null;
+    state.activeSegment = null;
+    updateBrowseControls();
     state.hoverPoint = null;
     state.pinnedPoint = null;
     state.combined = [];
@@ -1022,6 +1156,9 @@ function bindEvents() {
     document.querySelectorAll('#route-mode .sport-btn').forEach(button => {
         button.addEventListener('click', () => setRouteMode(button.dataset.mode));
     });
+    document.querySelectorAll('#browse-type .sport-btn').forEach(button => {
+        button.addEventListener('click', () => setBrowseType(button.dataset.browse));
+    });
     document.getElementById('world-select').addEventListener('change', e => {
         if (e.target.value) loadWorld(parseInt(e.target.value, 10));
     });
@@ -1046,6 +1183,7 @@ function bindEvents() {
         renderBase();
     });
     document.getElementById('btn-copy-link').addEventListener('click', copyRouteLink);
+    document.getElementById('btn-matching-routes').addEventListener('click', showMatchingRoutes);
 
     // Pan
     let dragging = false, moved = false, lastX = 0, lastY = 0, startX = 0, startY = 0;

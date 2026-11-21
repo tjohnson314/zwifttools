@@ -48,6 +48,38 @@ function profile() {
         gradient_pct: [0, 2, -1, 1], surface_type: ['Tarmac', 'Dirt', 'Cobbles', 'Dirt'] };
 }
 
+for (const [query, expectedId] of [
+    ['2:-9223372027220687690', '2:-9223372027220687690'],
+    ['sprint', '1:123'],
+]) {
+    test(`TT segment deep link resolves ${query} and shares its unique ID`, () => {
+        const { context } = plannerContext();
+        context.window.location.href = `http://localhost/tt-pacing?segment=${encodeURIComponent(query)}&zwift_id=7`;
+        vm.runInContext(`
+            allSegments = [
+                { id: '1:123', name: 'Sprint', world: 'WATOPIA' },
+                { id: '2:-9223372027220687690', name: 'Sprint', world: 'RICHMOND' },
+            ];
+            buildRouteSlugMap();
+            updateCourseUI = () => {};
+            populateWorldFilter = () => {};
+            filterRoutes = () => {};
+            document.getElementById('worldFilter').options = [{value: 'WATOPIA'}, {value: 'RICHMOND'}];
+            document.getElementById('routeSelect').options = allSegments.map(segment => ({value: segment.id}));
+            onRouteChange = () => {
+                selectedRoute = allSegments.find(segment => segment.id === document.getElementById('routeSelect').value);
+                setRouteUrlParam(selectedRoute);
+            };
+        `, context);
+        assert.equal(context.selectRouteFromUrl(), true);
+        assert.equal(vm.runInContext('planMode', context), 'segment');
+        assert.equal(vm.runInContext('selectedRoute.id', context), expectedId);
+        const params = new URL(context.window.location.href).searchParams;
+        assert.equal(params.get('segment'), expectedId);
+        assert.equal(params.get('zwift_id'), '7');
+    });
+}
+
 test('switching active riders discards saved rider inputs without losing route and equipment', () => {
     const { context, storage } = plannerContext();
     storage.set('ttSettings', JSON.stringify({

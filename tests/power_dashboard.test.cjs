@@ -7,13 +7,141 @@ const vm = require('node:vm');
 function dashboardContext(globals = {}) {
     const context = vm.createContext({
         document: { addEventListener() {} },
-        window: { ZwiftRider: { url: url => `${url}?zwift_id=7681059` } },
+        window: { ZwiftRider: { url: url => `${url}${url.includes('?') ? '&' : '?'}zwift_id=7681059` } },
         ...globals,
     });
     const source = fs.readFileSync(path.join(__dirname, '../static/js/power_dashboard.js'), 'utf8');
     vm.runInContext(source.replace(/\ninit\(\);\s*$/, '\n'), context);
     return context;
 }
+
+test('matching segments rounds highest visible watts and CP regardless of display units or Morton model', () => {
+    const context = dashboardContext();
+    vm.runInContext(`
+        durationsSec = [1, 300, 600, 1200];
+        pinnedIndex = 1;
+        powerUnit = 'W/kg';
+        showMortonModel = false;
+        activities = [
+            { activity_id: 'one', weight_kg: 50, peak_watts: [900, 253.7, 230, 215] },
+            { activity_id: 'two', weight_kg: 90, peak_watts: [800, 300, 280, 260] },
+            { activity_id: 'hidden', peak_watts: [2000, 1500, 1400, 1300] },
+        ];
+        dividers = new Set([1, 2]);
+        hiddenPartitions.add(partitionKey(2));
+    `, context);
+    assert.equal(context.pinnedSegmentPoint().power_w, 300);
+    assert.equal(context.pinnedSegmentPoint().duration_sec, 300);
+    const cp = context.pinnedSegmentPoint().critical_power_w;
+    assert.equal(cp, Math.round(context.fitMortonModel([
+        { duration: 300, power: 300 }, { duration: 600, power: 280 }, { duration: 1200, power: 260 },
+    ], 900).cp));
+    vm.runInContext('powerUnit = "W"; showMortonModel = true;', context);
+    assert.equal(context.pinnedSegmentPoint().critical_power_w, cp);
+    vm.runInContext('hiddenPartitions.add(partitionKey(1));', context);
+    assert.equal(context.pinnedSegmentPoint().power_w, 254);
+    vm.runInContext('hiddenPartitions.add(partitionKey(0));', context);
+    assert.throws(() => context.pinnedSegmentPoint(), /No visible activity power/);
+    vm.runInContext('pinnedIndex = null;', context);
+    assert.throws(() => context.pinnedSegmentPoint(), /Pin a chart interval/);
+});
+
+test('matching segments reports missing CP fit instead of using a standing start', () => {
+    const context = dashboardContext();
+    vm.runInContext(`
+        durationsSec = [1, 300];
+        pinnedIndex = 1;
+        activities = [{ activity_id: 'ride', peak_watts: [900, 300] }];
+    `, context);
+    assert.throws(() => context.pinnedSegmentPoint(), /critical-power fit requires/);
+});
+
+function matchingContext(fetch) {
+    const elements = Object.fromEntries(['pinState', 'findMatchingSegmentBtn', 'matchingSegmentsDialog',
+        'matchingSegmentsTable', 'matchingSegmentsBody', 'matchingSegmentsSummary', 'matchingSegmentsStatus']
+        .map(id => [id, { children: [], classList: { toggle() {} },
+            appendChild(child) { this.children.push(child); },
+            showModal() { this.open = true; },
+        }]));
+    const context = dashboardContext({
+        fetch,
+        document: {
+            getElementById: id => elements[id],
+            createElement: tag => ({ tagName: tag, children: [],
+                appendChild(child) { this.children.push(child); },
+                setAttribute(name, value) { this[name] = value; },
+            }),
+        },
+    });
+    vm.runInContext(`
+        durationsSec = [1, 300, 600, 1200];
+        activities = [{ activity_id: 'ride', peak_watts: [900, 253.7, 230, 215] }];
+        pinnedIndex = 1;
+    `, context);
+    return { context, elements };
+}
+
+test('matching popup posts the pinned point, renders completion, and resets button state', async () => {
+    const requests = [];
+    const { context, elements } = matchingContext(async (url, options) => {
+        requests.push({ url, options });
+        return { ok: true, json: async () => ({ weight_kg: 75, height_cm: 180, bike: 'All-rounder',
+            critical_power_w: 200, initial_speed_mps: 10,
+            matches: [{ segment_id: '1:-9223372027220687690', world_name: 'Watopia',
+                segment_name: '<KOM>', completion_percent: 105.25 }] }) };
+    });
+    context.updatePinStateLabel();
+    assert.equal(elements.findMatchingSegmentBtn.hidden, false);
+    await context.findMatchingSegments();
+    assert.equal(elements.matchingSegmentsDialog.open, true);
+    assert.equal(requests[0].url, '/api/power_dashboard/matching_segments?zwift_id=7681059');
+    assert.equal(requests[0].options.method, 'POST');
+    assert.deepEqual(JSON.parse(requests[0].options.body), {
+        power_w: 254, duration_sec: 300, critical_power_w: Math.round(context.visibleMortonFit(true).cp),
+    });
+    assert.match(elements.matchingSegmentsSummary.textContent, /Rolling start: 36.0 km\/h at Morton CP 200 W/);
+    assert.deepEqual(elements.matchingSegmentsBody.children[0].children.map(cell => cell.textContent),
+        ['Watopia', '<KOM>', '105.3%']);
+    const links = elements.matchingSegmentsBody.children[0].children[1].children[0].children;
+    assert.deepEqual(links.map(link => link.tagName), ['a', 'a', 'a']);
+    assert.deepEqual(links.map(link => link.textContent), ['\u{1F5FA}\uFE0F', '\u{1F3C6}', '\u{1F4C8}']);
+    assert.deepEqual(links.map(link => link.href), [
+        '/surface-map?segment=1%3A-9223372027220687690',
+        '/segment-prs?segment=1%3A-9223372027220687690&zwift_id=7681059',
+        '/tt-pacing?segment=1%3A-9223372027220687690&zwift_id=7681059',
+    ]);
+    assert.deepEqual(links.map(link => link['aria-label']), [
+        'View <KOM> on the surface map', 'View <KOM> in segment PRs',
+        'Plan <KOM> in the TT pacing planner',
+    ]);
+    assert.equal(elements.findMatchingSegmentBtn.disabled, false);
+    assert.equal(elements.matchingSegmentsTable.hidden, false);
+    vm.runInContext('pinnedIndex = null;', context);
+    context.updatePinStateLabel();
+    assert.equal(elements.findMatchingSegmentBtn.hidden, true);
+});
+
+test('matching popup displays server errors instead of successful empty results', async () => {
+    const { context, elements } = matchingContext(async () => ({
+        ok: false, json: async () => ({ error: 'Current height and weight are required.' }),
+    }));
+    await context.findMatchingSegments();
+    assert.match(elements.matchingSegmentsStatus.textContent, /Current height and weight are required/);
+    assert.equal(elements.matchingSegmentsTable.hidden, true);
+    assert.equal(elements.findMatchingSegmentBtn.disabled, false);
+});
+
+test('matching popup explains when no segments are in the completion range', async () => {
+    const { context, elements } = matchingContext(async () => ({
+        ok: true, json: async () => ({
+            matches: [], critical_power_w: 200, initial_speed_mps: 10,
+            weight_kg: 75, height_cm: 180, bike: 'All-rounder',
+        }),
+    }));
+    await context.findMatchingSegments();
+    assert.match(elements.matchingSegmentsStatus.textContent, /No segments match the 90–110% completion range/);
+    assert.equal(elements.matchingSegmentsTable.hidden, true);
+});
 
 test('per-activity power requests include the active rider ID', async () => {
     const requests = [];

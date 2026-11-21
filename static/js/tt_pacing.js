@@ -549,7 +549,7 @@ function setRouteUrlParam(route) {
         const url = new URL(window.location.href);
         url.searchParams.delete('route');
         url.searchParams.delete('segment');
-        url.searchParams.set(planMode, convertToSlug(route.name));
+        url.searchParams.set(planMode, planMode === 'segment' ? route.id : convertToSlug(route.name));
         if (planMode === 'route') url.searchParams.set('mode', routeMode);
         else url.searchParams.delete('mode');
         window.history.replaceState(null, '', url);
@@ -566,7 +566,7 @@ function clearRouteUrlParam() {
     } catch (e) { /* ignore */ }
 }
 
-// Resolve a ?route= slug to a route and select it. Returns true on success.
+// Resolve a route slug or segment ID/legacy slug. Returns true on success.
 function selectRouteFromUrl() {
     let slug = null;
     let mode = 'route';
@@ -577,7 +577,8 @@ function selectRouteFromUrl() {
     }
     catch (e) { return false; }
     if (!slug) return false;
-    const route = routeSlugMap[`${mode}:${slug}`];
+    const route = (mode === 'segment' && allSegments.find(segment => segment.id === slug))
+        || routeSlugMap[`${mode}:${slug}`];
     if (!route) return false;
     planMode = mode;
     updateCourseUI();

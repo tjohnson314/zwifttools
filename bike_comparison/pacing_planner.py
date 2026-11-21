@@ -432,6 +432,7 @@ def list_routes() -> list[dict]:
 @lru_cache(maxsize=1)
 def _segment_catalog() -> dict:
     catalog = {}
+    route_hashes = {}
     for map_id, world_name in surface_map._WORLD_NAMES.items():
         for route in surface_map._load_route_world(map_id).get("routes", []):
             path = route.get("segment_path")
@@ -448,8 +449,6 @@ def _segment_catalog() -> dict:
                 if start < checkpoints[0] or end > checkpoints[-1] or start >= end:
                     continue
                 key = f"{map_id}:{segment['hash']}"
-                if key in catalog and catalog[key]["length"] >= length:
-                    continue
                 interior = checkpoints[(checkpoints > start) & (checkpoints < end)]
                 samples = np.concatenate(([start], interior, [end]))
                 arch = segment.get("timing_arch_checkpoint")
@@ -463,6 +462,9 @@ def _segment_catalog() -> dict:
                 distances = np.concatenate(([0.0], np.cumsum(np.hypot(np.diff(xs), np.diff(zs)))))
                 if distances[-1] <= 0:
                     continue
+                route_hashes.setdefault(key, set()).add(route["nameHash"])
+                if key in catalog and catalog[key]["length"] >= length:
+                    continue
                 name = segment.get("name") or surface_map._load_segment_names().get(
                     int(segment["hash"]), f"Segment {segment['hash']}")
                 catalog[key] = {
@@ -475,6 +477,7 @@ def _segment_catalog() -> dict:
                 }
     by_name = {}
     for entry in catalog.values():
+        entry["route_hashes"] = sorted(route_hashes[entry["id"]])
         by_name.setdefault((entry["world"], entry["name"]), []).append(entry)
     for entries in by_name.values():
         if len(entries) > 1:
@@ -487,7 +490,7 @@ def _segment_catalog() -> dict:
 def list_segments() -> list[dict]:
     """List complete directional timing segments with real elevation geometry."""
     return sorted(
-        ({key: value for key, value in entry.items() if key not in ("leg", "length")}
+        ({key: value for key, value in entry.items() if key not in ("leg", "length", "route_hashes")}
          for entry in _segment_catalog().values()),
         key=lambda entry: (entry["world"], entry["name"]),
     )
@@ -499,10 +502,25 @@ def load_segment_geometry(segment_id: str) -> dict:
     if entry is None:
         raise ValueError("Unknown segment or no elevation data available for this segment")
     leg = surface_map._pack_leg(entry["course_id"], entry["leg"])
+    if leg is None:
+        raise ValueError("Segment geometry unavailable")
     leg["latlng"] = surface_map.local_to_latlng(entry["course_id"], entry["leg"]["x"], entry["leg"]["z"])
+    breakdown = surface_map._surface_breakdown(leg)
     return {"route_name": entry["name"], "world": entry["world"],
             "background": surface_map.get_world_background(entry["course_id"])["background"],
-            "leadin": None, "route": leg}
+            "leadin": None, "route": leg, "segment_id": entry["id"],
+            "matching_route_hashes": entry["route_hashes"],
+            "mapID": entry["course_id"], "world_name": entry["world_name"], "name": entry["name"],
+            "distance_m": float(entry["leg"]["d"][-1]), "ascent_m": entry["ascent_m"],
+            "leadin_distance_m": 0.0, "route_offset_m": 0.0,
+            "bounds": {"min_x": min(leg["x"]), "max_x": max(leg["x"]),
+                       "min_y": min(leg["y"]), "max_y": max(leg["y"])},
+            "breakdown": sorted(
+                ({"surface": name, "distance_m": distance,
+                  "color": surface_map.SURFACE_COLORS.get(name, surface_map.SURFACE_COLORS["Unknown"])}
+                 for name, distance in breakdown.items()),
+                key=lambda row: -row["distance_m"],
+            )}
 
 
 def load_segment_profile(segment_id: str) -> RouteProfile:
@@ -637,7 +655,7 @@ def truncate_route_profile(
     )
 
 
-def _traverse(v0, drive, f_grav, f_roll, aero_k, inv_mass, length):
+def _traverse(v0, drive, f_grav, f_roll, aero_k, inv_mass, length, min_step_m=0.5):
     """Integrate one chunk, returning (exit_speed, time_seconds).
 
     Steps in *distance* with the kinematic update ``v² = v₀² + 2·a·dl``, using
@@ -662,8 +680,8 @@ def _traverse(v0, drive, f_grav, f_roll, aero_k, inv_mass, length):
         a = (f_drive - f_grav - f_roll - aero_k * v * v) * inv_mass
         if a > 0.0:
             dl = 0.5 * v * v / a          # so 2·a·dl ≤ ½·v²
-            if dl < 0.5:
-                dl = 0.5
+            if dl < min_step_m:
+                dl = min_step_m
             if dl > remaining:
                 dl = remaining
         else:
@@ -778,6 +796,49 @@ def _build_chunks(route, max_chunk_m, crr):
 
 
 MAX_BUCKETS_CAP = 40       # largest bucket count the slider ever offers
+
+
+def constant_power_time(
+    route: RouteProfile, *, power_w: float, rider_weight_kg: float,
+    bike_weight_kg: float, cda: float, bike_type: str = "road_bike",
+    crr_reduction: float = 0.0,
+    initial_speed_mps: float = V_FLOOR,
+) -> float:
+    """Predict a solo segment time using the TT momentum integrator, without power optimization."""
+    for value in (power_w, rider_weight_kg, bike_weight_kg, cda, initial_speed_mps):
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError("Power, rider weight, bike weight, CdA and initial speed must be finite and positive.")
+    distance = np.asarray(route.distance_m, dtype=float)
+    altitude = np.asarray(route.altitude_m, dtype=float)
+    if (len(distance) < 2 or distance.shape != altitude.shape
+            or not np.all(np.isfinite(distance)) or not np.all(np.isfinite(altitude))
+            or distance[0] != 0 or np.any(np.diff(distance) < 0) or distance[-1] <= 0):
+        raise ValueError("Segment needs finite, non-decreasing geometry starting at zero.")
+    if route.surfaces is not None:
+        if len(route.surfaces) != len(distance):
+            raise ValueError("Segment surfaces do not match its geometry.")
+        resistance = surface_types_to_crr(np.asarray(route.surfaces)[:-1], bike_type)
+    else:
+        resistance = np.full(len(distance) - 1, 0.004)
+    mass = rider_weight_kg + bike_weight_kg
+    speed, total = initial_speed_mps, 0.0
+    for length, rise, crr in zip(np.diff(distance), np.diff(altitude), resistance):
+        if length == 0:
+            continue
+        # Keep the supplied elevation and power intact, including steep gradients.
+        grade = float(rise / length)
+        count = max(1, math.ceil(length / 10.0))
+        for _ in range(count):
+            speed, elapsed = _traverse(
+                speed, power_w * (1 - DRIVETRAIN_LOSS), mass * GRAVITY * grade,
+                mass * GRAVITY * (float(crr) - crr_reduction) * math.cos(math.atan(grade)),
+                0.5 * AIR_DENSITY * cda, 1 / mass, float(length / count),
+                min_step_m=0.001,
+            )
+            total += elapsed
+    if not math.isfinite(total) or total <= 0:
+        raise ValueError("Segment simulation did not produce a finite positive completion time.")
+    return total
 
 
 def _optimal_segmentation(values, weights, k):

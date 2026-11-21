@@ -2,6 +2,8 @@ import numpy as np
 import pytest
 
 from bike_comparison.pacing_planner import PacingPlanResult, RouteProfile, plan_tt_pacing, truncate_route_profile
+from bike_comparison.pacing_planner import constant_power_time
+from bike_comparison.workout_route import simulate_workout_route
 
 
 def make_route_profile():
@@ -13,6 +15,76 @@ def make_route_profile():
         source_distance_m=200.0,
         source_ascent_m=10.0,
     )
+
+
+@pytest.mark.parametrize("grade,surface,power", [(0, "Tarmac", 253.7), (.12, "Dirt", 350), (-.06, "Tarmac", 200)])
+def test_constant_power_time_matches_time_integrator_without_rounding(grade, surface, power):
+    route = RouteProfile(
+        "Constant", np.array([0., 1000.]), np.array([-5., -5 + 1000 * grade]),
+        surfaces=np.array([surface, surface]),
+    )
+    actual = constant_power_time(
+        route, power_w=power, rider_weight_kg=75, bike_weight_kg=8, cda=.3,
+        crr_reduction=.0003,
+    )
+    # This power is a multiple of five, avoiding workout-specific rounding.
+    reference_power = 255 if power == 253.7 else power
+    workout = {"duration_sec": 3600, "segments": [{
+        "start_sec": 0, "end_sec": 3600, "power_low": 1, "power_high": 1, "ramp": False,
+    }]}
+    expected = simulate_workout_route(
+        route, workout, rider_weight_kg=75, bike_weight_kg=8, cda=.3,
+        ftp_w=reference_power, crr_reduction=.0003,
+    )["finish_time_sec"]
+    assert actual == pytest.approx(expected, rel=.015)
+    if power == 253.7:
+        assert actual > constant_power_time(
+            route, power_w=255, rider_weight_kg=75, bike_weight_kg=8, cda=.3,
+            crr_reduction=.0003,
+        )
+
+
+def test_constant_power_preserves_steep_geometry_and_uses_rider_and_surface():
+    options = dict(power_w=300, rider_weight_kg=75, bike_weight_kg=8, cda=.3)
+    def time(grade=0, surface="Tarmac", **changes):
+        route = RouteProfile("Raw", np.array([0., 100.]), np.array([0., 100 * grade]),
+                             surfaces=np.array([surface, surface]))
+        return constant_power_time(route, **{**options, **changes})
+    assert time(.5) > time(.4)
+    assert time(surface="Dirt") > time()
+    assert time(.1, rider_weight_kg=90) > time(.1)
+    assert time(cda=.4) > time()
+    assert time(crr_reduction=.0003) < time()
+
+
+def test_constant_power_rolling_start_keeps_flat_equilibrium_and_affects_short_segments():
+    from bike_comparison.physics import speed_from_power
+
+    route = RouteProfile("Sprint", np.array([0., 100.]), np.array([0., 0.]),
+                         surfaces=np.array(["Tarmac", "Tarmac"]))
+    speed = speed_from_power(300, 0, 75, 8, .3)
+    rolling = constant_power_time(route, power_w=300, rider_weight_kg=75, bike_weight_kg=8,
+                                  cda=.3, initial_speed_mps=speed)
+    assert rolling == pytest.approx(100 / speed, rel=1e-6)
+    standing = constant_power_time(route, power_w=300, rider_weight_kg=75, bike_weight_kg=8, cda=.3)
+    assert standing - rolling > 3
+    lower_cp_speed = speed_from_power(150, 0, 75, 8, .3)
+    assert constant_power_time(route, power_w=300, rider_weight_kg=75, bike_weight_kg=8,
+                               cda=.3, initial_speed_mps=lower_cp_speed) > rolling
+
+
+@pytest.mark.parametrize("speed", [-1, 0, float("nan"), float("inf")])
+def test_constant_power_rejects_invalid_entry_speed(speed):
+    with pytest.raises(ValueError, match="initial speed"):
+        constant_power_time(make_route_profile(), power_w=300,
+                            rider_weight_kg=75, bike_weight_kg=8, cda=.3, initial_speed_mps=speed)
+
+
+@pytest.mark.parametrize("power", [0, -10, float("nan"), float("inf")])
+def test_constant_power_rejects_invalid_power_without_clipping(power):
+    with pytest.raises(ValueError, match="finite and positive"):
+        constant_power_time(make_route_profile(), power_w=power,
+                            rider_weight_kg=75, bike_weight_kg=8, cda=.3)
 
 
 def test_truncate_route_profile_interpolates_endpoint_and_drops_full_route_totals():
@@ -67,7 +139,7 @@ def test_segment_catalog_uses_complete_directional_checkpoint_geometry(monkeypat
                "percent_start": 1 / 6, "percent_end": 2 / 3}
     monkeypatch.setattr(planner.surface_map, "_WORLD_NAMES", {1: "Watopia"})
     monkeypatch.setattr(planner.surface_map, "_load_route_world", lambda _: {"routes": [
-        {"segment_path": path, "segments": [segment, dict(segment, distance_m=50)]}]})
+        {"nameHash": 10, "segment_path": path, "segments": [segment, dict(segment, distance_m=50)]}]})
     monkeypatch.setattr(planner.surface_map, "get_world_altitude_scale", lambda _: 0.5)
     planner._segment_catalog.cache_clear()
     try:

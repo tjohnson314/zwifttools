@@ -703,6 +703,40 @@ def get_route(map_id: int, name_hash: int, mode: str | None = None) -> dict | No
     }
 
 
+def segment_starts_on_free_ride_leadin(map_id: int, route: dict, segment: dict) -> list[float] | None:
+    """Locate complete directional traversals that start before the main route."""
+    if not route.get("leadin"):
+        return []
+    import pandas as pd
+    from shared.segment_prs import find_traversals
+
+    segment_leg = segment["route"]
+    segment_path = local_to_latlng(map_id, segment_leg["local_x"], segment_leg["local_z"])
+    if segment_path is None:
+        return None
+    samples = []
+    for leg, offset in ((route["leadin"], 0), (route["route"], route["route_offset_m"])):
+        if not leg:
+            continue
+        path = local_to_latlng(map_id, leg["local_x"], leg["local_z"])
+        if path is None:
+            return None
+        for distance, (lat, lng) in zip(leg["d"], path):
+            ride_distance = offset + distance
+            if samples and ride_distance <= samples[-1]["time_sec"]:
+                continue
+            # The crossing interpolator's clock carries ride distance here.
+            samples.append({"time_sec": ride_distance, "distance_km": ride_distance / 1000,
+                            "lat": lat, "lng": lng})
+    if len(samples) < 2:
+        raise ValueError("Free-ride geometry has insufficient distance samples")
+    traversals = find_traversals(pd.DataFrame(samples), [{
+        "segment_id": segment["segment_id"], "name": segment["name"], "latlng": segment_path,
+    }])
+    return [row["start_time_sec"] for row in traversals
+            if row["start_time_sec"] < route["route_offset_m"]]
+
+
 def local_to_latlng(map_id: int, x, z) -> list[list[float]] | None:
     """Convert local route coordinates to calibrated ``[lat, lng]`` points."""
     calibration = _load_calibration().get(str(map_id))

@@ -341,30 +341,19 @@ function fitMortonModel(points, peakPower) {
         : null;
 }
 
+function visibleMortonFit(rawWatts = false) {
+    const bestPowerAt = duration => bestVisiblePowerAt(durationsSec.indexOf(duration), rawWatts);
+    return fitMortonModel(
+        MORTON_PR_DURATIONS.map(duration => ({ duration, power: bestPowerAt(duration) })),
+        bestPowerAt(1),
+    );
+}
+
 function buildMortonDataset() {
     if (!showMortonModel || activities.length === 0) {
         return null;
     }
-
-    const visibleCurves = partitionBounds()
-        .filter(([startIdx]) => !isPartitionHidden(startIdx))
-        .map(([startIdx, endIdx]) => partitionCurve(startIdx, endIdx));
-    function bestPowerAt(duration) {
-        const index = durationsSec.indexOf(duration);
-        let power = null;
-        if (index >= 0) {
-            for (const curve of visibleCurves) {
-                const candidate = curve[index];
-                if (Number.isFinite(candidate) && (power === null || candidate > power)) {
-                    power = candidate;
-                }
-            }
-        }
-        return power;
-    }
-    const peakPower = bestPowerAt(1);
-    const points = MORTON_PR_DURATIONS.map((duration) => ({ duration, power: bestPowerAt(duration) }));
-    const fit = fitMortonModel(points, peakPower);
+    const fit = visibleMortonFit();
     if (!fit) {
         return null;
     }
@@ -522,6 +511,109 @@ function updatePinStateLabel() {
         return;
     }
     pinState.textContent = pinnedIndex === null ? 'Hover to inspect' : 'Pinned (click chart to unpin)';
+    const button = document.getElementById('findMatchingSegmentBtn');
+    if (button) {
+        button.hidden = pinnedIndex === null;
+    }
+}
+
+function bestVisiblePowerAt(intervalIndex, rawWatts = false) {
+    let best = null;
+    for (const [start, end] of partitionBounds()) {
+        if (isPartitionHidden(start)) {
+            continue;
+        }
+        for (let index = start; index < end; index++) {
+            const raw = activities[index].peak_watts?.[intervalIndex];
+            const value = rawWatts ? raw : powerValue(raw, activities[index]);
+            if (Number.isFinite(value) && (best === null || value > best)) {
+                best = value;
+            }
+        }
+    }
+    return best;
+}
+
+function pinnedSegmentPoint() {
+    if (pinnedIndex === null) {
+        throw new Error('Pin a chart interval first.');
+    }
+    const watts = bestVisiblePowerAt(pinnedIndex, true);
+    if (watts === null) {
+        throw new Error('No visible activity power is available for this interval.');
+    }
+    const fit = visibleMortonFit(true);
+    if (!fit || !Number.isFinite(fit.cp) || fit.cp <= 0) {
+        throw new Error('A positive Morton critical-power fit requires visible 1-second and 5/10/20-minute power data for the rolling start.');
+    }
+    return { power_w: Math.round(watts), duration_sec: durationsSec[pinnedIndex], critical_power_w: Math.round(fit.cp) };
+}
+
+async function findMatchingSegments() {
+    const dialog = document.getElementById('matchingSegmentsDialog');
+    const button = document.getElementById('findMatchingSegmentBtn');
+    const table = document.getElementById('matchingSegmentsTable');
+    const body = document.getElementById('matchingSegmentsBody');
+    const summary = document.getElementById('matchingSegmentsSummary');
+    body.innerHTML = '';
+    table.hidden = true;
+    summary.textContent = '';
+    setStatusText('matchingSegmentsStatus', 'Simulating all segments…');
+    dialog.showModal();
+    button.disabled = true;
+    try {
+        const point = pinnedSegmentPoint();
+        summary.textContent = `${point.power_w.toLocaleString()} W for ${formatDuration(point.duration_sec)}`;
+        const response = await fetch(window.ZwiftRider.url('/api/power_dashboard/matching_segments'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(point),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || `HTTP ${response.status}`);
+        }
+        if (!Array.isArray(data.matches)) {
+            throw new Error('Invalid matching segment response.');
+        }
+        summary.textContent += ` · ${data.height_cm} cm · ${data.weight_kg} kg · ${data.bike}`;
+        summary.textContent += ` · Rolling start: ${(data.initial_speed_mps * 3.6).toFixed(1)} km/h at Morton CP ${data.critical_power_w} W`;
+        for (const match of data.matches) {
+            const row = document.createElement('tr');
+            for (const [index, text] of [match.world_name, match.segment_name, `${match.completion_percent.toFixed(1)}%`].entries()) {
+                const cell = document.createElement('td');
+                cell.textContent = text;
+                if (index === 1) {
+                    const links = document.createElement('span');
+                    links.className = 'matching-segment-links';
+                    const segmentQuery = `?segment=${encodeURIComponent(match.segment_id)}`;
+                    for (const [icon, href, label] of [
+                        ['\u{1F5FA}\uFE0F', `/surface-map${segmentQuery}`, `View ${match.segment_name} on the surface map`],
+                        ['\u{1F3C6}', window.ZwiftRider.url(`/segment-prs${segmentQuery}`), `View ${match.segment_name} in segment PRs`],
+                        ['\u{1F4C8}', window.ZwiftRider.url(`/tt-pacing${segmentQuery}`), `Plan ${match.segment_name} in the TT pacing planner`],
+                    ]) {
+                        const link = document.createElement('a');
+                        link.className = 'matching-segment-link';
+                        link.href = href;
+                        link.textContent = icon;
+                        link.title = label;
+                        link.setAttribute('aria-label', label);
+                        links.appendChild(link);
+                    }
+                    cell.appendChild(links);
+                }
+                row.appendChild(cell);
+            }
+            row.children[2].className = 'num';
+            body.appendChild(row);
+        }
+        table.hidden = data.matches.length === 0;
+        setStatusText('matchingSegmentsStatus', data.matches.length ? '' : 'No segments match the 90–110% completion range.');
+    } catch (error) {
+        setStatusText('matchingSegmentsStatus', `Unable to find matching segments: ${error.message}`, true);
+    } finally {
+        button.disabled = false;
+    }
 }
 
 function updateInspectPanel(index) {
@@ -1101,6 +1193,10 @@ async function loadAllActivities() {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 function bindControls() {
+    const matchingButton = document.getElementById('findMatchingSegmentBtn');
+    if (matchingButton) {
+        matchingButton.addEventListener('click', findMatchingSegments);
+    }
     const criticalPowerToggle = document.getElementById('criticalPowerToggle');
     if (criticalPowerToggle) {
         criticalPowerToggle.addEventListener('change', () => {

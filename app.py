@@ -34,6 +34,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from scipy.ndimage import uniform_filter1d
+from scipy.optimize import brentq
 
 import math
 
@@ -44,7 +45,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 from bike_comparison.bike_data import get_bike_database, get_bike_stats, BASE_CDA
-from bike_comparison.physics import compare_bike_setups, frontal_area_from_rider, rider_cda, estimate_draft_efficiency
+from bike_comparison.physics import compare_bike_setups, frontal_area_from_rider, rider_cda, estimate_draft_efficiency, calculate_power_for_speed
 from bike_comparison.pacing_planner import (
     list_routes,
     list_segments,
@@ -54,6 +55,7 @@ from bike_comparison.pacing_planner import (
     load_segment_geometry,
     plan_tt_pacing,
     truncate_route_profile,
+    constant_power_time,
 )
 from bike_comparison.ttt_planner import (
     MAX_TEAM_SIZE as TTT_MAX_TEAM_SIZE,
@@ -704,7 +706,9 @@ def api_surface_map_world(map_id):
     """Return a world's road network (coloured by surface) and its route list."""
     try:
         from shared.surface_map import get_world_surfaces
-        return jsonify(get_world_surfaces(map_id))
+        data = get_world_surfaces(map_id)
+        data['timing_segments'] = [segment for segment in list_segments() if segment['course_id'] == map_id]
+        return jsonify(data)
     except FileNotFoundError:
         return jsonify({'error': f'No data for world {map_id}'}), 404
     except Exception as e:
@@ -729,6 +733,56 @@ def api_surface_map_route(map_id, name_hash):
     except Exception as e:
         logger.exception("Error loading surface-map route %s/%s", map_id, name_hash)
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/surface_map/segment/<segment_id>')
+def api_surface_map_segment(segment_id):
+    """Return a complete directional segment in the map's route-detail format."""
+    try:
+        return jsonify(load_segment_geometry(segment_id))
+    except ValueError as error:
+        return jsonify({'error': str(error)}), 404
+    except OSError:
+        logger.exception("Could not load surface-map segment %s", segment_id)
+        return jsonify({'error': 'Could not load segment geometry. Please try again.'}), 502
+
+
+@app.route('/api/surface_map/segment/<segment_id>/routes')
+def api_surface_map_segment_routes(segment_id):
+    """First complete segment crossing from each route's free-ride start."""
+    try:
+        from shared.surface_map import get_route, get_route_start_options, segment_starts_on_free_ride_leadin
+        segment = load_segment_geometry(segment_id)
+        routes = []
+        for route_hash in segment['matching_route_hashes']:
+            row = {'nameHash': route_hash, 'start_distance_m': None, 'status': 'free_ride_unavailable'}
+            options = get_route_start_options(segment['mapID'], route_hash)
+            if options and 'free_ride' in options['available_modes']:
+                if options['leadin_by_mode']['free_ride']['distance_m'] is None:
+                    row['status'] = 'leadin_unavailable'
+                else:
+                    route = get_route(segment['mapID'], route_hash, mode='free_ride')
+                    if route is None:
+                        raise ValueError('Matching route geometry unavailable')
+                    markers = [marker for marker in route['segments']
+                               if str(marker['hash']) == segment_id.split(':', 1)[1]]
+                    starts = [marker['start_distance_m'] for marker in markers
+                              if marker['start_distance_m'] is not None]
+                    leadin_starts = segment_starts_on_free_ride_leadin(segment['mapID'], route, segment)
+                    if leadin_starts is None:
+                        row['status'] = 'start_unavailable'
+                    else:
+                        starts.extend(leadin_starts)
+                        row['status'] = 'available' if starts else 'start_unavailable' if markers else 'not_on_free_ride'
+                        if starts:
+                            row['start_distance_m'] = min(starts)
+            routes.append(row)
+        return jsonify({'routes': routes})
+    except ValueError as error:
+        return jsonify({'error': str(error)}), 404
+    except OSError:
+        logger.exception("Could not load matching route starts for segment %s", segment_id)
+        return jsonify({'error': 'Could not load matching route starts. Please try again.'}), 502
 
 
 # --- Surface Map (developer view) -------------------------------------------
@@ -979,6 +1033,75 @@ def api_workout_activity(activity_id):
 def power_dashboard():
     """ZwiftPower-style power profile dashboard for a selected rider."""
     return render_template('power_dashboard.html')
+
+
+@app.route('/api/power_dashboard/matching_segments', methods=['POST'])
+def api_power_dashboard_matching_segments():
+    profile_id = _selected_zwift_id()
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({'error': 'Provide pinned power and duration as JSON.'}), 400
+    for field in ('power_w', 'duration_sec', 'critical_power_w'):
+        value = payload.get(field)
+        if (isinstance(value, bool) or not isinstance(value, (int, float))
+                or not math.isfinite(value) or value <= 0):
+            return jsonify({'error': 'Pinned power, duration and critical power must be finite and positive; values are not clipped.'}), 400
+    for field in ('power_w', 'critical_power_w'):
+        payload[field] = math.floor(payload[field] + 0.5)
+        if payload[field] <= 0:
+            return jsonify({'error': 'Pinned power and critical power must round to positive whole watts.'}), 400
+    headers = get_headers()
+    if not headers:
+        return jsonify({'error': 'Zwift service unavailable.'}), 503
+    try:
+        profile = _fetch_profile(profile_id, headers)
+        weight_kg, height_cm = _ttt_profile_measurements(profile)
+        if weight_kg is None or height_cm is None:
+            return jsonify({'error': 'Current rider height and weight are required for segment simulation.'}), 422
+        setup = _get_efficiency_setup()
+        if setup is None:
+            return jsonify({'error': 'Reference all-rounder bike configuration unavailable'}), 503
+        cda = rider_cda(height_cm / 100, weight_kg) + setup.cda_bias
+        def equilibrium_error(speed):
+            return calculate_power_for_speed(
+                speed, 0.0, weight_kg, setup.weight_kg, cda, 0.004 - setup.crr_reduction,
+            ) - payload['critical_power_w']
+        upper_speed = 30.0
+        while equilibrium_error(upper_speed) < 0:
+            upper_speed *= 2
+        initial_speed, _ = brentq(equilibrium_error, 0.0, upper_speed, full_output=True)
+        matches = []
+        for segment in list_segments():
+            seconds = constant_power_time(
+                load_segment_profile(segment['id']), power_w=payload['power_w'],
+                rider_weight_kg=weight_kg, bike_weight_kg=setup.weight_kg,
+                cda=cda, crr_reduction=setup.crr_reduction,
+                initial_speed_mps=initial_speed,
+            )
+            completion = 100 * payload['duration_sec'] / seconds
+            if not 90 <= completion <= 110:
+                continue
+            matches.append({
+                'segment_id': segment['id'], 'world_name': segment['world_name'],
+                'segment_name': segment['name'], 'expected_time_sec': seconds,
+                'difference_sec': abs(seconds - payload['duration_sec']),
+                'completion_percent': completion,
+            })
+        matches.sort(key=lambda row: (row['completion_percent'], row['world_name'], row['segment_name']))
+        return jsonify({
+            'matches': matches[:5], 'power_w': payload['power_w'],
+            'duration_sec': payload['duration_sec'], 'weight_kg': weight_kg,
+            'height_cm': height_cm, 'bike': str(setup),
+            'critical_power_w': payload['critical_power_w'], 'initial_speed_mps': initial_speed,
+        })
+    except ZwiftAPIError:
+        raise
+    except (ValueError, KeyError) as error:
+        logger.warning("Cannot simulate matching segments: %s", error)
+        return jsonify({'error': str(error)}), 422
+    except (OSError, requests.RequestException):
+        logger.exception("Could not load matching segment data")
+        return jsonify({'error': 'Could not load matching segment data. Please try again.'}), 502
 
 
 @app.route('/segment-prs')

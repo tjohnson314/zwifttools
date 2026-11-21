@@ -31,6 +31,21 @@ Activities, Power Dashboard, and Segment PRs use the active rider. Profile-based
 inputs remain editable; activity analysis uses the activity owner's profile,
 which may differ from the active rider. Race Replay, Ride Compare, static tools,
 and manual planners do not require a selected rider.
+On Power Dashboard, pin an interval and choose **Find matching segments** to
+simulate all complete timed segments with elevation geometry using the highest
+visible activity power rounded to whole watts, current rider height/weight, and the fully
+upgraded Tarmac SL9 + Princeton Wake all-rounder. The popup lists up to five
+segments with 90–110% completion (inclusive), sorted by increasing percentage. Completion
+is pinned duration divided by predicted finish time, and can exceed 100%.
+Map, trophy, and chart icons beside each segment name open Surface Map, Segment PRs,
+and the TT Pacing Planner with that directional segment selected. The Segment PRs
+and TT planner links retain the active rider.
+These are constant-power solo estimates, not optimized pacing or draft estimates.
+Every segment starts at the flat-tarmac equilibrium speed for the dashboard's
+Morton critical power, fitted in raw watts from visible 1-second and 5/10/20-minute
+powers even when the overlay is off, with fitted CP rounded to whole watts for
+the entry-speed calculation. The popup shows CP and entry speed; missing
+or invalid CP fits are reported rather than replaced with a standing start.
 My Activities caches computed normalized power and average heart rate, along
 with race-link information, in browser local storage per rider and activity.
 Entries are refreshed when the activity's listed date, distance, or duration
@@ -174,7 +189,9 @@ status and unavailable profiles are reported without breaking the Roster tab.
 
 ### Surface Map / Route Explorer
 
-- Browse worlds and routes at `/surface-map`, with surface-colored elevation profiles
+- Browse worlds, routes, and complete timed segments at `/surface-map`, with surface-colored elevation profiles. Switch between **Routes** and **Segments** in the sidebar; segment views show only the timed geometry, without a route lead-in
+- Segment deep links use `/surface-map?segment=<world-id>:<segment-hash>` and preserve directional segment IDs, including signed hashes; **Copy link** shares the selected route or segment
+- In a segment view, **Matching routes** next to **Reset view** opens a searchable list of all routes containing the complete directional segment. Each entry shows its first segment-start distance from the free-ride start, including the measured free-ride lead-in and complete segments starting within that lead-in. Unavailable free-ride versions or start geometry are reported explicitly. Selecting a route opens it on the map
 - Virtual-world GPS transforms fit an affine mapping from game x/z coordinates to cached ZwiftMap GPS routes. Watopia uses the wider-coverage Peak Performance reference rather than Jungle Circuit Reverse, improving alignment across both northern and southern roads. Previously cleaned replays are rebuilt from saved telemetry on their next load; segment PR caches also invalidate when the calibration changes
 - A bottom-left metric distance scale updates with zoom and resizing. Canvas maps derive horizontal distances from the inverse world projection in game metres; video satellite maps use their geographic zoom scale
 - Road overlays use thin, zoom-aware strokes (1.5 CSS pixels at world fit, growing gently up to 3 pixels); selected routes remain more prominent, including on high-DPI screens and after resizing

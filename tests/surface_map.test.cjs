@@ -118,6 +118,184 @@ test('route mode rapid switching rejects stale responses', async () => {
     assert.equal(vm.runInContext('state.route.route_mode', context), 'race');
 });
 
+function segmentBrowserContext() {
+    const node = () => ({
+        children: [], dataset: {}, style: {}, listeners: {}, hidden: false,
+        classList: { add() {}, toggle() {} },
+        set innerHTML(value) { this.children = []; this.html = value; },
+        get innerHTML() { return this.html || ''; },
+        appendChild(child) { this.children.push(child); },
+        addEventListener(name, callback) { this.listeners[name] = callback; },
+        setAttribute(name, value) { this[name] = value; },
+    });
+    const elements = Object.fromEntries(['route-list', 'road-picker-list', 'route-count', 'route-search',
+        'browse-title', 'route-mode', 'sport-filter', 'route-detail', 'status', 'road-picker-status',
+        'map-hint', 'world-select', 'road-route-picker', 'road-picker-title', 'road-picker-search',
+        'btn-matching-routes'].map(id => [id, node()]));
+    elements['road-route-picker'].showModal = function() { this.open = true; };
+    elements['road-route-picker'].close = function() { this.open = false; };
+    const pending = [], links = [];
+    const context = vm.createContext({
+        URL, URLSearchParams,
+        document: { addEventListener() {}, getElementById: id => elements[id],
+            createElement: node, querySelectorAll: () => [] },
+        window: { location: { href: 'http://localhost/surface-map?segment=1%3A-9223372027220687690' } },
+        location: { pathname: '/surface-map' },
+        history: { replaceState(_, title, url) { links.push(url); } },
+        fetch(url) { return new Promise(resolve => pending.push({ url, resolve })); },
+    });
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../static/js/surface_map.js'), 'utf8'), context);
+    for (const name of ['hideSatellite', 'buildCombinedPath', 'renderRouteDetail', 'fitToBounds',
+        'buildLegend', 'loadBackground']) context[name] = () => {};
+    const world = { mapID: 1, name: 'Watopia', bounds: {},
+        routes: [{ nameHash: 123, name: 'Test Route', distance_m: 1000, ascent_m: 10,
+            leadin_distance_m: 0, leadin_ascent_m: 0 }],
+        timing_segments: [{ id: '1:-9223372027220687690', name: 'Zwift KOM Reverse',
+            distance_km: 2, ascent_m: 20 }] };
+    vm.runInContext(`state.world = ${JSON.stringify(world)};`, context);
+    return { context, elements, pending, links, world };
+}
+
+test('segment loading preserves signed IDs, selects segment controls, and creates a shareable link', async () => {
+    const { context, elements, pending, links } = segmentBrowserContext();
+    const id = context.getUrlParams().segment;
+    assert.equal(id, '1:-9223372027220687690');
+    const loading = context.loadSegment(id);
+    assert.equal(pending[0].url, '/api/surface_map/segment/1%3A-9223372027220687690');
+    pending[0].resolve({ ok: true, json: async () => ({ name: 'Zwift KOM Reverse', bounds: {} }) });
+    assert.equal(await loading, true);
+    assert.equal(vm.runInContext('state.activeSegment', context), id);
+    assert.equal(vm.runInContext('state.activeHash', context), null);
+    assert.equal(elements['browse-title'].textContent, 'Segments');
+    assert.equal(elements['route-mode'].hidden, true);
+    assert.equal(elements['sport-filter'].hidden, true);
+    assert.equal(elements['route-list'].children[0].dataset.hash, id);
+    const params = new URL(links.at(-1), 'http://localhost').searchParams;
+    assert.equal(params.get('segment'), id);
+    assert.equal(params.get('route'), null);
+    assert.equal(params.get('mode'), null);
+});
+
+test('segment deep link loads its catalog entry after the world response', async () => {
+    const { context, pending, world } = segmentBrowserContext();
+    context.fetch = async url => {
+        pending.push(url);
+        return { ok: true, json: async () => url.endsWith('/world/1')
+            ? world : { name: 'Zwift KOM Reverse', bounds: {} } };
+    };
+    await context.loadWorld(1, null, '1:-9223372027220687690');
+    assert.deepEqual(pending, ['/api/surface_map/world/1', '/api/surface_map/segment/1%3A-9223372027220687690']);
+    assert.equal(vm.runInContext('state.activeSegment', context), '1:-9223372027220687690');
+});
+
+test('route selection wins over a stale segment response and restores route controls', async () => {
+    const { context, elements, pending, links } = segmentBrowserContext();
+    const old = context.loadSegment('1:-9223372027220687690');
+    const latest = context.loadRoute(123);
+    pending[1].resolve({ ok: true, json: async () => ({ name: 'Test Route', bounds: {}, route_mode: 'race' }) });
+    await latest;
+    pending[0].resolve({ ok: true, json: async () => ({ name: 'Zwift KOM Reverse', bounds: {} }) });
+    await old;
+    assert.equal(vm.runInContext('state.activeHash', context), 123);
+    assert.equal(vm.runInContext('state.activeSegment', context), null);
+    assert.equal(elements['route-mode'].hidden, false);
+    assert.equal(elements['sport-filter'].hidden, false);
+    const params = new URL(links.at(-1), 'http://localhost').searchParams;
+    assert.equal(params.get('route'), 'test-route');
+    assert.equal(params.get('segment'), null);
+});
+
+test('segment browser supports searching, empty worlds, and switching back to routes', () => {
+    const { context, elements } = segmentBrowserContext();
+    context.setBrowseType('segments');
+    assert.equal(elements['route-count'].textContent, '1/1');
+    vm.runInContext('state.routeFilter = "not found";', context);
+    context.renderRouteList();
+    assert.equal(elements['route-count'].textContent, '0/1');
+    assert.equal(elements['route-list'].children[0].textContent, 'No matching segments.');
+    vm.runInContext('state.world.timing_segments = [];', context);
+    context.renderRouteList();
+    assert.match(elements['route-list'].children[0].textContent, /No complete timed segments/);
+    context.setBrowseType('routes');
+    assert.equal(elements['route-count'].textContent, '1/1');
+    assert.equal(elements['route-mode'].hidden, false);
+});
+
+test('matching routes popup lists every containing route, searches, and selects a route', async () => {
+    const { context, elements, pending } = segmentBrowserContext();
+    vm.runInContext(`
+        state.activeSegment = '1:-9223372027220687690';
+        state.browseType = 'segments';
+        state.route = {name: 'Zwift KOM Reverse', matching_route_hashes: [123, 456]};
+        state.world.routes.push(
+            {nameHash:456,name:'Another Route',distance_m:2000,leadin_distance_m:0,sport_type:0},
+            {nameHash:789,name:'Other Direction',distance_m:1000,leadin_distance_m:0,sport_type:0});
+    `, context);
+    context.updateBrowseControls();
+    assert.equal(elements['btn-matching-routes'].hidden, false);
+    const originalFetch = context.fetch;
+    context.fetch = async url => {
+        assert.equal(url, '/api/surface_map/segment/1%3A-9223372027220687690/routes');
+        return {ok:true,json:async()=>({routes:[
+            {nameHash:123,start_distance_m:2345,status:'available'},
+            {nameHash:456,start_distance_m:0,status:'available'},
+        ]})};
+    };
+    await context.showMatchingRoutes();
+    context.fetch = originalFetch;
+    assert.equal(elements['road-route-picker'].open, true);
+    assert.equal(elements['road-picker-title'].textContent, 'Routes containing Zwift KOM Reverse');
+    const rows = elements['road-picker-list'].children;
+    assert.deepEqual(rows.map(row => row.dataset.hash), ['123', '456']);
+    assert.equal(rows[0].children[0].children[0].textContent,
+        'Segment starts at 2.35 km (free ride, including lead-in)');
+    assert.equal(rows[1].children[0].children[0].textContent,
+        'Segment starts at 0.00 km (free ride, including lead-in)');
+    elements['road-picker-search'].oninput({ target: { value: 'another' } });
+    assert.equal(rows[0].hidden, true);
+    assert.equal(rows[1].hidden, false);
+    const selecting = rows[1].children[0].listeners.click();
+    assert.equal(pending[0].url, '/api/surface_map/route/1/456?mode=race');
+    pending[0].resolve({ ok: true, json: async () => ({name:'Another Route',bounds:{}}) });
+    await selecting;
+    assert.equal(vm.runInContext('state.activeHash', context), 456);
+    assert.equal(elements['road-route-picker'].open, false);
+    assert.equal(elements['btn-matching-routes'].hidden, true);
+});
+
+test('matching routes button hides on cleared segments and unavailable data is reported', async () => {
+    const { context, elements } = segmentBrowserContext();
+    vm.runInContext('state.activeSegment = "1:123"; state.route = { name:"Segment" };', context);
+    await context.showMatchingRoutes();
+    assert.match(elements.status.textContent, /Matching route information is unavailable/);
+    vm.runInContext('state.route.matching_route_hashes = [];', context);
+    context.fetch = async () => ({ok:true,json:async()=>({routes:[]})});
+    await context.showMatchingRoutes();
+    assert.equal(elements['road-picker-list'].children[0].textContent, 'No routes contain this segment.');
+    context.clearRoute();
+    assert.equal(elements['btn-matching-routes'].hidden, true);
+    assert.equal(elements['road-route-picker'].open, false);
+});
+
+test('matching route starts report unavailable free rides and ignore stale responses', async () => {
+    const { context, elements, pending } = segmentBrowserContext();
+    vm.runInContext(`
+        state.activeSegment = '1:-123'; state.browseType = 'segments';
+        state.route = {name:'Segment',matching_route_hashes:[123]};
+    `, context);
+    const old = context.showMatchingRoutes();
+    context.clearRoute();
+    pending[0].resolve({ok:true,json:async()=>({routes:[{nameHash:123,status:'available',start_distance_m:10}]})});
+    await old;
+    assert.notEqual(elements['road-route-picker'].open, true);
+    assert.equal(elements['btn-matching-routes'].disabled, false);
+    vm.runInContext(`state.activeSegment = '1:-123'; state.route = {name:'Segment',matching_route_hashes:[123]};`, context);
+    context.fetch = async () => ({ok:true,json:async()=>({routes:[{nameHash:123,status:'free_ride_unavailable'}]})});
+    await context.showMatchingRoutes();
+    assert.equal(elements['road-picker-list'].children[0].children[0].children[0].textContent,
+        'Free-ride version unavailable');
+});
+
 function render(escalators, overrides = {}) {
     let result;
     const listeners = {};
@@ -532,7 +710,7 @@ test('portal route loading stays on the canvas without attempting satellite imag
         route: { x: [0, 100], y: [0, 0] } };
     context.fetch = async () => ({ ok: true, json: async () => route });
     vm.runInContext(`
-        setRouteLoading = closeRoadPicker = updateRouteModeButtons = buildCombinedPath =
+        setRouteLoading = closeRoadPicker = updateBrowseControls = updateRouteModeButtons = buildCombinedPath =
             renderRouteDetail = renderRouteList = updateUrl = () => {};
     `, context);
     assert.equal(await context.loadRoute(10009), true);

@@ -214,6 +214,9 @@ select option {
     display: flex;
     gap: 4px;
 }
+.sport-filter[hidden] {
+    display: none;
+}
 .sport-btn {
     flex: 1;
     background: rgba(0, 0, 0, 0.25);

@@ -44,7 +44,10 @@
                             <input id="criticalPowerToggle" type="checkbox" aria-label="Show Morton model overlay">
                             <label for="criticalPowerToggle">Morton model</label>
                         </div>
-                        <span id="pinState" class="pin-state">Hover to inspect</span>
+                        <div class="pin-controls">
+                            <span id="pinState" class="pin-state">Hover to inspect</span>
+                            <button id="findMatchingSegmentBtn" class="pin-state matching-segment-button" type="button" hidden>Find matching segments</button>
+                        </div>
                     </div>
                 </div>
                 <div id="partitionLegend" class="partition-legend"></div>
@@ -117,6 +120,21 @@
         </section>
     </div>
 
+    <dialog id="matchingSegmentsDialog" class="matching-segments-dialog" aria-labelledby="matchingSegmentsTitle">
+        <div class="panel-title-row">
+            <h2 id="matchingSegmentsTitle">Matching segments</h2>
+            <form method="dialog"><button class="range-btn" aria-label="Close matching segments">Close</button></form>
+        </div>
+        <p id="matchingSegmentsSummary" class="subtitle"></p>
+        <p id="matchingSegmentsStatus" class="subtitle" role="status" aria-live="polite"></p>
+        <div class="activity-table-wrap">
+            <table id="matchingSegmentsTable" class="activity-table" hidden>
+                <thead><tr><th>World</th><th>Segment</th><th class="num">Expected completion</th></tr></thead>
+                <tbody id="matchingSegmentsBody"></tbody>
+            </table>
+        </div>
+        <p class="subtitle">Up to five segments with 90-110% expected completion, sorted by increasing percentage. Completion = duration / finish time; values above 100% mean you could finish sooner. Constant power, no draft. Power and CP are rounded to whole watts. Rolling start at flat-tarmac equilibrium speed for Morton CP fitted from visible 1-second and 5/10/20-minute powers, even with the overlay off.</p>
+    </dialog>
     <script src="/static/js/power_dashboard.js"></script>
 </body>
 </html>
