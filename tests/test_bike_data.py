@@ -11,6 +11,64 @@ def db():
     return BikeDatabase()
 
 
+@pytest.mark.parametrize("component,allowed", [
+    ({"weight_g": 0}, False),
+    ({"weight_g": 1000, "weight_g_v2": 0}, False),
+    ({"weight_g": 0, "weight_g_v2": 1000}, True),
+    ({"weight_g": -1}, True),
+    ({}, True),
+])
+def test_allowed_bikes_filter_only_zero_effective_frame_component_weight(
+        db, tmp_path, monkeypatch, component, allowed):
+    frame = {"folder": "Test", "make": "Test", "name": "Bike", "type": "STANDARD",
+             "components": {"frame": component, "fork": {"weight_g": 0}},
+             "frameset_weight_g_effective": 830, "frameset_cda_bias_effective": 0}
+    (tmp_path / "game_frames.json").write_text(json.dumps([frame]))
+    (tmp_path / "game_wheels.json").write_text("[]")
+    (tmp_path / "game_upgrades.json").write_text(json.dumps({
+        "levelup_configs": db.upgrade_definitions,
+    }))
+    monkeypatch.setattr(BikeDatabase, "DATA_DIR", tmp_path)
+    database = BikeDatabase()
+
+    assert ("Test" in database.frames) == allowed
+    assert (database.get_bike_stats("Test", None) is not None) == allowed
+    assert any(frame_id == "Test" for frame_id, _ in database.bikes) == allowed
+
+
+def test_extraction_reports_excluded_frames_without_discarding_raw_stats(capsys):
+    from tools import extract_zwift_bikes as extractor
+
+    configs = {folder: {"refs": {"frame": f"{folder}.xml"}}
+               for folder in ("Placeholder", "Ready")}
+    index = {
+        f"{folder}.xml": (
+            f"<Component><WeightGrams>{weight}</WeightGrams>"
+            "<CdABias>0</CdABias></Component>"
+        ).encode()
+        for folder, weight in (("Placeholder", 0), ("Ready", 1000))
+    }
+
+    frames = extractor.extract_frames("assets", configs, index)
+
+    assert len(frames) == 2
+    assert frames[0]["components"]["frame"]["weight_g"] == 0
+    assert capsys.readouterr().out == (
+        "frames excluded from allowed options (zero frame component weight): Placeholder\n"
+    )
+
+
+def test_frame_api_excludes_placeholder_but_keeps_zero_weight_forks(monkeypatch, db):
+    import app as app_module
+
+    monkeypatch.setattr(app_module, "get_db", lambda: db)
+    client = app_module.app.test_client()
+    frames = {frame["id"] for frame in client.get("/api/frames").get_json()}
+    assert "FactorONE2026" not in frames
+    assert {"CerveloP52026", "CubeAeriumC68X2026"} <= frames
+    assert client.get("/api/bike_stats?frame_id=FactorONE2026").status_code == 404
+
+
 def test_bike_extraction_preserves_localized_variants_and_their_components(monkeypatch, capsys):
     from tools import extract_zwift_bikes as extractor
 

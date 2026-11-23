@@ -38,6 +38,8 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from bike_comparison.bike_data import has_zero_frame_weight  # noqa: E402
 from extract_zwift_routes import read_wad_entries  # noqa: E402
 
 # Repeating 182-byte XOR key used to obfuscate Zwift bike component XML.
@@ -500,6 +502,9 @@ def extract_frames(base: str, configs: dict[str, dict], index: dict[str, bytes])
             f"  {len(unresolved)} unresolved component refs (first 5): {unresolved[:5]}",
             file=sys.stderr,
         )
+    excluded = [frame["folder"] for frame in out if has_zero_frame_weight(frame)]
+    print(f"frames excluded from allowed options (zero frame component weight): "
+          f"{', '.join(excluded) if excluded else '(none)'}")
     return out
 
 

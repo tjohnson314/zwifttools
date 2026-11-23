@@ -101,6 +101,15 @@ def _slug(text: str) -> str:
     return re.sub(r'[^a-z0-9]', '', (text or '').lower())
 
 
+def has_zero_frame_weight(frame: dict) -> bool:
+    """Identify placeholder frame components using current-physics weight."""
+    component = frame.get('components', {}).get('frame', {})
+    weight = component.get('weight_g_v2')
+    if weight is None:
+        weight = component.get('weight_g')
+    return weight == 0
+
+
 @dataclass
 class BikeSetup:
     """Complete bike setup with computed stats (from authoritative game data)."""
@@ -157,6 +166,8 @@ class BikeDatabase:
                 continue
             folder = fr.get('folder')
             if not folder:
+                continue
+            if has_zero_frame_weight(fr):
                 continue
             weight_g = fr.get('frameset_weight_g_effective')
             cda_bias = fr.get('frameset_cda_bias_effective')

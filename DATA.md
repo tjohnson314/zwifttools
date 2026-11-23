@@ -102,6 +102,14 @@ This also corrects previously overwritten base-bike stats. Refresh with
 `python tools\extract_zwift_bikes.py --out zwiftdata` (or force the full pipeline
 at an already-extracted client version).
 
+`BikeDatabase` excludes bikes whose frame component's effective weight is exactly
+zero from allowed selections and calculations. The component's `weight_g_v2`
+takes precedence when present, otherwise `weight_g` is used. This checks the
+frame component, not the complete frameset weight; zero-weight forks alone do
+not exclude a bike. Negative and missing component weights are not excluded by
+this rule. The extractor prints the excluded frame IDs during regeneration,
+while retaining all raw records and stats in `game_frames.json`.
+
 ---
 
 ## Game Bike Upgrades
