@@ -164,7 +164,13 @@ class BikeDatabase:
                 # Incomplete frameset (e.g. missing frame or fork) -- skip.
                 continue
             make = fr.get('make') or ''
-            model = _humanize(fr.get('name') or folder, strip_prefix=make)
+            display_name = fr.get('display_name')
+            if display_name:
+                model = display_name.strip()
+                if make and model.lower().startswith(make.lower() + ' '):
+                    model = model[len(make):].lstrip()
+            else:
+                model = _humanize(fr.get('name') or folder, strip_prefix=make)
             if not model:
                 model = _humanize(folder)
             frame_type = _GAME_TYPE_TO_FRAME_TYPE.get(fr.get('type'), 'Standard')

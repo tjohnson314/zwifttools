@@ -8,6 +8,7 @@ This document describes the complete data pipeline for every page and API endpoi
 
 - [Architecture Overview](#architecture-overview)
 - [Game Entitlements](#game-entitlements)
+- [Game Bike Names](#game-bike-names)
 - [Game Bike Upgrades](#game-bike-upgrades)
 - [Authentication](#authentication)
 - [Landing Page](#landing-page)
@@ -80,6 +81,26 @@ references fail extraction before overwriting the existing export.
 using its existing client-version gate and `--out-data` directory. Use `--force`
 or the standalone extractor when first adding the catalogue at an already-extracted
 client version. The dataset has no web endpoint or account-ownership lookup.
+
+---
+
+## Game Bike Names
+
+Bike selector names are exported by `tools/extract_zwift_bikes.py` from each
+bike config's `NameLoc`, resolved against the English entries in
+`Localization/Localization.xml` inside `assets/global.wad`. `game_frames.json`
+retains the internal `name`, localization key `name_loc`, and exact
+`display_name`; `BikeDatabase` uses the latter without CamelCase formatting.
+Unresolved keys are reported during extraction and retain the existing
+internal-name fallback.
+
+Configs sharing a frame folder are retained as separate selectable bikes,
+with their own component references, prices, and upgrade paths. The base config
+keeps the existing folder ID; additional variants use their config filename
+without `Config.xml`. `source_frame_folder` records the shared asset folder.
+This also corrects previously overwritten base-bike stats. Refresh with
+`python tools\extract_zwift_bikes.py --out zwiftdata` (or force the full pipeline
+at an already-extracted client version).
 
 ---
 

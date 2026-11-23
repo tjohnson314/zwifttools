@@ -11,6 +11,69 @@ def db():
     return BikeDatabase()
 
 
+def test_bike_extraction_preserves_localized_variants_and_their_components(monkeypatch, capsys):
+    from tools import extract_zwift_bikes as extractor
+
+    localization = b'''<?xml version="1.0"?><VERSION>0</VERSION><ZL>
+        <Entry LOC_ID="LOC_BASE"><EN value="Aeroad 2024"/></Entry>
+        <Entry LOC_ID="LOC_VARIANT"><EN value="MyCanyon Opus - Felipe Pantone"/></Entry>
+        </ZL>'''
+    def config(key, frame, price):
+        return f'''<Bike><Make>Canyon</Make><Name>InternalName</Name>
+            <NameLoc>{key}</NameLoc><Price>{price}</Price><Type>STANDARD</Type>
+            <Frame>data/bikes/Frames/CanyonAeroad2024/{frame}.xml</Frame></Bike>'''.encode()
+
+    entries = {
+        "bikes/CanyonAeroadPantone2025Config.xml": config("LOC_VARIANT", "frameSRAM", 1750000),
+        "bikes/CanyonAeroad2024Config.xml": config("LOC_BASE", "frame", 1100000),
+        "bikes/CanyonAeroadLiteralConfig.xml": config("Aeroad / SRAM", "frame", 1200000),
+        "bikes/CanyonAeroadUnknownConfig.xml": config("LOC_MISSING", "frame", 1300000),
+    }
+    monkeypatch.setattr(extractor, "read_wad_entries", lambda path:
+                        {"Localization/Localization.xml": localization}
+                        if path.endswith("global.wad") else entries)
+    monkeypatch.setattr(extractor, "decrypt", lambda data: data.decode())
+    configs = extractor.build_bike_configs("assets")
+    index = {
+        "bikes/frames/canyonaeroad2024/frame.xml":
+            b"<Component><WeightGrams>1000</WeightGrams><CdABias>0.01</CdABias></Component>",
+        "bikes/frames/canyonaeroad2024/framesram.xml":
+            b"<Component><WeightGrams>900</WeightGrams><CdABias>0.02</CdABias></Component>",
+    }
+    frames = {frame["folder"]: frame for frame in extractor.extract_frames("assets", configs, index)}
+    assert len(frames) == 4
+    assert frames["CanyonAeroad2024"]["display_name"] == "Aeroad 2024"
+    variant = frames["CanyonAeroadPantone2025"]
+    assert variant["display_name"] == "MyCanyon Opus - Felipe Pantone"
+    assert variant["source_frame_folder"] == "CanyonAeroad2024"
+    assert variant["price"] == 1750000
+    assert variant["frameset_weight_g_effective"] == 900
+    assert variant["frameset_cda_bias_effective"] == .02
+    assert frames["CanyonAeroadLiteral"]["display_name"] == "Aeroad / SRAM"
+    assert frames["CanyonAeroadUnknown"]["display_name"] is None
+    assert "LOC_MISSING" in capsys.readouterr().err
+
+
+def test_frame_selector_api_uses_game_variant_names(monkeypatch, db):
+    import app as app_module
+
+    monkeypatch.setattr(app_module, "get_db", lambda: db)
+    frames = {frame["id"]: frame for frame in
+              app_module.app.test_client().get("/api/frames").get_json()}
+    expected = {
+        "CanyonAeroad2024": "Canyon Aeroad 2024",
+        "CanyonAeroadFabrio2025": "Canyon MyCanyon Fabrio - Gold Dust",
+        "CanyonAeroad2025": "Canyon MyCanyon Mano - Carina Red",
+        "CanyonAeroadPantone2025": "Canyon MyCanyon Opus - Felipe Pantone",
+        "CanyonAeroadSRAM2024": "Canyon Aeroad 2024 / SRAM",
+    }
+    for frame_id, name in expected.items():
+        assert frames[frame_id]["name"] == name
+        setup = db.get_bike_stats(frame_id, None)
+        assert setup is not None
+        assert setup.frame_name == name
+
+
 @pytest.mark.parametrize("level", [0, 3, 5])
 def test_lightning_aero_socks_reduce_total_drag_without_changing_components(db, level):
     stock = db.get_bike_stats("Zwift_Carbon", None, level)

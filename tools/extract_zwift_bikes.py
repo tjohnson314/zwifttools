@@ -194,10 +194,20 @@ def _upgrade_path(level_up: str | None) -> str | None:
 
 
 def build_bike_configs(base: str) -> dict[str, dict]:
-    """Map a frame folder -> full bike config: metadata, whole-bike price/level,
-    and the set of component references that make up the bike."""
+    """Map stable bike IDs to configs, retaining variants sharing components."""
+    localization = read_wad_entries(os.path.join(base, "global.wad"))
+    text = localization["Localization/Localization.xml"]
+    # The client places a VERSION element before the localization root.
+    root = ET.fromstring(text[text.index(b"<ZL>"):])
+    names = {
+        entry.attrib["LOC_ID"]: english.attrib["value"]
+        for entry in root.findall("Entry")
+        if (english := entry.find("EN")) is not None and english.get("value")
+    }
     cfg = read_wad_entries(os.path.join(base, "Bikes", "bikes_config.wad"))
+    by_folder: dict[str, list[tuple[str, dict]]] = {}
     configs: dict[str, dict] = {}
+    unresolved: list[str] = []
     for name, data in cfg.items():
         if not (name.startswith("bikes/") and name.endswith("Config.xml")):
             continue
@@ -221,9 +231,19 @@ def build_bike_configs(base: str) -> dict[str, dict]:
             if t:
                 refs[key] = _norm_ref(t)
         cassette = (_text(root.find("Cassette")) or "").lower() == "true"
-        configs[folder] = {
+        name_loc = _text(root.find("NameLoc"))
+        display_name = names.get(name_loc)
+        if name_loc and not name_loc.startswith("LOC_"):
+            display_name = name_loc
+        elif name_loc and not display_name:
+            unresolved.append(name_loc)
+        config_id = os.path.basename(name)[:-len("Config.xml")]
+        record = {
+            "source_frame_folder": folder,
             "make": _text(root.find("Make")),
             "name": _text(root.find("Name")),
+            "name_loc": name_loc,
+            "display_name": display_name,
             "type": _text(root.find("Type")),
             "year": _inum(root, "Year"),
             "class": _text(root.find("BikeClass")),
@@ -233,6 +253,24 @@ def build_bike_configs(base: str) -> dict[str, dict]:
             "refs": refs,
             "cassette": cassette,
         }
+        by_folder.setdefault(folder, []).append((config_id, record))
+    for folder, variants in by_folder.items():
+        # Keep the historic folder ID for the base bike, not whichever variant
+        # happens to be encountered last in the archive.
+        normalized_folder = folder.replace("_", "").lower()
+        primary_id = next(
+            (bike_id for bike_id, _ in variants
+             if bike_id.replace("_", "").lower() == normalized_folder),
+            variants[0][0],
+        )
+        for bike_id, record in variants:
+            frame_id = folder if bike_id == primary_id else bike_id
+            if frame_id in configs:
+                raise ValueError(f"Duplicate bike ID: {frame_id}")
+            configs[frame_id] = record
+    if unresolved:
+        print(f"  unresolved bike name localization keys: {sorted(set(unresolved))}; "
+              "using internal names for these bikes", file=sys.stderr)
     return configs
 
 
@@ -435,8 +473,11 @@ def extract_frames(base: str, configs: dict[str, dict], index: dict[str, bytes])
 
         rec = {
             "folder": folder,
+            "source_frame_folder": cfg.get("source_frame_folder", folder),
             "make": cfg.get("make"),
             "name": cfg.get("name"),
+            "name_loc": cfg.get("name_loc"),
+            "display_name": cfg.get("display_name"),
             "type": cfg.get("type"),
             "year": cfg.get("year"),
             "class": cfg.get("class"),
