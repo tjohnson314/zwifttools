@@ -1,0 +1,20 @@
+{
+    "manifest_version": 1,
+    "id": "sauce_mod_segment_times",
+    "name": "Segment Times",
+    "description": "Estimated segment times for nearby riders.",
+    "version": "1.0.0",
+    "author": "ZwiftTools",
+    "windows": [{
+        "id": "segment-times",
+        "file": "segment-times.html",
+        "name": "Segment Times",
+        "description": "Live estimated segment finishes",
+        "overlay": true,
+        "frame": false,
+        "default_bounds": {
+            "width": 420,
+            "height": 320
+        }
+    }]
+}

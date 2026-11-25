@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html class="transparent-bg" tabindex="0">
+    <head>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+        <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';"/>
+        <title>Segment Times - Sauce for Zwift</title>
+        <script src="/pages/src/preloads.js"></script>
+        <link rel="stylesheet" href="/pages/css/common.css"/>
+        <link rel="stylesheet" href="segment-times.css"/>
+        <script type="module">
+            import {main} from './segment-times.mjs';
+            main();
+        </script>
+    </head>
+    <body>
+        <div id="titlebar" class="always-visible">
+            <header>
+                <div class="title">Segment Times</div>
+                <div class="filler"></div>
+                <div class="buttons">
+                    <div title="Minimize" class="button minimize electron-only"><ms>minimize</ms></div>
+                    <div title="Close" class="button close electron-only"><ms>close</ms></div>
+                </div>
+            </header>
+        </div>
+        <div id="content">
+            <div id="status" role="status">Waiting for nearby riders...</div>
+            <div class="notice">Nearby riders only. Estimated times; attempts with missing telemetry may be skipped.</div>
+            <div class="headings"><span>Rider</span><span>Segment</span><span>Time</span></div>
+            <div id="results" role="log" aria-label="Estimated segment finishes"></div>
+        </div>
+    </body>
+</html>

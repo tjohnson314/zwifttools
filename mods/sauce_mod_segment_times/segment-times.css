@@ -1,0 +1,57 @@
+body {
+    margin: 0;
+    color: white;
+    font-family: 'Noto Sans', sans-serif;
+}
+
+#content {
+    display: flex;
+    flex-direction: column;
+    height: calc(100% - 2em);
+    padding: 0.4em 0.6em;
+    background: rgba(0, 0, 0, 0.65);
+}
+
+#status, .notice {
+    font-size: 0.75em;
+    color: rgba(255, 255, 255, 0.75);
+    margin-bottom: 0.4em;
+}
+
+#status.error {
+    color: #ff8585;
+}
+
+.headings, .result {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    gap: 0.5em;
+}
+
+.headings {
+    font-size: 0.7em;
+    font-weight: bold;
+    color: rgba(255, 255, 255, 0.65);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+#results {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.result {
+    padding: 0.35em 0;
+    font-size: 0.8em;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.result span {
+    overflow-wrap: anywhere;
+}
+
+.result span:last-child {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
