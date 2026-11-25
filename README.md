@@ -367,7 +367,10 @@ and zero reported draft. TT/MTB frames and active workouts (including free-ride
 blocks) are excluded. Sauce's rider groups must identify you as solo, except
 in rubberbanded "keep together" events. Group, workout, and event context is
 checked every second; unavailable context is reported and disables this estimate.
-Sauce's game connection must be enabled for the workout-status RPC.
+Enable **Settings > General > Game Connection** in Sauce and restart Sauce to
+provide workout status. Sauce warns this connection conflicts with Zwift
+Companion's Game mode. Supertuck detection waits until Game Connection is
+connected; the overlay automatically retries when it becomes available.
 During a detected supertuck, the row is labeled **Draft (supertuck)** and replaces
 normal draft with one third of the modeled aero drag. The residual uses that same
 replacement. Display smoothing resets on entry/exit so the draft row does not

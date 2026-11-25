@@ -21,6 +21,7 @@ async function harness() {
     const fields = element();
     let update;
     const rpc = {
+        async getGameConnectionStatus() { return {connected: true}; },
         async getWorkoutStatus() { return null; },
         async getGroupsData() { return [{athletes: [{athleteId: 1}]}]; },
     };
@@ -140,4 +141,32 @@ test('banded event rules are loaded and stale or failed context never produces a
     assert.equal(h.draftLabel(), 'Draft');
     assert.equal(h.values().draft, 0);
     assert.match(h.fields.querySelector('.supertuck-status').textContent, /Game connection unavailable/);
+});
+
+test('disabled or disconnected Game Connection reports the remedy and recovers when connected', async () => {
+    const h = await harness();
+    const data = ride();
+    h.update(data);
+    assert.equal(h.draftLabel(), 'Draft (supertuck)');
+
+    h.rpc.getGameConnectionStatus = async () => ({connected: false, state: 'disabled'});
+    h.rpc.getWorkoutStatus = async () => { throw new Error('Invalid handler name: getWorkoutStatus'); };
+    await h.refresh();
+    h.update(data);
+    assert.equal(h.draftLabel(), 'Draft');
+    assert.equal(h.values().draft, 0);
+    assert.match(h.fields.querySelector('.supertuck-status').textContent,
+        /Enable Game Connection in Sauce Settings > General, then restart Sauce/);
+
+    h.rpc.getGameConnectionStatus = async () => ({connected: false, state: 'waiting'});
+    await h.refresh();
+    assert.match(h.fields.querySelector('.supertuck-status').textContent, /Game Connection not connected/);
+
+    h.rpc.getGameConnectionStatus = async () => ({connected: true});
+    h.rpc.getWorkoutStatus = async () => null;
+    await h.refresh();
+    h.update(data);
+    assert.equal(h.draftLabel(), 'Draft (supertuck)');
+    assert.equal(h.fields.querySelector('.supertuck-status').textContent, '');
+    assert.ok(Math.abs(h.values().draft + h.values().aero / 3) < 1e-9);
 });

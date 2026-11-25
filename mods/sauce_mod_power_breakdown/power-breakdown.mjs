@@ -99,6 +99,13 @@ async function refreshSupertuckContext() {
     contextRefreshing = true;
     const eventId = selfData?.eventSubgroupId ?? null;
     try {
+        const connection = await Common.rpc.getGameConnectionStatus();
+        if (connection?.state === 'disabled') {
+            throw new Error('Enable Game Connection in Sauce Settings > General, then restart Sauce');
+        }
+        if (!connection?.connected) {
+            throw new Error(`Game Connection not connected${connection?.error ? `: ${connection.error}` : ''}`);
+        }
         const [workoutStatus, groups] = await Promise.all([
             Common.rpc.getWorkoutStatus(),
             Common.rpc.getGroupsData(),
