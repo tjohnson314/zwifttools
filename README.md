@@ -343,8 +343,35 @@ Standalone browser overlays for [Sauce4Zwift](https://www.sauce.llc/), installed
 | **Surface Telemetry** | `sauce_mod_surface_telemetry/` | Records your telemetry with manual surface type tagging (Tarmac, Cobbles, Brick, Wood, Dirt, Gravel) for CRR mapping. Exports CSV. |
 | **Team Race Score** | `sauce_mod_team_race/` | Live team race scoreboard — tracks two teams across categories with 3/2/1 point scoring, gap-to-rival, and power stats. |
 | **Race Telemetry** | `sauce_mod_telemetry/` | Records per-second telemetry for all nearby riders (power, HR, speed, cadence, location, draft). Exports rider telemetry + profiles as separate CSVs. |
-| **Power Breakdown** | `sauce_mod_power_breakdown/` | Live aero, rolling, gravity, acceleration, and draft power estimates using bike upgrade stats and road surfaces. |
-| **Nearby Draft** | `sauce_mod_nearby_draft/` | Live road map with initials-centered draft donuts at actual rider positions: green effective draft, blue wasted watts, gray remaining maximum draft. Configurable radius (default 50 m) and closest-rider limit (0 = unlimited), with displayed/actual rider counts including you. Zoomable; negative segments are dashed and flagged rather than clipped. Uses each rider's Zwift weight/height, automatic road surfaces, and a configurable shared bike assumption. |
+| **Power Breakdown** | `sauce_mod_power_breakdown/` | Live aero, rolling, gravity, acceleration, and draft power estimates using your actual Sauce 2.4 frame/wheels, bike upgrade stats, and road surfaces. |
+| **Nearby Draft** | `sauce_mod_nearby_draft/` | Live road map with initials-centered draft donuts at actual rider positions: green effective draft, blue wasted watts, gray remaining maximum draft. Configurable radius (default 50 m) and closest-rider limit (0 = unlimited), with displayed/actual rider counts including you. Zoomable; negative segments are dashed and flagged rather than clipped. Uses each rider's actual Sauce 2.4 frame/wheels, Zwift weight/height, and automatic road surfaces. |
+| **Equipment Peek** | `sauce_mod_equipment/` | Shows your frame, front wheel, rear wheel, and equipment signatures through the stock Sauce 2.4 equipment API. |
+
+These equipment features require Sauce **2.4.0-alpha.6 or newer**; no custom
+Sauce branch is needed. Power Breakdown and Nearby Draft use
+`athlete.equipment.cycling` from Sauce's rider updates, whose profile cache
+normally refreshes about every five minutes. Bike swaps may therefore be delayed.
+Equipment Peek explicitly refreshes your equipment profile every five seconds;
+Zwift's own profile updates may still lag behind the game.
+
+The physics mods no longer use manual frame/wheel selectors. Their retained
+**assumed upgrade level** setting is not detected from Zwift (Sauce does not
+report it); Nearby Draft applies this assumption to all riders. Missing equipment,
+unmatched physics records, or unsupported mixed wheelsets show unavailable
+estimates instead of substituting a different bike. Nearby Draft keeps those
+riders on the map with neutral dashed rings and explains the issue in their details.
+
+Power Breakdown estimates [supertucking](https://zwiftinsider.com/supertuck/)
+at speeds of at least 58 km/h, grades of -3% or steeper, power below 11 W,
+and zero reported draft. TT/MTB frames and active workouts (including free-ride
+blocks) are excluded. Sauce's rider groups must identify you as solo, except
+in rubberbanded "keep together" events. Group, workout, and event context is
+checked every second; unavailable context is reported and disables this estimate.
+Sauce's game connection must be enabled for the workout-status RPC.
+During a detected supertuck, the row is labeled **Draft (supertuck)** and replaces
+normal draft with one third of the modeled aero drag. The residual uses that same
+replacement. Display smoothing resets on entry/exit so the draft row does not
+retain a previous riding mode's watts.
 
 Nearby Draft interpolates all rider positions, displayed distances, and camera motion at approximately 30 Hz using one shared delayed game timestamp. Playback has a one-second buffer anchored to your position history. New or stale riders wait individually until their history covers the displayed timestamp, without hiding the rest of the group or extrapolating positions. Draft values and radius filtering continue to use the actual telemetry.
 
@@ -355,7 +382,9 @@ surface data for **both Power Breakdown and Nearby Draft** from the repository r
 python tools/build_power_breakdown_data.py
 ```
 
-The builder uses the current bike database and local Zwift world WADs. If no WADs
+The builder also copies the shared equipment resolver from
+`shared/sauce_bike_setup.mjs` into each standalone physics mod.
+It uses the current bike database and local Zwift world WADs. If no WADs
 are available, existing road-surface bundles are preserved. Other map-based mods
 load road geometry directly from Sauce rather than bundling repository route data.
 

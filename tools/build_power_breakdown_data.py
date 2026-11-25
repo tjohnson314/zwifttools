@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -204,6 +205,10 @@ def main(update_road_styles: bool = True) -> None:
             f.write(";\n")
         print(f"wrote {out_mjs} ({os.path.getsize(out_mjs) // 1024} KB, "
               f"{len(model['frames'])} frames, {len(model['wheels'])} wheels)")
+        shutil.copyfile(
+            os.path.join(ROOT, "shared", "sauce_bike_setup.mjs"),
+            os.path.join(mod_dir, "bike-setup.mjs"),
+        )
 
         if not update_road_styles:
             continue

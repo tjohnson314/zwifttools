@@ -50,6 +50,7 @@ html:not(.settings-page) #content { flex: 1; min-height: 0; display: flex; flex-
 .detail-head { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
 .detail-name { min-width: 0; overflow-wrap: anywhere; }
 .detail-distance { flex-shrink: 0; color: #abb8bf; }
+.detail-bike { padding-top: 4px; font-size: 11px; color: #abb8bf; overflow-wrap: anywhere; }
 .detail-values { padding-top: 4px; }
 .effective-value { color: #72cf98; }
 .wasted-value { color: #7eafe3; }

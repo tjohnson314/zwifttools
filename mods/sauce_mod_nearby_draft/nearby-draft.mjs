@@ -1,5 +1,4 @@
 import * as Common from '/pages/src/common.mjs';
-import {MODEL} from './bike-model.mjs';
 import * as Surface from './surface.mjs';
 import {DEFAULTS, DraftTracker, PositionInterpolator, positionOffset,
     selectDisplayedRiders, riderInitials, donutSegments} from './draft-model.mjs';
@@ -134,29 +133,45 @@ function createMarker(id) {
 
 function renderMarkerLabel(marker) {
     const {entry, summary, element} = marker;
-    const segments = donutSegments(summary);
     const name = entry.athlete?.sanitizedFullname || `Rider ${entry.athleteId}`;
     const distance = marker.displayDistance ?? entry.distance;
+    if (summary.error) {
+        const label = `${name}${entry.isSelf ? ' (you)' : ''}: ${distance.toFixed(1)} m; ${summary.error}`;
+        element.title = label;
+        element.setAttribute('aria-label', label);
+        return;
+    }
+    const segments = donutSegments(summary);
     const label = `${name}${entry.isSelf ? ' (you)' : ''}: ${distance.toFixed(1)} m; ` +
         `effective ${summary.effective.toFixed(0)} W; wasted ${summary.residual.toFixed(0)} W; ` +
         `remaining ${segments.values[2].toFixed(0)} W; max draft ${summary.maxDraft.toFixed(0)} W` +
-        (segments.signed ? '. Signed values; dashed segments are negative.' : '');
+        (segments.signed ? '. Signed values; dashed segments are negative.' : '') +
+        `; ${summary.bikeLabel}`;
     element.title = label;
     element.setAttribute('aria-label', label);
 }
 
 function renderMarker(marker) {
     const {entry, summary, element} = marker;
-    const segments = donutSegments(summary);
     renderMarkerLabel(marker);
     element.classList.toggle('self', entry.isSelf);
-    element.classList.toggle('signed', segments.signed);
+    element.classList.toggle('unavailable', Boolean(summary.error));
+    element.classList.toggle('signed', !summary.error && donutSegments(summary).signed);
     marker.initials.textContent = riderInitials(entry.athlete, entry.athleteId);
     const ratio = devicePixelRatio || 1;
     marker.canvas.width = marker.canvas.height = Math.round(36 * ratio);
     const context = marker.canvas.getContext('2d');
     context.scale(ratio, ratio);
     context.lineWidth = 5;
+    if (summary.error) {
+        context.beginPath();
+        context.strokeStyle = '#9aa';
+        context.setLineDash([2, 2]);
+        context.arc(18, 18, 14.5, 0, Math.PI * 2);
+        context.stroke();
+        return;
+    }
+    const segments = donutSegments(summary);
     const colors = ['#45a86e', '#4c8fd6', '#737b80'];
     let angle = -Math.PI / 2;
     segments.fractions.forEach((fraction, index) => {
@@ -180,6 +195,13 @@ function renderDetails() {
     detailsEl.querySelector('.detail-name').textContent =
         `${entry.athlete?.sanitizedFullname || `Rider ${entry.athleteId}`}${entry.isSelf ? ' (you)' : ''}`;
     detailsEl.querySelector('.detail-distance').textContent = `${(marker.displayDistance ?? entry.distance).toFixed(1)} m`;
+    detailsEl.querySelector('.detail-bike').textContent = summary.error || summary.bikeLabel;
+    if (summary.error) {
+        for (const selector of ['.effective-value', '.wasted-value', '.remaining-value']) {
+            detailsEl.querySelector(selector).textContent = 'Unavailable';
+        }
+        return;
+    }
     detailsEl.querySelector('.effective-value').textContent = `${summary.effective.toFixed(0)} W`;
     detailsEl.querySelector('.wasted-value').textContent = `${summary.residual.toFixed(0)} W`;
     detailsEl.querySelector('.remaining-value').textContent = `${donutSegments(summary).values[2].toFixed(0)} W`;
@@ -298,11 +320,6 @@ export function settingsMain() {
     Common.initInteractionListeners();
     Common.settingsStore.setDefault({...DEFAULTS});
     loadSettings();
-    const framePicker = document.querySelector('[data-set="frameId"]');
-    const wheelPicker = document.querySelector('[data-set="wheelId"]');
-    for (const frame of MODEL.frames) framePicker.add(new Option(frame.name, frame.id));
-    wheelPicker.add(new Option('Frame built-in wheels', ''));
-    for (const wheel of MODEL.wheels) wheelPicker.add(new Option(`${wheel.make} ${wheel.model}`.trim(), wheel.id));
     document.querySelector('form').addEventListener('submit', event => event.preventDefault());
     for (const element of document.querySelectorAll('[data-set]')) {
         const key = element.dataset.set;

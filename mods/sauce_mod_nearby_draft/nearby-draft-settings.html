@@ -30,10 +30,10 @@
                 <label>Max riders (0 = unlimited) <input type="number" data-set="maxRiders" min="0" step="1" required/></label>
             </fieldset>
             <fieldset>
-                <legend>Bike assumption (all riders)</legend>
-                <label>Frame <select data-set="frameId"></select></label>
-                <label>Wheels <select data-set="wheelId"></select></label>
-                <label>Upgrade level <select data-set="upgradeLevel">
+                <legend>Actual rider equipment</legend>
+                <p>Each rider's frame and wheels come from Sauce 2.4.
+                    Estimates are unavailable when equipment or physics stats are missing.</p>
+                <label>Assumed upgrade level (all riders; not reported by Sauce) <select data-set="upgradeLevel">
                     <option value="0">0 (stock)</option><option value="1">1</option>
                     <option value="2">2</option><option value="3">3</option>
                     <option value="4">4</option><option value="5">5</option>

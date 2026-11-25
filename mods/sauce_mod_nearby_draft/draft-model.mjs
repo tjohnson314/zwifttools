@@ -1,10 +1,11 @@
 import {MODEL} from './bike-model.mjs';
+import {createBikeResolver} from './bike-setup.mjs';
+
+const resolveBike = createBikeResolver(MODEL);
 
 export const DEFAULTS = {
     radiusM: 50,
     maxRiders: 0,
-    frameId: 'Zwift_TT',
-    wheelId: '',
     upgradeLevel: 5,
     weightKg: 75,
     heightCm: 183,
@@ -227,9 +228,14 @@ export class DraftTracker {
     update(entry, settings = DEFAULTS, style = 'NORMAL') {
         const state = entry.state;
         const id = String(entry.athleteId);
+        const setup = resolveBike(entry.athlete?.equipment?.cycling, settings.upgradeLevel);
+        if (setup.error) {
+            this.riders.delete(id);
+            return {error: setup.error, bikeLabel: setup.label};
+        }
         const worldTime = Number.isFinite(state.worldTime) ? state.worldTime : null;
         let history = this.riders.get(id);
-        if (history && history.courseId !== state.courseId) history = null;
+        if (history && (history.courseId !== state.courseId || history.setupKey !== setup.key)) history = null;
         if (history && worldTime != null && history.prev.worldTime != null) {
             const elapsed = (worldTime - history.prev.worldTime) / 1000;
             if (elapsed === 0) return history.summary;
@@ -257,9 +263,6 @@ export class DraftTracker {
             smooth.speed = gameSpeed;
         }
 
-        const frame = MODEL.frames.find(candidate => candidate.id === settings.frameId) || MODEL.frames[0];
-        const wheel = MODEL.wheels.find(candidate => candidate.id === settings.wheelId);
-        const level = settings.upgradeLevel;
         const weight = Number.isFinite(entry.athlete?.weight) && entry.athlete.weight > 0 ?
             entry.athlete.weight : settings.weightKg;
         const height = Number.isFinite(entry.athlete?.height) && entry.athlete.height > 0 ?
@@ -267,13 +270,11 @@ export class DraftTracker {
         const constants = MODEL.constants;
         const area = constants.AREA_COEFFICIENT * height ** constants.HEIGHT_EXPONENT *
             weight ** constants.WEIGHT_EXPONENT - constants.AREA_OFFSET;
-        const wheelBias = wheel ? ((frame.type || '').toUpperCase() === 'TT' ? wheel.cdaTt : wheel.cda) : 0;
-        const cda = 0.5 * constants.AIR_DENSITY * area + frame.cda[level] + wheelBias;
-        const mass = weight + (frame.wt[level] + (wheel?.wt || 0)) / 1000;
-        const bikeType = MODEL.frameTypeToBikeType[frame.type] || 'road_bike';
-        const crrTable = MODEL.crr[bikeType] || MODEL.crr.road_bike;
+        const cda = 0.5 * constants.AIR_DENSITY * area + setup.frameBias + setup.wheelBias;
+        const mass = weight + setup.bikeWeightKg;
+        const crrTable = MODEL.crr[setup.bikeType] || MODEL.crr.road_bike;
         const crr = (crrTable[MODEL.styleMap[style] || 'Tarmac'] ?? crrTable.Tarmac) -
-            frame.crrReduction[level];
+            setup.crrReduction;
         const speed = smooth.speed;
         const gradient = speed !== 0 ? smooth.altitude / speed : 0;
         const aero = -(0.5 * constants.AIR_DENSITY * cda * speed ** 3);
@@ -287,8 +288,8 @@ export class DraftTracker {
         const raw = {aero, draft, residual};
         const values = history?.values || {...raw};
         for (const key of Object.keys(raw)) values[key] += (raw[key] - values[key]) * alpha;
-        const summary = summarizeDraft(values);
-        this.riders.set(id, {courseId: state.courseId, smooth, values, summary,
+        const summary = {...summarizeDraft(values), bikeLabel: setup.label};
+        this.riders.set(id, {courseId: state.courseId, setupKey: setup.key, smooth, values, summary,
             prev: {worldTime, altitude, latlng, speed}});
         return summary;
     }

@@ -1,5 +1,6 @@
 import * as Common from '/pages/src/common.mjs';
 import {MODEL} from './bike-model.mjs';
+import {createBikeResolver} from './bike-setup.mjs';
 import * as Surface from './surface.mjs';
 
 Common.enableSentry();
@@ -24,8 +25,6 @@ const CATEGORIES = [
 ];
 
 const DEFAULTS = {
-    frameId: 'Zwift_TT',
-    wheelId: '',
     upgradeLevel: 5,
     useZwiftWeight: true,
     weightKg: 75,
@@ -46,6 +45,15 @@ let prev = null;            // {worldTime, altitude, latlng, speedMps}
 let sm = {dAltDt: 0, dvDt: 0, speed: 0};   // smoothed derivatives + speed
 let smVals = null;          // smoothed category watts
 let lastAthlete = {weightKg: null, heightCm: null};
+let equipment;
+let setupKey;
+let lastSupertuck = false;
+let selfData;
+let supertuckContext;
+let contextRefreshing = false;
+let contextError;
+let cachedEvent;
+const resolveBike = createBikeResolver(MODEL);
 
 
 // Horizontal ground distance (m) between two [lat, lng] pairs. Equirectangular
@@ -81,6 +89,62 @@ export function main() {
         updateConfigSummary();
     });
     Common.subscribe('athlete/self', onSelfUpdate);
+    refreshSupertuckContext();
+    const contextTimer = setInterval(refreshSupertuckContext, 1000);
+    globalThis.addEventListener('pagehide', () => clearInterval(contextTimer), {once: true});
+}
+
+async function refreshSupertuckContext() {
+    if (contextRefreshing) return;
+    contextRefreshing = true;
+    const eventId = selfData?.eventSubgroupId ?? null;
+    try {
+        const [workoutStatus, groups] = await Promise.all([
+            Common.rpc.getWorkoutStatus(),
+            Common.rpc.getGroupsData(),
+        ]);
+        if (!Array.isArray(groups)) throw new Error('Rider group data unavailable');
+        if (!cachedEvent || cachedEvent.id !== eventId) {
+            let banded = false;
+            if (eventId != null) {
+                const subgroup = await Common.rpc.getEventSubgroup(eventId);
+                if (!subgroup) throw new Error('Event rules unavailable');
+                banded = subgroup.rubberbanding || subgroup.rulesSet?.includes('RUBBERBANDING');
+                if (!banded && subgroup.eventId != null) {
+                    const event = await Common.rpc.getEvent(subgroup.eventId);
+                    if (!event) throw new Error('Event rules unavailable');
+                    banded = event.rubberbanding || event.rulesSet?.includes('RUBBERBANDING');
+                }
+            }
+            cachedEvent = {id: eventId, banded: Boolean(banded)};
+        }
+        supertuckContext = {eventId, workoutStatus, groups, banded: cachedEvent.banded};
+        contextError = null;
+        els.supertuckStatus.textContent = '';
+    } catch (error) {
+        supertuckContext = null;
+        const message = String(error.message || error);
+        els.supertuckStatus.textContent = `Supertuck detection unavailable: ${message}`;
+        if (contextError !== message) console.error('Supertuck context lookup failed:', error);
+        contextError = message;
+    } finally {
+        contextRefreshing = false;
+    }
+}
+
+function isSupertucking(data, setup, context) {
+    const state = data.state;
+    if (!state || !context || context.eventId !== (data.eventSubgroupId ?? null)) return false;
+    if (!Number.isFinite(state.speed) || state.speed < 58 ||
+        !Number.isFinite(state.grade) || state.grade > -0.03 ||
+        !Number.isFinite(state.power) || state.power >= 11 || state.draft !== 0) return false;
+    const frameType = (setup.frame.type || '').toUpperCase();
+    if (frameType === 'TT' || frameType === 'MTB') return false;
+    if (state.workoutZone ||
+        (context.workoutStatus && !context.workoutStatus.state?.isFinished)) return false;
+    const group = context.groups.find(item =>
+        item.athletes.some(athlete => String(athlete.athleteId) === String(data.athleteId)));
+    return context.banded || Boolean(group && group.athletes.length === 1);
 }
 
 
@@ -101,6 +165,7 @@ function cacheEls() {
     els.bikeSummary = document.querySelector('.bike-summary');
     els.cdaSummary = document.querySelector('.cda-summary');
     els.massSummary = document.querySelector('.mass-summary');
+    els.supertuckStatus = document.querySelector('.supertuck-status');
     els.surfaceStyle = document.querySelector('.surface-style');
     els.surfaceType = document.querySelector('.surface-type');
     els.surfaceCrr = document.querySelector('.surface-crr');
@@ -109,8 +174,6 @@ function cacheEls() {
     els.draftRes = document.querySelector('.draft-res');
     els.draftMax = document.querySelector('.draft-max');
     els.checkSum = document.querySelector('.check-sum');
-    els.frameSel = document.querySelector('[data-set="frameId"]');
-    els.wheelSel = document.querySelector('[data-set="wheelId"]');
     els.upgradeSel = document.querySelector('[data-set="upgradeLevel"]');
     els.useZwiftWeight = document.querySelector('[data-set="useZwiftWeight"]');
     els.weightKg = document.querySelector('[data-set="weightKg"]');
@@ -133,6 +196,7 @@ function buildRows() {
             <div class="brk-value">—</div>`;
         els.rows.appendChild(row);
         rowEls[cat.key] = {
+            label: row.querySelector('.brk-label'),
             value: row.querySelector('.brk-value'),
             barPos: row.querySelector('.brk-pos'),
             barNeg: row.querySelector('.brk-neg'),
@@ -142,24 +206,6 @@ function buildRows() {
 
 
 function populatePickers() {
-    // Flat alphabetical frame list (already sorted by name in the data).
-    els.frameSel.innerHTML = '';
-    for (const f of MODEL.frames) {
-        const o = document.createElement('option');
-        o.value = f.id;
-        o.textContent = f.name;
-        els.frameSel.appendChild(o);
-    }
-    els.frameSel.value = settings.frameId;
-
-    els.wheelSel.innerHTML = '<option value="">(Frame built-in wheels)</option>';
-    for (const w of MODEL.wheels) {
-        const o = document.createElement('option');
-        o.value = w.id;
-        o.textContent = `${w.make} ${w.model}`.trim();
-        els.wheelSel.appendChild(o);
-    }
-    els.wheelSel.value = settings.wheelId;
     els.upgradeSel.value = String(settings.upgradeLevel);
 
     els.manualSurface.innerHTML = '';
@@ -213,16 +259,7 @@ function applySurfaceEnable() {
 
 
 function getBikeSetup() {
-    const frame = MODEL.frames.find(f => f.id === settings.frameId) || MODEL.frames[0];
-    const wheel = settings.wheelId ? MODEL.wheels.find(w => w.id === settings.wheelId) : null;
-    const lvl = Math.max(0, Math.min(5, settings.upgradeLevel | 0));
-    const frameBias = frame.cda[lvl];
-    const isTT = (frame.type || '').toUpperCase() === 'TT';
-    const wheelBias = wheel ? (isTT ? wheel.cdaTt : wheel.cda) : 0;
-    const bikeWeightKg = (frame.wt[lvl] + (wheel ? wheel.wt : 0)) / 1000;
-    const bikeType = MODEL.frameTypeToBikeType[frame.type] || 'road_bike';
-    const crrReduction = frame.crrReduction[lvl];
-    return {frame, wheel, frameBias, wheelBias, bikeWeightKg, bikeType, crrReduction};
+    return resolveBike(equipment, settings.upgradeLevel);
 }
 
 
@@ -234,15 +271,36 @@ function computeCdA(setup, heightM, riderWeightKg) {
 
 
 function updateConfigSummary() {
+    if (!els.bikeSummary) return;
     const setup = getBikeSetup();
+    if (setup.error) {
+        renderUnavailable(setup.error);
+        return;
+    }
     const {riderWeightKg, heightM} = getRider();
     const cda = computeCdA(setup, heightM, riderWeightKg);
     const mass = riderWeightKg + setup.bikeWeightKg;
-    const wheelName = setup.wheel ? `${setup.wheel.make} ${setup.wheel.model}`.trim() : 'built-in';
-    els.bikeSummary.textContent =
-        `${setup.frame.name} · ${wheelName} · L${settings.upgradeLevel}`.trim();
+    els.bikeSummary.textContent = setup.label;
     els.cdaSummary.textContent = `CdA ${cda.toFixed(4)} m²`;
     els.massSummary.textContent = `${mass.toFixed(1)} kg`;
+}
+
+function renderUnavailable(message) {
+    lastSupertuck = false;
+    rowEls.draft.label.textContent = 'Draft';
+    els.bikeSummary.textContent = message;
+    els.cdaSummary.textContent = 'CdA unavailable';
+    els.massSummary.textContent = 'Mass unavailable';
+    els.surfaceStyle.textContent = '—';
+    els.surfaceType.textContent = '';
+    els.surfaceCrr.textContent = '';
+    els.draftValue.textContent = 'Unavailable';
+    els.draftMax.textContent = 'max —';
+    els.draftEff.style.width = els.draftRes.style.width = '0%';
+    for (const row of Object.values(rowEls)) {
+        row.value.textContent = '—';
+        row.barPos.style.width = row.barNeg.style.width = '0%';
+    }
 }
 
 
@@ -261,16 +319,27 @@ function getRider() {
 
 function onSelfUpdate(data) {
     if (!data) return;
+    selfData = data;
     const state = data.state;
     if (data.athlete) {
         if (data.athlete.weight) lastAthlete.weightKg = data.athlete.weight;
         if (data.athlete.height) lastAthlete.heightCm = data.athlete.height;
     }
+    equipment = data.athlete?.equipment?.cycling;
+    const setup = getBikeSetup();
+    if (setup.error || setup.key !== setupKey) {
+        prev = null;
+        sm = {dAltDt: 0, dvDt: 0, speed: 0};
+        smVals = null;
+        setupKey = setup.key;
+    }
+    if (setup.error) {
+        renderUnavailable(setup.error);
+        return;
+    }
     if (!state) return;
 
     if (state.courseId != null) Surface.preload(state.courseId);
-
-    const setup = getBikeSetup();
     const {riderWeightKg, heightM} = getRider();
     const cda = computeCdA(setup, heightM, riderWeightKg);
     const mass = riderWeightKg + setup.bikeWeightKg;
@@ -336,7 +405,9 @@ function onSelfUpdate(data) {
     // --- Power categories (W), signed so they sum to zero ---------------
     const riderToWheel = power * (1 - DRIVETRAIN_LOSS);
     const cAero = -(0.5 * AIR_DENSITY * cda * v * v * v);
-    const draftW = settings.draftIsWatts ? draftRaw : draftRaw * -cAero / 100;
+    const supertuck = isSupertucking(data, setup, supertuckContext);
+    const draftW = supertuck ? -cAero / 3 :
+        settings.draftIsWatts ? draftRaw : draftRaw * -cAero / 100;
 
     const cRider = riderToWheel;
     const cDraft = draftW;
@@ -349,15 +420,18 @@ function onSelfUpdate(data) {
                  pe: cPE, ke: cKE, residual: cResidual};
 
     // EMA display smoothing (linear -> preserves zero sum).
+    if (supertuck !== lastSupertuck) smVals = null;
+    lastSupertuck = supertuck;
     if (!smVals) smVals = {...raw};
     const aDisp = dt > 0 ? 1 - Math.exp(-dt / Math.max(0.5, settings.smoothSec)) : 0.3;
     for (const k of Object.keys(raw)) smVals[k] += (raw[k] - smVals[k]) * aDisp;
 
-    render(smVals, {style, surfaceType, crr, cda, mass, setup});
+    render(smVals, {style, surfaceType, crr, cda, mass, setup, supertuck});
 }
 
 
 function render(vals, ctx) {
+    rowEls.draft.label.textContent = ctx.supertuck ? 'Draft (supertuck)' : 'Draft';
     let maxAbs = 1;
     for (const k of Object.keys(vals)) maxAbs = Math.max(maxAbs, Math.abs(vals[k]));
 
@@ -382,9 +456,7 @@ function render(vals, ctx) {
     els.surfaceCrr.textContent = `Crr ${ctx.crr.toFixed(4)}`;
     els.cdaSummary.textContent = `CdA ${ctx.cda.toFixed(4)} m²`;
     els.massSummary.textContent = `${ctx.mass.toFixed(1)} kg`;
-    const wheelName = ctx.setup.wheel ? `${ctx.setup.wheel.make} ${ctx.setup.wheel.model}`.trim() : 'built-in';
-    els.bikeSummary.textContent =
-        `${ctx.setup.frame.name} · ${wheelName} · L${settings.upgradeLevel}`.trim();
+    els.bikeSummary.textContent = ctx.setup.label;
 }
 
 

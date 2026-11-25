@@ -6,7 +6,11 @@ async function modelContext() {
 }
 
 function rider(athleteId, gap, overrides = {}) {
-    return {athleteId, gap, athlete: {weight: 75, height: 183},
+    return {athleteId, gap, athlete: {weight: 75, height: 183, equipment: {cycling: {
+        frame: {name: 'Zwift TT'},
+        wheelFront: {name: 'DTSwiss ARC 1100 DICUT 85/Disc', imageName: 'Wheel_DTSwissARC1100DICUT85DISC'},
+        wheelRear: {name: 'DTSwiss ARC 1100 DICUT 85/Disc', imageName: 'Wheel_DTSwissARC1100DICUT85DISC'},
+    }}},
         state: {worldTime: 1000, courseId: 6, speed: 36, power: 200, draft: 100,
             altitude: 10, ...overrides}};
 }
@@ -82,7 +86,7 @@ test('course changes and stale samples reset derivatives; athlete dimensions aff
     const stale = rider(1, 0, {courseId: 13, worldTime: 10000, altitude: 2000});
     assert.deepEqual(tracker.update(stale, settings), new context.DraftTracker().update(stale, settings));
     const heavy = rider(2, 1);
-    heavy.athlete = {weight: 110, height: 200};
+    heavy.athlete = {...heavy.athlete, weight: 110, height: 200};
     assert.notEqual(tracker.update(heavy, settings).maxDraft,
         new context.DraftTracker().update(rider(2, 1), settings).maxDraft);
 });
@@ -165,30 +169,37 @@ test('a one-rider cap retains self even when another rider has the same coordina
     assert.equal(selection.actual, 2);
 });
 
-test('assigned frame and wheels affect the draft model equally for every rider', async () => {
+test('each rider uses their actual frame and wheels, ignoring legacy manual selectors', async () => {
     const {DEFAULTS, DraftTracker} = await modelContext();
     const {MODEL} = await import('../mods/sauce_mod_nearby_draft/bike-model.mjs');
-    const defaultFrame = MODEL.frames.find(frame => frame.id === DEFAULTS.frameId);
+    const defaultFrame = MODEL.frames.find(frame => frame.id === 'Zwift_TT');
     const otherFrame = MODEL.frames.find(frame =>
         frame.cda[DEFAULTS.upgradeLevel] !== defaultFrame.cda[DEFAULTS.upgradeLevel]);
-    const wheel = MODEL.wheels.find(candidate => Number.isFinite(candidate.cdaTt) && candidate.cdaTt !== 0);
+    const wheel = MODEL.wheels.find(candidate => candidate.id === 'enveenveses45pro');
     assert.ok(otherFrame);
     assert.ok(wheel);
     const baseline = new DraftTracker().update(rider(1, 0), DEFAULTS).maxDraft;
-    for (const settings of [{...DEFAULTS, frameId: otherFrame.id}, {...DEFAULTS, wheelId: wheel.id}]) {
+    for (const component of ['frame', 'wheels']) {
         const tracker = new DraftTracker();
-        const first = tracker.update(rider(1, 0), settings);
-        const second = tracker.update(rider(2, 1), settings);
-        assert.notEqual(first.maxDraft, baseline);
-        assert.deepEqual(first, second);
+        const first = rider(1, 0);
+        const second = rider(2, 1);
+        if (component === 'frame') {
+            second.athlete.equipment.cycling.frame = {name: otherFrame.name};
+        } else {
+            second.athlete.equipment.cycling.wheelFront = {name: `${wheel.make} ${wheel.model}`};
+            second.athlete.equipment.cycling.wheelRear = {name: `${wheel.make} ${wheel.model}`};
+        }
+        const settings = {...DEFAULTS, frameId: otherFrame.id, wheelId: wheel.id};
+        assert.equal(tracker.update(first, settings).maxDraft, baseline);
+        assert.notEqual(tracker.update(second, settings).maxDraft, baseline);
     }
 });
 
 test('drivetrain upgrades change rolling power but not the aero draft ceiling', async () => {
     const {DEFAULTS, DraftTracker} = await modelContext();
     const {MODEL} = await import('../mods/sauce_mod_nearby_draft/bike-model.mjs');
-    const frame = MODEL.frames.find(candidate => candidate.id === DEFAULTS.frameId);
-    const wheel = MODEL.wheels.find(candidate => candidate.id === DEFAULTS.wheelId);
+    const frame = MODEL.frames.find(candidate => candidate.id === 'Zwift_TT');
+    const wheel = MODEL.wheels.find(candidate => candidate.id === 'dtswissarc1100dicut85disc');
     const entry = rider(1, 0, {power: 400});
     const stock = new DraftTracker().update(entry, {...DEFAULTS, upgradeLevel: 2});
     const upgraded = new DraftTracker().update(entry, {...DEFAULTS, upgradeLevel: 3});
@@ -197,6 +208,25 @@ test('drivetrain upgrades change rolling power but not the aero draft ceiling', 
 
     assert.equal(upgraded.maxDraft, stock.maxDraft);
     assert.ok(Math.abs(stock.effective - upgraded.effective - rollingReduction) < 1e-9);
+});
+
+test('missing equipment clears stale estimates and a bike swap recomputes even at the same timestamp', async () => {
+    const {DEFAULTS, DraftTracker} = await modelContext();
+    const tracker = new DraftTracker();
+    const entry = rider(1, 0);
+    const baseline = tracker.update(entry, DEFAULTS);
+    entry.athlete.equipment.cycling.frame = {name: 'Specialized Tarmac SL8'};
+    const swapped = tracker.update(entry, DEFAULTS);
+    assert.ok(Number.isFinite(swapped.maxDraft));
+    assert.notEqual(swapped.maxDraft, baseline.maxDraft);
+    delete entry.athlete.equipment;
+    const missing = tracker.update(entry, DEFAULTS);
+    assert.match(missing.error, /Equipment unavailable/);
+    assert.equal(missing.maxDraft, undefined);
+    assert.equal(tracker.riders.has('1'), false);
+    const recovered = rider(1, 0, {worldTime: 2000, altitude: 100});
+    assert.deepEqual(tracker.update(recovered, DEFAULTS),
+        new DraftTracker().update(recovered, DEFAULTS));
 });
 
 test('position interpolation moves continuously between telemetry samples without extrapolating', async () => {
