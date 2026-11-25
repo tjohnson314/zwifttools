@@ -49,6 +49,18 @@ test('unknown, missing, mixed, and invalid equipment assumptions are explicitly 
     assert.match(resolve(equipment(), 6).error, /Upgrade assumption/);
 });
 
+test('bike labels show matching wheelsets once and retain different or missing wheels', async () => {
+    const {resolve} = await resolver();
+    assert.equal(resolve(equipment(), 5).label,
+        'Specialized Tarmac SL8 / Princeton Wake 6560 Lava; assumed L5');
+    const mixed = resolve({...equipment(), wheelRear: {name: 'Enve SES 4.5 Pro'}}, 5);
+    assert.match(mixed.label, /front: Princeton Wake 6560 Lava \/ rear: Enve SES 4\.5 Pro/);
+    const missing = resolve({...equipment(), wheelRear: undefined}, 5);
+    assert.match(missing.label, /front: Princeton Wake 6560 Lava \/ rear: unavailable/);
+    const unknown = resolve({...equipment(), wheelFront: {signature: 123}, wheelRear: {signature: 456}}, 5);
+    assert.match(unknown.label, /front: 123 \/ rear: 456/);
+});
+
 test('standalone mods bundle the shared resolver and resolve integrated wheels rather than dropping wheel mass', async () => {
     const {MODEL} = await resolver();
     const source = await fs.readFile(path.join(__dirname, '..', 'shared', 'sauce_bike_setup.mjs'), 'utf8');

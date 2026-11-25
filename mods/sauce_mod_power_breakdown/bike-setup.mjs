@@ -39,8 +39,11 @@ export function createBikeResolver(model) {
         return (asset && wheels.get(normalize(asset))) || wheels.get(normalize(item?.name));
     };
     return (equipment, level) => {
-        const label = `${equipmentName(equipment?.frame)} / ${equipmentName(equipment?.wheelFront)}` +
-            ` / ${equipmentName(equipment?.wheelRear)}; assumed L${level}`;
+        const front = equipmentName(equipment?.wheelFront);
+        const rear = equipmentName(equipment?.wheelRear);
+        const wheels = equipment?.wheelFront?.name && equipment?.wheelRear?.name &&
+            front === rear ? front : `front: ${front} / rear: ${rear}`;
+        const label = `${equipmentName(equipment?.frame)} / ${wheels}; assumed L${level}`;
         if (!equipment?.frame || !equipment.wheelFront || !equipment.wheelRear) {
             return {label, error: 'Equipment unavailable (requires Sauce 2.4)'};
         }
