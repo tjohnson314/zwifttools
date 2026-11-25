@@ -348,11 +348,11 @@ Standalone browser overlays for [Sauce4Zwift](https://www.sauce.llc/), installed
 | **Equipment Peek** | `sauce_mod_equipment/` | Shows your frame, front wheel, rear wheel, and equipment signatures through the stock Sauce 2.4 equipment API. |
 
 These equipment features require Sauce **2.4.0-alpha.6 or newer**; no custom
-Sauce branch is needed. Power Breakdown and Nearby Draft use
-`athlete.equipment.cycling` from Sauce's rider updates, whose profile cache
-normally refreshes about every five minutes. Bike swaps may therefore be delayed.
-Equipment Peek explicitly refreshes your equipment profile every five seconds;
-Zwift's own profile updates may still lag behind the game.
+Sauce branch is needed. Power Breakdown and Equipment Peek explicitly refresh
+your equipment profile every five seconds; Power Breakdown uses the refreshed
+profile from the next Sauce rider update and reports refresh failures. Nearby
+Draft uses Sauce's rider updates, whose profile cache normally refreshes about
+every five minutes. Zwift's own profile updates may still lag behind the game.
 
 The physics mods no longer use manual frame/wheel selectors. Their retained
 **assumed upgrade level** setting is not detected from Zwift (Sauce does not

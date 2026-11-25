@@ -20,7 +20,11 @@ async function harness() {
     }
     const fields = element();
     let update;
+    const timers = new Map();
+    const cleared = [];
+    let pagehide;
     const rpc = {
+        async getAthlete() { return ride().athlete; },
         async getGameConnectionStatus() { return {connected: true}; },
         async getWorkoutStatus() { return null; },
         async getGroupsData() { return [{athletes: [{athleteId: 1}]}]; },
@@ -33,14 +37,16 @@ async function harness() {
             addEventListener() {},
         }, subscribe(event, callback) { update = callback; }, rpc},
         document: {querySelector: selector => fields.querySelector(selector), createElement: element},
-        setInterval() {}, clearInterval() {}, addEventListener() {},
+        setInterval(callback, delay) { timers.set(delay, callback); return delay; },
+        clearInterval(id) { cleared.push(id); },
+        addEventListener(event, callback) { if (event === 'pagehide') pagehide = callback; },
         console: {error() {}},
     });
     vm.runInContext(source, sandbox);
     vm.runInContext('main()', sandbox);
     await new Promise(resolve => setImmediate(resolve));
     return {
-        sandbox, rpc, update, fields,
+        sandbox, rpc, update, fields, timers, cleared, pagehide,
         detects: vm.runInContext('isSupertucking', sandbox),
         refresh: vm.runInContext('refreshSupertuckContext', sandbox),
         values: () => vm.runInContext('({...smVals})', sandbox),
@@ -74,6 +80,50 @@ test('supertuck thresholds use raw game speed, grade, power, and exactly zero dr
     ]) {
         assert.equal(detects(ride(overrides), setup, context()), false, JSON.stringify(overrides));
     }
+});
+
+test('equipment profiles refresh every five seconds and update on the next rider sample', async () => {
+    const h = await harness();
+    const original = ride();
+    h.update(original);
+    assert.match(h.fields.querySelector('.bike-summary').textContent, /Specialized Tarmac SL8/);
+    let calls = 0;
+    let resolveProfile;
+    const pending = new Promise(resolve => { resolveProfile = resolve; });
+    h.rpc.getAthlete = async (id, options) => {
+        calls++;
+        assert.equal(id, 'self');
+        assert.deepEqual(Array.from(options.required), ['equipment']);
+        assert.equal(options.refresh, true);
+        return pending;
+    };
+    const refreshed = ride({worldTime: 2000});
+    refreshed.athlete.equipment.cycling.frame = {name: 'Zwift TT'};
+    const refresh = h.timers.get(5000)();
+    await h.timers.get(5000)();
+    assert.equal(calls, 1, 'overlapping profile requests are skipped');
+    resolveProfile(refreshed.athlete);
+    await refresh;
+    h.update(refreshed);
+    assert.match(h.fields.querySelector('.bike-summary').textContent, /Zwift TT/);
+    assert.equal(h.fields.querySelector('.equipment-status').textContent, '');
+    h.pagehide();
+    assert.deepEqual(h.cleared.sort(), [1000, 5000]);
+});
+
+test('equipment refresh failures and missing profiles are visible and recover on retry', async () => {
+    const h = await harness();
+    h.update(ride());
+    h.rpc.getAthlete = async () => { throw new Error('network down'); };
+    await h.timers.get(5000)();
+    assert.match(h.fields.querySelector('.equipment-status').textContent, /network down/);
+    assert.match(h.fields.querySelector('.bike-summary').textContent, /Specialized Tarmac SL8/);
+    h.rpc.getAthlete = async () => null;
+    await h.timers.get(5000)();
+    assert.match(h.fields.querySelector('.equipment-status').textContent, /Rider equipment unavailable/);
+    h.rpc.getAthlete = async () => ride().athlete;
+    await h.timers.get(5000)();
+    assert.equal(h.fields.querySelector('.equipment-status').textContent, '');
 });
 
 test('TT/MTB frames, workouts including free-ride blocks, and unbanded packs cannot supertuck', async () => {

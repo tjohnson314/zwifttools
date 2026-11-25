@@ -53,6 +53,8 @@ let supertuckContext;
 let contextRefreshing = false;
 let contextError;
 let cachedEvent;
+let equipmentRefreshing = false;
+let equipmentError;
 const resolveBike = createBikeResolver(MODEL);
 
 
@@ -89,9 +91,35 @@ export function main() {
         updateConfigSummary();
     });
     Common.subscribe('athlete/self', onSelfUpdate);
+    refreshEquipment();
     refreshSupertuckContext();
+    const equipmentTimer = setInterval(refreshEquipment, 5000);
     const contextTimer = setInterval(refreshSupertuckContext, 1000);
-    globalThis.addEventListener('pagehide', () => clearInterval(contextTimer), {once: true});
+    globalThis.addEventListener('pagehide', () => {
+        clearInterval(equipmentTimer);
+        clearInterval(contextTimer);
+    }, {once: true});
+}
+
+async function refreshEquipment() {
+    if (equipmentRefreshing) return;
+    equipmentRefreshing = true;
+    try {
+        const athlete = await Common.rpc.getAthlete('self', {
+            required: ['equipment'],
+            refresh: true,
+        });
+        if (!athlete?.equipment?.cycling) throw new Error('Rider equipment unavailable');
+        equipmentError = null;
+        els.equipmentStatus.textContent = '';
+    } catch (error) {
+        const message = String(error.message || error);
+        els.equipmentStatus.textContent = `Equipment refresh failed; showing last available profile: ${message}`;
+        if (equipmentError !== message) console.error('Equipment refresh failed:', error);
+        equipmentError = message;
+    } finally {
+        equipmentRefreshing = false;
+    }
 }
 
 async function refreshSupertuckContext() {
@@ -172,6 +200,7 @@ function cacheEls() {
     els.bikeSummary = document.querySelector('.bike-summary');
     els.cdaSummary = document.querySelector('.cda-summary');
     els.massSummary = document.querySelector('.mass-summary');
+    els.equipmentStatus = document.querySelector('.equipment-status');
     els.supertuckStatus = document.querySelector('.supertuck-status');
     els.surfaceStyle = document.querySelector('.surface-style');
     els.surfaceType = document.querySelector('.surface-type');
