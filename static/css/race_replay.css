@@ -711,6 +711,90 @@ h1 .header-icon {
     height: 350px;
 }
 
+#race-power-chart {
+    height: 460px;
+}
+
+.power-unit-control {
+    display: inline-flex;
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.power-unit-control button {
+    border: 0;
+    border-right: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.05);
+    color: #97a7c3;
+    padding: 6px 10px;
+    font: inherit;
+    font-size: 0.84rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.power-unit-control button:last-child {
+    border-right: 0;
+}
+
+.power-unit-control button.active {
+    background: #f7931e;
+    color: #fff;
+}
+
+#race-comparison-warning-list {
+    margin: 10px 0 0 20px;
+    color: #ffb74d;
+}
+
+#race-power-table,
+#race-segment-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
+#race-power-table th,
+#race-power-table td,
+#race-segment-table th,
+#race-segment-table td {
+    padding: 8px 10px;
+    text-align: right;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+#race-power-table th,
+#race-segment-table th {
+    position: sticky;
+    top: 0;
+    background: #1e2a3a;
+}
+
+#race-power-table th:nth-child(2),
+#race-power-table td:nth-child(2),
+#race-segment-table th:nth-child(2),
+#race-segment-table td:nth-child(2) {
+    text-align: left;
+}
+
+#race-segment-table th button {
+    background: none;
+    border: 0;
+    color: #aaa;
+    font: inherit;
+    cursor: pointer;
+}
+
+#race-segment-table th[aria-sort="ascending"] button::after {
+    content: ' \2191';
+}
+
+#race-segment-table th[aria-sort="descending"] button::after {
+    content: ' \2193';
+}
+
 /* Loading overlay */
 .loading-overlay {
     position: fixed;
@@ -884,6 +968,11 @@ h1 .header-icon {
 }
 
 .analysis-controls select,
+.analysis-controls select option {
+    background: #1e2a3a;
+    color: #fff;
+}
+
 .analysis-controls input {
     background: rgba(255,255,255,0.08);
     border: 1px solid rgba(255,255,255,0.15);

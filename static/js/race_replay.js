@@ -714,6 +714,7 @@ function initRaceData(data) {
 
     // Fetch YouTube stream links (async, non-blocking)
     fetchStreamLinks(data.race_id);
+    if (typeof initRaceComparisons === 'function') initRaceComparisons(data);
 }
 
 // ---------------------------------------------------------------------------

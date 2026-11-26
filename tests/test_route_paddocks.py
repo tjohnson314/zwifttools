@@ -151,6 +151,53 @@ def test_timing_arch_passages_require_both_crossings_and_do_not_interpolate_road
     assert all(segment["end_distance_m"] > segment["start_distance_m"] for segment in route["segments"])
 
 
+@pytest.mark.parametrize("direction", ["F", "R"])
+@pytest.mark.parametrize("change", ["complete", "undeclared", "missing_finish", "opposite_direction", "distant"])
+def test_native_segment_approach_can_cross_start_line_on_a_connecting_road(direction, change):
+    checkpoint_direction = "1" if direction == "F" else "0"
+    times = [0, .5, 1] if direction == "F" else [1, .5, 0]
+    coordinates = [0, 100, 200] if direction == "F" else [200, 100, 0]
+    reference = extract_zwift_routes.load_multiroot((
+        '<highrescheckpoint>' + ''.join(
+            f'<entry road="4" dir="{checkpoint_direction}" time="{time}" '
+            f'x="{x * 100}" y="0" z="0" />'
+            for time, x in zip(times, coordinates)) + '</highrescheckpoint>'
+    ).encode())
+    route_x = [coordinates[0], coordinates[1], coordinates[1], coordinates[2]]
+    route_times = [times[0], times[1], times[1], times[2]]
+    if change == "missing_finish":
+        route_x[-1] = (coordinates[1] + coordinates[2]) / 2 - (10 if direction == "F" else -10)
+        route_times[-1] = .7 if direction == "F" else .3
+    if change == "opposite_direction":
+        route_x.reverse()
+    offset = 50 if change == "distant" else 0
+    checkpoints = ''.join(
+        f'<entry road="{9 if index < 2 else 4}" dir="{checkpoint_direction}" '
+        f'time="{time}" x="{x * 100}" y="0" z="{offset * 100}" />'
+        for index, (x, time) in enumerate(zip(route_x, route_times)))
+    native = ('' if change == "undeclared" else
+              '<segment_data><entry hash="7" percentStart="0.1666666667" '
+              'percentEnd="0.8333333333" /></segment_data>')
+    source = f'<route name="Approach" /><highrescheckpoint>{checkpoints}</highrescheckpoint>{native}'.encode()
+    definition = {"hash": 7, "name": "KOM", "road_id": 4, "direction": direction,
+                  "start_time": .25 if direction == "F" else .75,
+                  "end_time": .75 if direction == "F" else .25, "distance_m": 100}
+
+    route = parse_route(source, 1, 2, segment_definitions=[definition],
+                        reference_paths=extract_zwift_routes.native_start_paths(reference))
+
+    if change != "complete":
+        assert route["segments"] == []
+        return
+    assert len(route["segments"]) == 1
+    segment = route["segments"][0]
+    assert segment["boundary_source"] == "timing_arch_geometry"
+    assert segment["start_distance_m"] == pytest.approx(50)
+    assert segment["end_distance_m"] == pytest.approx(150)
+    assert segment["start_checkpoint"] == pytest.approx(.5)
+    assert segment["end_checkpoint"] == pytest.approx(2.5)
+
+
 @pytest.mark.parametrize("direction,times,start_time,end_time,begin_timer", [
     ("F", [0.4, 0.6, 0.9, 1, 0, 0.25, 0.4, 0.6], 0.500001, 0.5, 0.25),
     ("R", [0.6, 0.4, 0.1, 0, 1, 0.75, 0.6, 0.4], 0.500001, 0.5, 0.75),

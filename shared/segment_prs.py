@@ -94,11 +94,11 @@ def world_segments(map_id, version):
     return list(candidates.values())
 
 
-def _crossings(frame, path, position):
+def _crossings(frame, path, position, max_lateral_m=SEGMENT_CROSSING_CORRIDOR_M):
     remaining = frame
     while len(remaining) >= 2:
         crossing = _crossing_time_at_route_position(
-            remaining, path, position, max_lateral_m=SEGMENT_CROSSING_CORRIDOR_M,
+            remaining, path, position, max_lateral_m=max_lateral_m,
         )
         if crossing is None:
             break
@@ -167,7 +167,10 @@ def traversal_metrics(frame, start, end, weight_kg, height_cm, setup):
     }
 
 
-def find_traversals(frame, segments, weight_kg=None, height_cm=None, setup=None):
+def find_traversals(
+    frame, segments, weight_kg=None, height_cm=None, setup=None,
+    *, max_lateral_m=SEGMENT_CROSSING_CORRIDOR_M,
+):
     required = {"time_sec", "lat", "lng", "distance_km"}
     if not required.issubset(frame.columns):
         raise ValueError("GPS, time and distance telemetry are required to identify segments.")
@@ -188,12 +191,13 @@ def find_traversals(frame, segments, weight_kg=None, height_cm=None, setup=None)
         # Equal spacing avoids a redundant gate almost coincident with a curved finish.
         gate_distances = np.linspace(0, length, int(np.ceil(length / 100)) + 1)[1:-1]
         gates = np.interp(gate_distances, distances, np.arange(len(path)))
-        starts = list(_crossings(frame, path, 0))
-        ends = list(_crossings(frame, path, len(path) - 1))
+        starts = list(_crossings(frame, path, 0, max_lateral_m))
+        ends = list(_crossings(frame, path, len(path) - 1, max_lateral_m))
         pass_number = 0
-        for index, start in enumerate(starts):
-            limit = starts[index + 1] + 1e-6 if index + 1 < len(starts) else np.inf
-            for end in (value for value in ends if start < value <= limit):
+        for start in starts:
+            # A circuit's finish can be just after its next start crossing.
+            # Distance and ordered gates, not the next start, validate a full pass.
+            for end in (value for value in ends if start < value):
                 portion = _slice(frame, start, end)
                 travelled = (portion["distance_km"].iloc[-1] - portion["distance_km"].iloc[0]) * 1000
                 if abs(travelled - length) > max(60, length * 0.1):
@@ -202,7 +206,7 @@ def find_traversals(frame, segments, weight_kg=None, height_cm=None, setup=None)
                 for gate in gates:
                     crossing = _crossing_time_at_route_position(
                         portion[portion["time_sec"] >= gate_time], path, gate,
-                        max_lateral_m=SEGMENT_CROSSING_CORRIDOR_M,
+                        max_lateral_m=max_lateral_m,
                     )
                     if crossing is None or crossing <= gate_time:
                         break

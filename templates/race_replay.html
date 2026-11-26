@@ -235,6 +235,65 @@
             </div>
         </section>
 
+        <section class="panel" id="race-power-panel" style="display:none;">
+            <div class="table-header">
+                <h2>Rider Power Curves</h2>
+                <div class="power-unit-control" role="group" aria-label="Power curve units">
+                    <button type="button" class="active" data-race-power-unit="W" aria-pressed="true">W</button>
+                    <button type="button" data-race-power-unit="W/kg" aria-pressed="false">W/kg</button>
+                </div>
+            </div>
+            <p class="subtitle">Best recorded race power for the same intervals as Power Dashboard, from 1 second to 2 hours. Click a curve to compare all riders at that duration. Click legend names to hide riders; double-click to isolate one. Missing or incomplete efforts are not filled in.</p>
+            <p id="race-comparison-status" class="status-msg info" role="status" aria-live="polite"></p>
+            <button id="race-comparison-retry" class="btn btn-secondary" type="button" hidden>Retry comparisons</button>
+            <div id="race-power-chart" class="chart"></div>
+            <div id="race-power-inspect" hidden>
+                <h3 id="race-power-duration" aria-live="polite"></h3>
+                <div class="table-container">
+                    <table id="race-power-table">
+                        <thead><tr><th aria-label="Row number">#</th><th>Rider</th><th id="race-power-value-heading">Power (W)</th></tr></thead>
+                        <tbody id="race-power-rows"></tbody>
+                    </table>
+                </div>
+            </div>
+            <details id="race-comparison-warnings" hidden>
+                <summary>Comparison data notes</summary>
+                <ul id="race-comparison-warning-list"></ul>
+            </details>
+        </section>
+
+        <section class="panel" id="race-segment-panel" style="display:none;">
+            <div class="table-header">
+                <h2>Segment Times</h2>
+                <div class="power-unit-control" role="group" aria-label="Segment power units">
+                    <button type="button" class="active" data-race-segment-unit="W" aria-pressed="true">W</button>
+                    <button type="button" data-race-segment-unit="W/kg" aria-pressed="false">W/kg</button>
+                </div>
+            </div>
+            <div class="analysis-controls">
+                <label>Segment
+                    <select id="race-segment-select" disabled></select>
+                </label>
+            </div>
+            <p class="subtitle">Complete directional traversals only, with a separate selection for each pass and lap. Draft is estimated using rider height and weight and a level 5 Tarmac SL9 with Princeton Wake 6560 wheels. Elevation change is finish minus start.</p>
+            <div class="table-container">
+                <table id="race-segment-table">
+                    <thead><tr>
+                        <th aria-label="Row number">#</th>
+                        <th data-race-segment-sort="name" aria-sort="none"><button type="button">Rider</button></th>
+                        <th data-race-segment-sort="total_time_sec" aria-sort="ascending"><button type="button">Duration</button></th>
+                        <th data-race-segment-sort="distance_m" aria-sort="none"><button type="button">Distance</button></th>
+                        <th data-race-segment-sort="elevation_change_m" aria-sort="none"><button type="button">Elevation change</button></th>
+                        <th data-race-segment-sort="avg_power" aria-sort="none"><button type="button">Avg power</button></th>
+                        <th data-race-segment-sort="normalized_power" aria-sort="none"><button type="button">NP</button></th>
+                        <th data-race-segment-sort="avg_draft_watts" aria-sort="none"><button type="button">Avg draft</button></th>
+                        <th data-race-segment-sort="initial_speed_kmh" aria-sort="none"><button type="button">Entry speed</button></th>
+                    </tr></thead>
+                    <tbody id="race-segment-rows"></tbody>
+                </table>
+            </div>
+        </section>
+
         {% include 'race_replay_faq.html' %}
 
         <!-- Loading overlay -->
@@ -245,6 +304,7 @@
     </div>
 
     <script src="/static/js/map_canvas.js?v=2"></script>
+    <script src="/static/js/race_replay_comparisons.js"></script>
     <script src="/static/js/race_replay.js"></script>
 </body>
 </html>

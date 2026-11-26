@@ -112,6 +112,7 @@ def build_replay_route_segments(race_data, world):
     from shared.route_lookup import load_route_cache
     from shared.surface_map import get_route, route_is_loop
     from shared.world_config import MAP_TO_WORLD_ID, MAPID_TO_CONFIG, WORLD_ID_TO_MAP
+    from shared.zrl_leaderboard import _crossing_time_at_route_position
 
     map_id = MAP_TO_WORLD_ID.get(world)
     if map_id is None:
@@ -149,27 +150,22 @@ def build_replay_route_segments(race_data, world):
             continue
         samples = rider.data[['distance_km', 'lat', 'lng']].dropna().to_numpy(dtype=float)
         if len(samples) >= 2:
-            reference = samples
+            reference = pd.DataFrame({
+                'time_sec': samples[:, 0], 'lat': samples[:, 1], 'lng': samples[:, 2],
+            })
             break
 
-    def replay_distance(point, nominal_km):
-        if point is None or reference is None:
+    def replay_distance(path, position, nominal_km):
+        if not path or reference is None:
             return nominal_km
-        lat_scale = np.cos(np.radians(point[0]))
-        target = np.array([point[0], point[1] * lat_scale])
-        points = reference[:, 1:] * [1.0, lat_scale]
-        vectors = points[1:] - points[:-1]
-        lengths = np.sum(vectors * vectors, axis=1)
-        fractions = np.divide(
-            np.sum((target - points[:-1]) * vectors, axis=1), lengths,
-            out=np.zeros_like(lengths), where=lengths > 0,
-        ).clip(0, 1)
-        nearest = points[:-1] + fractions[:, None] * vectors
-        errors = np.linalg.norm(nearest - target, axis=1) * 111_320
-        distances = reference[:-1, 0] + fractions * np.diff(reference[:, 0])
-        errors[np.abs(distances - nominal_km) > 1.0] = np.inf
-        index = int(np.argmin(errors))
-        return float(distances[index]) if errors[index] <= 100 else nominal_km
+        # Interpolate course distance instead of time, rejecting nearby passes
+        # that traverse the same road in the opposite direction.
+        crossing = _crossing_time_at_route_position(
+            reference, path, position, expected_time_sec=nominal_km, max_lateral_m=100,
+        )
+        if crossing is not None and abs(crossing - nominal_km) <= 1:
+            return crossing
+        return nominal_km
 
     result = []
     for lap in range(lap_count):
@@ -181,11 +177,12 @@ def build_replay_route_segments(race_data, world):
             if lap and nominal_start < leadin_km:
                 continue
             path = segment.get('latlng')
-            start = replay_distance(path[0] if path else None, nominal_start + lap * lap_km)
-            end = replay_distance(path[-1] if path else None, nominal_end + lap * lap_km)
+            start = replay_distance(path, 0, nominal_start + lap * lap_km)
+            end = replay_distance(path, len(path) - 1 if path else 0, nominal_end + lap * lap_km)
             if end <= start or end < 0 or start > race_data.finish_line_km:
                 continue
             result.append({
+                'segment_id': f"{map_id}:{segment['hash']}",
                 'name': segment['name'],
                 'type': segment['type'],
                 'pass': segment['pass'],

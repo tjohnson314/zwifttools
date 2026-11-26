@@ -65,6 +65,17 @@ def test_repeated_closed_laps_are_distinct_attempts():
     assert all(row["distance_m"] == pytest.approx(400) for row in rows)
 
 
+def test_closed_lap_finish_just_after_next_start_does_not_discard_complete_laps():
+    loop = [(0, 0), (100, 0), (100, 100), (0, 100), (-100, 100), (-100, 0), (0, 0)]
+    points = [(-10, 0), *loop, *loop[1:], (10, 0)]
+    path = [*loop[:-1], (.001, 0)]
+    rows = segment_prs.find_traversals(frame_from_xy(points), [segment(path)])
+    assert [row["pass"] for row in rows] == [1, 2]
+    assert [row["start_time_sec"] for row in rows] == pytest.approx([1, 7])
+    assert [row["end_time_sec"] for row in rows] == pytest.approx([7.00001, 13.0001])
+    assert all(row["distance_m"] == pytest.approx(600.001) for row in rows)
+
+
 @pytest.mark.parametrize("points", [
     [(x, 0) for x in range(105, -6, -10)],  # reverse
     [(x, 0) for x in range(15, 106, 10)],  # begins within the segment

@@ -108,10 +108,10 @@ def test_replay_route_segments_preserve_occurrences_within_length_tolerance():
     source = next(route for route in _load_route_world(11)['routes'] if route['name'] == 'Montmartre Mixer')
     assert sum(segment['hash'] == 1055881124 for segment in source['native_segments']) == 2
     segments = build_replay_route_segments(_segment_race(), 'PARIS')
-    assert len(segments) == 6
+    assert len(segments) == 7
     koms = [segment for segment in segments if segment['type'] == 'kom']
-    assert [segment['pass'] for segment in koms] == [1]
-    assert koms[0]['start_distance_km'] == 18.32678
+    assert [segment['pass'] for segment in koms] == [1, 2]
+    assert [segment['start_distance_km'] for segment in koms] == [15.06268, 18.32678]
     assert len(koms[0]['latlng']) > 2
     sprints = [segment for segment in segments if segment['name'] == 'Monceau Sprint']
     assert [segment['pass'] for segment in sprints] == [1, 2]
@@ -139,6 +139,27 @@ def test_makuri_40_replay_uses_embedded_sprint_segments():
     assert [segment['name'] for segment in segments] == [segment['name'] for segment in expected]
     assert all(segment['type'] == 'sprint' for segment in segments)
     assert all(len(segment['latlng']) > 2 for segment in segments)
+
+
+def test_double_espresso_route_and_replay_include_both_declared_kom_passes():
+    from shared.surface_map import get_route
+
+    race = _segment_race(33.691)
+    race.route_name = 'Double Espresso'
+    source = get_route(11, 1365497350)['segments']
+    assert [segment['pass'] for segment in source if segment['name'] == 'Montmartre KOM'] == [1, 2]
+
+    segments = build_replay_route_segments(race, 'PARIS')
+    koms = [segment for segment in segments if segment['name'] == 'Montmartre KOM']
+    assert [segment['pass'] for segment in koms] == [1, 2]
+    assert [segment['lap'] for segment in koms] == [1, 1]
+    assert [segment['start_distance_km'] for segment in koms] == pytest.approx([10.725, 22.547], abs=.01)
+    assert [segment['end_distance_km'] for segment in koms] == pytest.approx([11.953, 23.776], abs=.01)
+    assert len(segments) == len(source) == 8
+    assert len([segment for segment in segments if segment['type'] == 'sprint']) == 6
+    race.finish_line_km = 10
+    shortened = build_replay_route_segments(race, 'PARIS')
+    assert not any(segment['name'] == 'Montmartre KOM' for segment in shortened)
 
 
 def test_replay_route_segments_repeat_laps_and_respect_shortened_races():
@@ -174,7 +195,30 @@ def test_replay_segment_boundaries_follow_rider_gps_distance():
     assert abs(aligned['end_distance_km'] - segment['end_distance_km'] + 0.095) < 1e-6
 
 
+@pytest.mark.parametrize('forward_offset, expected_offset', [(.05, .05), (25, 0)])
+def test_replay_segment_boundaries_ignore_wrong_passes(forward_offset, expected_offset):
+    race = _segment_race()
+    segment = build_replay_route_segments(race, 'PARIS')[0]
+    path = np.asarray(segment['latlng'])
+    start = segment['start_distance_km']
+    end = segment['end_distance_km']
+    gps = np.vstack([path[::-1], path])
+    distances = np.r_[np.linspace(start - .8, end - .8, len(path)),
+                      np.linspace(start + forward_offset, end + forward_offset, len(path))]
+    race.riders = [RiderData(
+        rank=1, activity_id='test', name='Reference', team='', finish_time_sec=100,
+        data=pd.DataFrame({'distance_km': distances, 'lat': gps[:, 0], 'lng': gps[:, 1]}),
+    )]
+
+    aligned = next(item for item in build_replay_route_segments(race, 'PARIS')
+                   if item['name'] == segment['name'] and item['pass'] == segment['pass'])
+    assert aligned['start_distance_km'] == pytest.approx(start + expected_offset)
+    assert aligned['end_distance_km'] == pytest.approx(end + expected_offset)
+
+
 def test_montmartre_prefers_zwift_wad_without_loading_strava():
+    from shared.surface_map import get_route
+
     reference = pd.DataFrame({
         "distance_km": [0.0, 1.0],
         "altitude_m": [35.0, 40.0],
@@ -195,7 +239,7 @@ def test_montmartre_prefers_zwift_wad_without_loading_strava():
     assert route_data is None
     assert calibrated.horizontal_p95_m == 3.3
     assert len(calibrated.leadin_latlng) == 259
-    assert len(calibrated.route_latlng) == 600
+    assert calibrated.route_latlng.shape == (len(get_route(11, 1247427185)['route']['d']), 2)
 
 
 def test_strava_is_used_only_when_zwift_geometry_is_unavailable():

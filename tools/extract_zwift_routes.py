@@ -788,7 +788,53 @@ def derive_escalator_passages(root: ET.Element, definitions: list[dict],
     return passages
 
 
-def derive_segment_data(root: ET.Element, definitions: list[dict]) -> list[dict]:
+def _segment_boundary_crossing(entries, reference_paths, definition, boundary, expected):
+    """Locate a declared boundary across junctions using native timing-line geometry."""
+    direction = "1" if definition["direction"] == "F" else "0"
+    points = [tuple(float(entry.get(axis)) / UNITS_PER_METRE for axis in ("x", "z"))
+              for entry in entries]
+    distances = [0.0]
+    for first, last in zip(points, points[1:]):
+        distances.append(distances[-1] + math.dist(first, last))
+    expected_index = min(int(expected), len(entries) - 2)
+    expected_distance = (distances[expected_index] + (expected - expected_index)
+                         * (distances[expected_index + 1] - distances[expected_index]))
+    for reference, _source in reference_paths:
+        if len(reference) < 2:
+            continue
+        for position in _native_crossings(
+                reference, str(definition["road_id"]), direction, definition[f"{boundary}_time"]):
+            index = min(int(position), len(reference) - 2)
+            first, last = [
+                tuple(float(entry.get(axis)) / UNITS_PER_METRE for axis in ("x", "z"))
+                for entry in reference[index:index + 2]
+            ]
+            dx, dz = last[0] - first[0], last[1] - first[1]
+            norm = math.hypot(dx, dz)
+            if norm == 0:
+                continue
+            dx, dz = dx / norm, dz / norm
+            target = (first[0] + (position - index) * (last[0] - first[0]),
+                      first[1] + (position - index) * (last[1] - first[1]))
+            candidates = []
+            for index, (first, last) in enumerate(zip(points, points[1:])):
+                if distances[index + 1] < expected_distance - 100 or distances[index] > expected_distance + 100:
+                    continue
+                before = (first[0] - target[0]) * dx + (first[1] - target[1]) * dz
+                after = (last[0] - target[0]) * dx + (last[1] - target[1]) * dz
+                if not before <= 0 <= after or after <= before:
+                    continue
+                fraction = -before / (after - before)
+                crossing = (first[0] + fraction * (last[0] - first[0]),
+                            first[1] + fraction * (last[1] - first[1]))
+                if math.dist(crossing, target) <= 20:
+                    candidates.append(index + fraction)
+            if candidates:
+                return min(candidates, key=lambda position: abs(position - expected))
+    return None
+
+
+def derive_segment_data(root: ET.Element, definitions: list[dict], reference_paths=()) -> list[dict]:
     """Locate complete directional timing-line crossings on native route edges."""
     legs = [root.find("leadinhighrescheckpoint"), root.find("highrescheckpoint")]
     entries = [entry for leg in legs if leg is not None for entry in leg.findall("entry")]
@@ -893,6 +939,37 @@ def derive_segment_data(root: ET.Element, definitions: list[dict]) -> list[dict]
                 "effective_start_time": start_line_time, "effective_end_time": start_line_time,
                 "begin_timer_time": timer_time, "lap_armed_checkpoint": lap_armed,
                 "timing_arch_checkpoint": start,
+            })
+    by_hash = {definition["hash"]: definition for definition in definitions}
+    for native in parse_segment_data(root):
+        definition = by_hash.get(native["hash"])
+        if definition is None or definition.get("is_loop") or len(entries) < 2:
+            continue
+        start_hint = native["percent_start"] * (len(entries) - 1)
+        end_hint = native["percent_end"] * (len(entries) - 1)
+        if not 0 <= start_hint < end_hint <= len(entries) - 1:
+            continue
+        if any(segment["hash"] == native["hash"]
+               and segment["start_checkpoint"] <= end_hint
+               and segment["end_checkpoint"] >= start_hint for segment in derived):
+            continue
+        # Native declarations also cover approaches on connecting roads, where
+        # spline-time crossings alone cannot locate the segment's start.
+        references = native_start_paths(root) + list(reference_paths)
+        definition = {**definition, "direction": definition.get(
+            "direction", "F" if definition["end_time"] > definition["start_time"] else "R")}
+        start = _segment_boundary_crossing(entries, references, definition, "start", start_hint)
+        end = _segment_boundary_crossing(entries, references, definition, "end", end_hint)
+        if start is not None and end is not None and end > start:
+            derived.append({
+                "hash": definition["hash"], "name": definition["name"],
+                "road_id": definition["road_id"], "direction": definition["direction"],
+                "start_time": definition["start_time"], "end_time": definition["end_time"],
+                "declared_distance_m": definition.get("distance_m"),
+                "boundary_source": "timing_arch_geometry",
+                "start_checkpoint": start, "end_checkpoint": end,
+                "percent_start": start / (len(entries) - 1),
+                "percent_end": end / (len(entries) - 1),
             })
     derived.sort(key=lambda segment: (segment["start_checkpoint"], segment["end_checkpoint"], segment["hash"]))
     return derived
@@ -1118,7 +1195,7 @@ def parse_route(data: bytes, map_id: int, max_points: int,
                 for rid, t in rt]
 
     native_segments = parse_segment_data(root)
-    segment_entries = (derive_segment_data(root, segment_definitions)
+    segment_entries = (derive_segment_data(root, segment_definitions, reference_paths)
                        if segment_definitions is not None else native_segments)
     segment_positions, leadin_boundaries, main_boundaries = [], [], []
     if segment_entries:

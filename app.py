@@ -4950,6 +4950,132 @@ def _build_race_data_response(race_id):
     })
 
 
+def _race_telemetry_runs(frame, columns):
+    """Keep missing samples and clock gaps from becoming complete efforts."""
+    if frame.empty or not set(columns).issubset(frame.columns):
+        return []
+    valid = np.isfinite(frame[columns]).all(axis=1).to_numpy()
+    times = frame['time_sec'].to_numpy(dtype=float)
+    boundaries = np.r_[True, ~np.isclose(np.diff(times), 1.0)]
+    boundaries[1:] |= ~valid[:-1]
+    groups = np.cumsum(boundaries | ~valid)
+    return [run for _, run in frame.loc[valid].groupby(groups[valid])]
+
+
+@app.route('/api/race/comparisons/<race_id>')
+def api_race_comparisons(race_id):
+    """Race-only power curves and complete directional segment occurrences."""
+    from race_replay.data_cleaner import build_replay_route_segments
+
+    race, error = _get_race_data(race_id)
+    if error:
+        return error
+    try:
+        intervals = _build_power_intervals_seconds()
+        segments = [
+            dict(segment, id=str(index))
+            for index, segment in enumerate(build_replay_route_segments(race, race.world))
+            if segment['start_distance_km'] >= 0
+            and segment['end_distance_km'] <= race.finish_line_km
+        ]
+        catalog = {}
+        occurrences = {}
+        for segment in segments:
+            path = segment.get('latlng')
+            if not path or len(path) < 2:
+                continue
+            key = segment['segment_id']
+            if key not in catalog:
+                catalog[key] = {
+                    'segment_id': key, 'name': segment['name'], 'latlng': path,
+                }
+                occurrences[key] = []
+            occurrences[key].append(segment)
+
+        warnings = []
+        no_drafting = 'NO_DRAFTING' in _race_rules(race_id)
+        setup = None if no_drafting else _get_efficiency_setup()
+        if no_drafting:
+            warnings.append('Draft estimates are unavailable for no-drafting events.')
+        elif setup is None:
+            warnings.append('Draft estimates unavailable: reference bike configuration is missing.')
+            logger.warning("Reference bike configuration unavailable for race comparisons: %s", race_id)
+        if not segments:
+            warnings.append('No complete timed segments are available for this race route.')
+        elif len(catalog) == 0:
+            warnings.append('Segment timing unavailable: route segment GPS geometry is missing.')
+        timing = _race_data_cache.get(race_id + '_subgroup_timing', {})
+        riders = []
+        for rider in race.riders:
+            start = float(timing.get(int(rider.rank), {}).get('offset_seconds', 0))
+            telemetry = rider.data.reset_index()
+            frame = telemetry[telemetry['time_sec'] >= start]
+            if rider.finish_time_sec is not None:
+                frame = frame[frame['time_sec'] <= rider.finish_time_sec]
+            peaks = {duration: None for duration in intervals}
+            for run in _race_telemetry_runs(frame, ['time_sec', 'power_watts']):
+                for duration, peak in _compute_peak_power_curve(run['power_watts'], intervals).items():
+                    if peak is not None and (peaks[duration] is None or peak > peaks[duration]):
+                        peaks[duration] = peak
+            if all(value is None for value in peaks.values()):
+                warnings.append(f'{rider.name}: no recorded race power samples.')
+
+            rows = {}
+            if catalog:
+                runs = _race_telemetry_runs(telemetry, ['time_sec', 'lat', 'lng', 'distance_km'])
+                if not any(len(run) >= 2 for run in runs):
+                    warnings.append(f'{rider.name}: segment timing unavailable without complete GPS telemetry.')
+                if setup is not None and (rider.height_cm is None or rider.weight_kg is None):
+                    warnings.append(f'{rider.name}: draft unavailable without height and weight.')
+                for run in runs:
+                    for row in find_traversals(
+                        run, list(catalog.values()), rider.weight_kg, rider.height_cm, setup,
+                        # Replay riders are already aligned to a known course;
+                        # use the replay cleaner's 50 m GPS sanity corridor.
+                        max_lateral_m=50,
+                    ):
+                        if row['start_time_sec'] < start or (
+                            rider.finish_time_sec is not None
+                            # Segment and race finish lines have different
+                            # tangents; allow one 1 Hz GPS sample of clock error
+                            # without changing the measured crossing time.
+                            and row['end_time_sec'] > rider.finish_time_sec + 1
+                        ):
+                            continue
+                        distance = float(np.interp(
+                            row['start_time_sec'], run['time_sec'], run['distance_km'],
+                        ))
+                        occurrence = min(
+                            occurrences[row['segment_id']],
+                            key=lambda item: abs(item['start_distance_km'] - distance),
+                        )
+                        # Match by course position, not the number of complete
+                        # attempts: missing pass 1 must not rename pass 2.
+                        if occurrence['id'] not in rows:
+                            rows[occurrence['id']] = {
+                                **row, 'occurrence_id': occurrence['id'],
+                                'pass': occurrence['pass'], 'lap': occurrence['lap'],
+                            }
+            riders.append({
+                'rank': int(rider.rank), 'activity_start_time': rider.activity_start_time,
+                'peak_watts': [peaks[duration] for duration in intervals],
+                'traversals': list(rows.values()),
+            })
+        return jsonify({
+            'durations_sec': intervals,
+            'durations_label': [_format_interval_label(duration) for duration in intervals],
+            'segments': [{key: value for key, value in segment.items() if key != 'latlng'}
+                         for segment in segments],
+            'riders': riders, 'warnings': warnings,
+        })
+    except ValueError as error:
+        logger.warning("Cannot compare race %s: %s", race_id, error)
+        return jsonify({'error': str(error)}), 422
+    except OSError:
+        logger.exception("Could not load comparison data for race %s", race_id)
+        return jsonify({'error': 'Could not load race comparison data. Please try again.'}), 500
+
+
 # Race grids for the rider analyzer, keyed by (race_id, gap_sec).  Grouping the
 # whole field is the expensive part, so it's shared across riders.
 _race_grid_cache = {}
