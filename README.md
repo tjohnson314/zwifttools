@@ -61,8 +61,9 @@ and derived analysis are not persistently cached on the server or in the browser
 and must be uploaded again after reloading.
 
 The homepage separates current **Tools** from **Archived** tools. The ZRL
-Leaderboard is available under **Archived** (`/?tab=archived`) and remains
-accessible at its existing `/zrl/leaderboard` URL with event loading and scoring
+Leaderboard, DIRT Racing Series (Season 14), and Stage 1 - Zwift Power Play are
+available under **Archived** (`/?tab=archived`). They remain accessible at their
+existing `/zrl/leaderboard`, `/dirt`, and `/power-play` URLs with functionality
 unchanged.
 
 ### DIRT Racing Series

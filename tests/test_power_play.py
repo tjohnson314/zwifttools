@@ -205,7 +205,8 @@ def test_standalone_api_and_title_rejection(tmp_path, monkeypatch):
     client = app_module.app.test_client()
     page = client.get("/power-play")
     assert page.status_code == 200
-    assert b"<title>Stage 1 - Zwift Power Play</title>" in page.data
+    assert b"<title>Stage 1 - Zwift Power Play (Archived)</title>" in page.data
+    assert b'href="/?tab=archived" class="back-link"' in page.data
     assert b"<th>Category</th>" not in page.data
     assert b'data-power-sort="avg_power"' in page.data
     assert b'data-power-sort="watts_per_kg"' in page.data

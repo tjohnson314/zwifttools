@@ -6,7 +6,8 @@ import app as app_module
 def test_dirt_roster_page_is_public():
     response = app_module.app.test_client().get('/dirt?team=1854')
     assert response.status_code == 200
-    assert b'DIRT Racing Series' in response.data
+    assert b'DIRT Racing Series (Archived)' in response.data
+    assert b'href="/?tab=archived"' in response.data
     assert b'SEASON 14' in response.data
     assert b'id="league"' in response.data
     assert b'id="velo-tab"' in response.data

@@ -13,9 +13,10 @@ def test_landing_shows_current_tools_by_default(query, monkeypatch):
     assert response.status_code == 200
     assert 'href="/" aria-current="page">Tools</a>' in html
     assert 'href="/?tab=archived"' in html
-    assert 'href="/zrl/leaderboard"' not in html
+    for path in ("/zrl/leaderboard", "/dirt", "/power-play"):
+        assert f'href="{path}"' not in html
     for path in (
-        "/dirt", "/bike-comparison", "/race-replay", "/event-inspector", "/surface-map", "/my-activities",
+        "/bike-comparison", "/race-replay", "/event-inspector", "/surface-map", "/my-activities",
         "/power", "/segment-prs", "/workout-analysis", "/ttt-analysis", "/ride-compare", "/critical-power",
         "/tt-pacing", "/ttt-pacing", "/top-performers",
     ):
@@ -24,15 +25,16 @@ def test_landing_shows_current_tools_by_default(query, monkeypatch):
     assert 'href="/top-performers-tt"' not in html
 
 
-def test_archived_tab_contains_only_zrl_tool():
+def test_archived_tab_contains_only_archived_tools():
     response = app_module.app.test_client().get("/?tab=archived")
     html = response.get_data(as_text=True)
 
     assert response.status_code == 200
     assert 'href="/?tab=archived" aria-current="page">Archived</a>' in html
     assert 'href="/" >Tools</a>' in html
-    assert 'href="/zrl/leaderboard" class="tool-card"' in html
-    assert html.count('class="tool-card"') == 1
+    for path in ("/zrl/leaderboard", "/dirt", "/power-play"):
+        assert f'href="{path}" class="tool-card"' in html
+    assert html.count('class="tool-card"') == 3
     assert "Archived tool:" in html
 
 
