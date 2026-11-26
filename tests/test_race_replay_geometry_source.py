@@ -193,7 +193,7 @@ def test_montmartre_prefers_zwift_wad_without_loading_strava():
 
     assert source == "zwift_wad"
     assert route_data is None
-    assert calibrated.horizontal_p95_m == 3.1
+    assert calibrated.horizontal_p95_m == 3.3
     assert len(calibrated.leadin_latlng) == 259
     assert len(calibrated.route_latlng) == 600
 

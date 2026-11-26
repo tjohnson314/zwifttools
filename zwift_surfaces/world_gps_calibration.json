@@ -152,20 +152,26 @@
  "11": {
   "coef": [
    [
-    9.089594930129602e-06,
-    2.5390078798400788e-08
+    8.99653005855356e-06,
+    -8.129779349407875e-10
    ],
    [
-    4.2525745965436845e-08,
-    1.37013847480962e-05
+    -3.5983057575239563e-09,
+    1.3669309045141482e-05
    ],
    [
-    48.867636237395324,
-    2.31412711477464
+    48.86762121631923,
+    2.3141442757583754
    ]
   ],
-  "route": "Champs-\u00c9lys\u00e9es",
-  "p95_m": 3.1
+  "route": "Double Espresso",
+  "p95_m": 3.3,
+  "source_activity_id": "2279362712335089712",
+  "fit_method": "nearest-path affine refinement; replay samples before 1500 s fit, remaining samples validation",
+  "fit_p95_m": 3.0,
+  "validation_p95_m": 3.3,
+  "fit_samples": 1489,
+  "validation_samples": 1583
  },
  "13": {
   "coef": [

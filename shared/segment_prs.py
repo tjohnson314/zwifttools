@@ -36,7 +36,7 @@ def _catalog_version(signature):
                    surface_map._load_segment_names, surface_map._load_calibration,
                    surface_map._projection):
         loader.cache_clear()
-    return "segmentPRsV6:" + digest.hexdigest()[:16]
+    return "segmentPRsV7:" + digest.hexdigest()[:16]
 
 
 def segment_map_id(activity):
@@ -185,7 +185,9 @@ def find_traversals(frame, segments, weight_kg=None, height_cm=None, setup=None)
         if length <= 0:
             continue
         # Interior directional gates verify the route, not merely its endpoints.
-        gates = np.interp(np.arange(100, length, 100), distances, np.arange(len(path)))
+        # Equal spacing avoids a redundant gate almost coincident with a curved finish.
+        gate_distances = np.linspace(0, length, int(np.ceil(length / 100)) + 1)[1:-1]
+        gates = np.interp(gate_distances, distances, np.arange(len(path)))
         starts = list(_crossings(frame, path, 0))
         ends = list(_crossings(frame, path, len(path) - 1))
         pass_number = 0
