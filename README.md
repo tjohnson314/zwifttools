@@ -194,6 +194,7 @@ status and unavailable profiles are reported without breaking the Roster tab.
 ### Surface Map / Route Explorer
 
 - Browse worlds, routes, and complete timed segments at `/surface-map`, with surface-colored elevation profiles. Switch between **Routes** and **Segments** in the sidebar; segment views show only the timed geometry, without a route lead-in
+- Rapid world switching keeps the latest selection; late responses and errors from earlier world requests are ignored
 - Route extraction preserves game-declared segment passes that approach a timing line on a connecting road (such as Montmartre KOM on Double Espresso). Their boundaries are located using directional timing-line geometry from native world checkpoints, rather than dropping the passes or adding undeclared segments from nearby parallel roads. Surface Map, Segment PRs, and Race Replay consume this shared catalog
 - Segment deep links use `/surface-map?segment=<world-id>:<segment-hash>` and preserve directional segment IDs, including signed hashes; **Copy link** shares the selected route or segment
 - In a segment view, **Matching routes** next to **Reset view** opens a searchable list of all routes containing the complete directional segment. Each entry shows its first segment-start distance from the free-ride start, including the measured free-ride lead-in and complete segments starting within that lead-in. Unavailable free-ride versions or start geometry are reported explicitly. Selecting a route opens it on the map

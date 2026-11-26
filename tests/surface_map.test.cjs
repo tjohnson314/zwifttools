@@ -142,7 +142,7 @@ function segmentBrowserContext() {
         window: { location: { href: 'http://localhost/surface-map?segment=1%3A-9223372027220687690' } },
         location: { pathname: '/surface-map' },
         history: { replaceState(_, title, url) { links.push(url); } },
-        fetch(url) { return new Promise(resolve => pending.push({ url, resolve })); },
+        fetch(url) { return new Promise((resolve, reject) => pending.push({ url, resolve, reject })); },
     });
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../static/js/surface_map.js'), 'utf8'), context);
     for (const name of ['hideSatellite', 'buildCombinedPath', 'renderRouteDetail', 'fitToBounds',
@@ -186,6 +186,56 @@ test('segment deep link loads its catalog entry after the world response', async
     await context.loadWorld(1, null, '1:-9223372027220687690');
     assert.deepEqual(pending, ['/api/surface_map/world/1', '/api/surface_map/segment/1%3A-9223372027220687690']);
     assert.equal(vm.runInContext('state.activeSegment', context), '1:-9223372027220687690');
+});
+
+for (const outcome of ['success', 'http error', 'network error']) {
+    test(`world switching ignores stale ${outcome} after the latest world loads`, async () => {
+        const { context, elements, pending, links, world } = segmentBrowserContext();
+        const latestWorld = { ...world, mapID: 2, name: 'Makuri Islands',
+            routes: [{ ...world.routes[0], nameHash: 456, name: 'Latest Route' }] };
+        const selections = [];
+        context.loadRoute = async hash => { selections.push(hash); };
+        elements['world-select'].value = '1';
+        const earlier = context.loadWorld(1, 'test-route');
+        elements['world-select'].value = '2';
+        const latest = context.loadWorld(2);
+        pending[1].resolve({ ok: true, json: async () => latestWorld });
+        await latest;
+        const latestUrl = links.at(-1);
+        if (outcome === 'network error') pending[0].reject(new Error('Stale network failure'));
+        else pending[0].resolve({
+            ok: outcome === 'success',
+            json: async () => outcome === 'success' ? world : { error: 'Stale HTTP failure' },
+        });
+        await earlier;
+        assert.equal(vm.runInContext('state.world.mapID', context), 2);
+        assert.equal(elements['world-select'].value, '2');
+        assert.equal(elements['route-list'].children[0].dataset.hash, '456');
+        assert.equal(elements.status.textContent, '');
+        assert.equal(links.at(-1), latestUrl);
+        assert.equal(new URL(latestUrl, 'http://localhost').searchParams.get('world'), 'makuri-islands');
+        assert.deepEqual(selections, [], 'a stale deep link must not start a route request');
+    });
+}
+
+test('world switching ignores a stale JSON body while the latest request is pending', async () => {
+    const { context, elements, pending, world } = segmentBrowserContext();
+    let finishJson;
+    let startJson;
+    const jsonStarted = new Promise(resolve => { startJson = resolve; });
+    const earlier = context.loadWorld(1);
+    pending[0].resolve({ ok: true, json: () => new Promise(resolve => {
+        finishJson = resolve;
+        startJson();
+    }) });
+    await jsonStarted;
+    const latest = context.loadWorld(2);
+    finishJson(world);
+    await earlier;
+    assert.match(elements.status.textContent, /Loading world/);
+    pending[1].resolve({ ok: false, json: async () => ({ error: 'Latest world unavailable' }) });
+    await latest;
+    assert.equal(elements.status.textContent, 'Latest world unavailable');
 });
 
 test('route selection wins over a stale segment response and restores route controls', async () => {

@@ -32,6 +32,7 @@ const state = {
     combined: [],       // [{dist_m, x, y}] leadin+route for hover linkage
     satellite: null,
     satelliteActive: false,
+    worldRequest: 0,
     routeRequest: 0,
 };
 
@@ -95,6 +96,7 @@ async function loadWorlds() {
 }
 
 async function loadWorld(mapId, routeSlug = null, segmentId = null) {
+    const request = ++state.worldRequest;
     closeRoadPicker();
     setStatus('Loading world…');
     state.routeRequest++;
@@ -111,6 +113,7 @@ async function loadWorld(mapId, routeSlug = null, segmentId = null) {
     try {
         const res = await fetch(`/api/surface_map/world/${mapId}`);
         const data = await res.json();
+        if (request !== state.worldRequest) return;
         if (!res.ok) throw new Error(data.error || 'Failed to load world');
         state.world = data;
         if (segmentId) state.browseType = 'segments';
@@ -136,7 +139,7 @@ async function loadWorld(mapId, routeSlug = null, segmentId = null) {
             await loadRoute(data.routes[0].nameHash);
         }
     } catch (e) {
-        setStatus(e.message, true);
+        if (request === state.worldRequest) setStatus(e.message, true);
     }
 }
 
